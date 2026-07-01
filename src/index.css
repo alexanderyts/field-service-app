@@ -1,0 +1,146 @@
+:root {
+  --bg: #f3f1ec;
+  --surface: #ffffff;
+  --surface-2: #faf8f4;
+  --border: #e4e0d8;
+  --text: #4b463e;
+  --text-h: #211e1a;
+  --muted: #8a8478;
+  --accent: #2f6f5e;
+  --accent-soft: #e4efe9;
+  --accent-hover: #25584a;
+  --danger: #b3503f;
+  --danger-soft: #f7e9e5;
+  /* Credit hours use a warm amber to contrast with the green ministry accent */
+  --credit: #c17d1c;
+  --credit-soft: #f6ebd6;
+  /* Return visits use a distinct violet so they never get confused with credit hours */
+  --visit: #6d5dd3;
+  --visit-soft: #e9e6f9;
+  --shadow-sm: 0 1px 2px rgba(33, 30, 26, 0.06);
+  --shadow-md: 0 8px 24px rgba(33, 30, 26, 0.08);
+
+  /* Contact tag palette (text + soft background pairs) */
+  --tag-interested: #2f6f5e;
+  --tag-interested-bg: #e2efe9;
+  --tag-return: #2b6cb0;
+  --tag-return-bg: #e4eef8;
+  --tag-study: #7c5cbf;
+  --tag-study-bg: #efe9f8;
+  --tag-not: #8a8478;
+  --tag-not-bg: #eeece6;
+  --tag-dnc: #b3503f;
+  --tag-dnc-bg: #f7e9e5;
+  --tag-moved: #b9822b;
+  --tag-moved-bg: #f6edd9;
+
+  font: 16px/1.5 'Satoshi', -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+  color-scheme: light;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+h1, h2, h3, h4 {
+  color: var(--text-h);
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+}
+
+input, select, textarea {
+  background: var(--surface);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+/* Custom dropdown arrow so every select has the same icon, size, and position */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238a8478' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 6 8 10 12 6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  padding-right: 32px;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+}
+
+textarea {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+}
+
+button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button.secondary {
+  background: var(--surface-2);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+
+button.secondary:hover {
+  background: var(--border);
+}
+
+button.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+button.danger:hover {
+  background: var(--danger);
+  color: white;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+a.link-button {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-weight: 500;
+  text-decoration: none;
+  font-size: 15px;
+}
