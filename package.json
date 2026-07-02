@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:pages": "cross-env GH_PAGES=1 npm run build",
-    "deploy:pages": "npm run build:pages && gh-pages -d dist",
+    "deploy:pages": "npm run build:pages && gh-pages -d dist --dotfiles",
     "lint": "oxlint",
     "preview": "vite preview"
   },
