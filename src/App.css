@@ -2044,7 +2044,7 @@ button.small {
 
 .tutorial-card {
   position: fixed;
-  top: 16px;
+  top: 72px;
   left: 16px;
   right: 16px;
   z-index: 2001;
@@ -2056,7 +2056,7 @@ button.small {
   margin: 0 auto;
   /* Guarantees the card can never grow tall enough to reach down and cover the tab
      bar (which every step highlights) — long step text scrolls inside instead. */
-  max-height: calc(100vh - 132px - env(safe-area-inset-bottom));
+  max-height: calc(100vh - 188px - env(safe-area-inset-bottom));
   overflow-y: auto;
 }
 

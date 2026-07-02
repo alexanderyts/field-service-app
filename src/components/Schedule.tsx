@@ -49,6 +49,20 @@ function fmtDayMonth(ts: number) {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+function fmtDayMonthFull(ts: number) {
+  return new Date(ts).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
+}
+
+/** Calendar-year week number (Sunday-start, week 1 = the week containing Jan 1) — deliberately
+    the plain calendar week, not the JW service-year week, and computed from the full week's
+    start (not whichever segment is shown), so both halves of a month-split week display the
+    same number and a single-day segment still reads as "part of week N". */
+function calendarWeekNumber(weekStartMs: number): number {
+  const d = new Date(weekStartMs)
+  const jan1WeekStart = startOfWeek(new Date(d.getFullYear(), 0, 1)).getTime()
+  return Math.round((weekStartMs - jan1WeekStart) / (7 * 24 * 60 * 60 * 1000)) + 1
+}
+
 /** Parses a `YYYY-MM-DD` (from a date input) as a local date, avoiding the UTC-midnight shift. */
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -808,8 +822,11 @@ function ScheduleMain({
           <button className="collapse-header week-nav-label" onClick={() => setWeekOpen((o) => !o)}>
             <span>
               <strong>
-                {fmtDayMonth(segmentStartMs)} – {fmtDayMonth(segmentEndMs - 86400000)}
+                {segmentEndMs - segmentStartMs <= 24 * 60 * 60 * 1000
+                  ? fmtDayMonthFull(segmentStartMs)
+                  : `${fmtDayMonth(segmentStartMs)} – ${fmtDayMonth(segmentEndMs - 86400000)}`}
               </strong>
+              <span className="muted"> · Week {calendarWeekNumber(weekStartMs)}</span>
               {weekOffset === 0 && segment === defaultSegment && <span className="muted"> · This week</span>}
             </span>
             <span className="chevron">{weekOpen ? '▾' : '▸'}</span>
