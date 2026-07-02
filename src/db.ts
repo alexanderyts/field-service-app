@@ -4,6 +4,7 @@ export type ContactStatus =
   | 'interested'
   | 'return-visit'
   | 'bible-study'
+  | 'informal-visit'
   | 'not-interested'
   | 'do-not-call'
   | 'moved'
@@ -41,6 +42,8 @@ export interface Call {
   /** What was left at the door, only relevant when notHome is true. */
   leftAtDoor?: string
   followUpDate?: number
+  /** Literature left/placed during this visit, if any (e.g. a tract or magazine title). */
+  literaturePlaced?: string
   lat?: number
   lng?: number
 }
@@ -67,12 +70,45 @@ export interface Appointment {
 export interface SchedulePrefs {
   id: number
   completedSurvey: boolean
+  /** Regular pioneers get the full hour-based survey/tracking; everyone else gets a
+      simplified day-based one. Missing on records saved before this field existed —
+      treat as `true` there, since the old survey WAS the pioneer survey. */
+  isPioneer?: boolean
   daysOut: number[]
   weeklyHours: number
   yearlyHours: number
-  creditMode: 'weekly' | 'as-needed'
-  startMinutes: number
-  sessionHours: number
+  /** Per-day suggested ministry window (day-of-week key, 0=Sun..6=Sat, -> minutes since
+      midnight) for whichever days are in daysOut. Each day can have its own start time —
+      replaces the old single global startMinutes/sessionHours. `end` is only present once
+      explicitly customized (from the Schedule tab); until then it's derived live from
+      weeklyHours split evenly across the selected days, so it stays correct as days are
+      added or removed instead of going stale. */
+  daySchedule?: Record<number, { start: number; end?: number }>
+  /** Non-pioneers only — an optional self-set goal. Choosing monthly or yearly turns on
+      real hour tracking (daysOut/weeklyHours/yearlyHours) for them, same as a pioneer's,
+      just measured against their own goal instead of the fixed 600h/year. */
+  goalPeriod?: 'none' | 'monthly' | 'yearly'
+}
+
+export interface TerritoryStreet {
+  /** Local to the territory, not a Dexie primary key — just needs to be unique within streets[]. */
+  id: string
+  name: string
+  points: { lat: number; lng: number }[]
+  done: boolean
+}
+
+/** A hand-traced, disposable group of streets someone is working door to door — not the
+    congregation's permanent territory records, just a lightweight way to carve out and
+    share "this group of streets" for a single outing. Streets live as a plain array on
+    the territory rather than their own table, since they're never queried independently
+    of their parent territory. */
+export interface Territory {
+  id: number
+  name: string
+  createdAt: number
+  completed: boolean
+  streets: TerritoryStreet[]
 }
 
 export const db = new Dexie('FieldServiceDB') as Dexie & {
@@ -81,6 +117,7 @@ export const db = new Dexie('FieldServiceDB') as Dexie & {
   timeLogs: EntityTable<TimeLog, 'id'>
   appointments: EntityTable<Appointment, 'id'>
   schedulePrefs: EntityTable<SchedulePrefs, 'id'>
+  territories: EntityTable<Territory, 'id'>
 }
 
 db.version(1).stores({
@@ -112,7 +149,7 @@ db.version(2).stores({
       date: v.date,
       notes: v.notes,
       scriptures: v.scriptures,
-      topics: v.literatureLeft,
+      leftAtDoor: v.literatureLeft,
       lat: v.lat,
       lng: v.lng,
     })
@@ -145,4 +182,8 @@ db.version(5).stores({
       await tx.table('calls').update(c.id, { literatureIds: undefined, topics: undefined })
     }
   }
+})
+
+db.version(6).stores({
+  territories: '++id, completed',
 })

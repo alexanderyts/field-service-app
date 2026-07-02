@@ -10,14 +10,31 @@ const CREDIT_CAT_LABELS: Record<string, string> = {
   other: 'Other',
 }
 
-export default function Misc() {
+export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => void }) {
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [confirmSeed, setConfirmSeed] = useState(false)
   const [creditEnabled, setCreditEnabled] = useState(() => localStorage.getItem('fieldservice_credit_hours') === 'yes')
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('fieldservice_dark_mode') === 'yes')
+
+  async function loadDemoData() {
+    // Dynamic import so this dev-only generator (and its data) is a separate chunk that
+    // production builds never fetch, rather than a static import baking it into the
+    // main bundle regardless of whether the (dev-gated) button that calls it renders.
+    const { seedDemoData } = await import('../devSeed')
+    await seedDemoData()
+    window.location.reload()
+  }
 
   function toggleCredit(v: boolean) {
     setCreditEnabled(v)
     localStorage.setItem('fieldservice_credit_hours', v ? 'yes' : 'no')
+  }
+
+  function toggleDarkMode(v: boolean) {
+    setDarkMode(v)
+    localStorage.setItem('fieldservice_dark_mode', v ? 'yes' : 'no')
+    document.documentElement.dataset.theme = v ? 'dark' : ''
   }
 
   async function clearAllData() {
@@ -37,7 +54,7 @@ export default function Misc() {
       <h2 className="applet-title">More</h2>
 
       {/* ── Credit hours ────────────────────────────────────── */}
-      <div className="card">
+      <div className="card" data-tutorial="credit-toggle">
         <label className="checkbox-row">
           <input type="checkbox" checked={creditEnabled} onChange={(e) => toggleCredit(e.target.checked)} />
           <div>
@@ -55,6 +72,40 @@ export default function Misc() {
           </div>
         )}
       </div>
+
+      {/* ── Dark mode ───────────────────────────────────────── */}
+      <div className="card">
+        <label className="checkbox-row">
+          <input type="checkbox" checked={darkMode} onChange={(e) => toggleDarkMode(e.target.checked)} />
+          <div>
+            <strong>Dark Mode <span className="beta-pill">Beta</span></strong>
+            <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+              Switches the app to a dark color scheme. Still being refined — if something looks off, let me know.
+            </p>
+          </div>
+        </label>
+      </div>
+
+      {/* ── Guided tour ─────────────────────────────────────── */}
+      <div className="card">
+        <strong>Guided Tour</strong>
+        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
+          A quick walkthrough of contacts, time tracking, and how minute banking works.
+        </p>
+        <button className="secondary" onClick={onReplayTutorial}>Take the Guided Tour</button>
+      </div>
+
+      {/* ── Developer (dev builds only, never shipped) ───────── */}
+      {import.meta.env.DEV && (
+        <div className="card">
+          <h4>Developer</h4>
+          <p className="muted" style={{ margin: '2px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
+            Fills the app with ~1.5 years of realistic pioneer activity (Rankin County, MS) for previewing.
+            This replaces all current data.
+          </p>
+          <button className="secondary" onClick={() => setConfirmSeed(true)}>Load Demo Year</button>
+        </div>
+      )}
 
       {/* ── Privacy ─────────────────────────────────────────── */}
       <div className="card">
@@ -153,6 +204,17 @@ export default function Misc() {
         tone="danger"
         onConfirm={clearAllData}
         onCancel={() => setConfirmClear(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmSeed}
+        title="Load a year of demo data?"
+        message="This replaces all current contacts, time logs, call history, and schedule settings with generated demo data. This cannot be undone."
+        confirmLabel="Yes, load demo data"
+        cancelLabel="Never mind"
+        tone="danger"
+        onConfirm={() => { setConfirmSeed(false); loadDemoData() }}
+        onCancel={() => setConfirmSeed(false)}
       />
     </div>
   )

@@ -1,40 +1,36 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Person, type Call, type Appointment, type ContactStatus } from '../db'
+import { STATUS_LABELS, STATUS_ORDER } from '../contactStatus'
 import { useCurrentLocation } from '../useGeolocation'
 import { analyzeScripture, formatScripture } from '../scripture'
 import ConfirmDialog from './ConfirmDialog'
-
-const STATUS_LABELS: Record<ContactStatus, string> = {
-  interested: 'Interested',
-  'return-visit': 'Return Visit',
-  'bible-study': 'Bible Study',
-  'not-interested': 'Not Interested',
-  'do-not-call': 'Do Not Call',
-  moved: 'Moved',
-}
-
-const STATUS_ORDER: ContactStatus[] = [
-  'interested',
-  'return-visit',
-  'bible-study',
-  'not-interested',
-  'do-not-call',
-  'moved',
-]
+import ModalPortal from '../ModalPortal'
 
 type SortKey = 'street' | 'name' | 'date' | 'city' | 'zip'
-
-function toLocalInput(ts: number) {
-  const d = new Date(ts)
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
-  return d.toISOString().slice(0, 16)
-}
 
 /** Parses a `YYYY-MM-DD` (from a date input) as a local date, avoiding the UTC-midnight shift. */
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, d)
+}
+
+function toLocalDateStr(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function toLocalTimeStr(ts: number): string {
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** Combines a `YYYY-MM-DD` and `HH:mm` pair (from separate date/time inputs) into a local timestamp. */
+function combineDateTime(dateStr: string, timeStr: string): number {
+  const d = parseLocalDate(dateStr)
+  const [h, m] = timeStr.split(':').map(Number)
+  d.setHours(h, m, 0, 0)
+  return d.getTime()
 }
 
 export default function Contacts({
@@ -108,7 +104,7 @@ export default function Contacts({
     <div className="view">
       <div className="view-header">
         <h2 className="applet-title">Contacts</h2>
-        <button onClick={() => setShowNew(true)}>+ New Contact</button>
+        <button data-tutorial="new-contact-btn" onClick={() => setShowNew(true)}>+ New Contact</button>
       </div>
 
       <input
@@ -154,7 +150,7 @@ export default function Contacts({
               <span className={`badge status-${p.status}`}>{STATUS_LABELS[p.status]}</span>
               {nextAppointment.has(p.id) && (
                 <span className="badge appt-badge" title={new Date(nextAppointment.get(p.id)!).toLocaleString()}>
-                  📅 {new Date(nextAppointment.get(p.id)!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  📅 {new Date(nextAppointment.get(p.id)!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                 </span>
               )}
               <div className="muted">{[p.street, p.city, p.state, p.zip].filter(Boolean).join(', ') || 'No address'}</div>
@@ -185,6 +181,42 @@ async function geocodeAddress(street: string, city: string, state: string, zip: 
   return null
 }
 
+interface AddressSuggestion {
+  label: string
+  street?: string
+  city?: string
+  state?: string
+  zip?: string
+  lat: number
+  lng: number
+}
+
+/** Looks up real, deliverable addresses matching what's typed so far, for autocorrecting street entry. */
+async function searchAddress(query: string): Promise<AddressSuggestion[]> {
+  if (query.trim().length < 4) return []
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5&countrycodes=us`,
+      { headers: { 'User-Agent': 'FieldServiceApp/1.0' } }
+    )
+    const data = await res.json()
+    return data.map((d: Record<string, unknown>) => {
+      const addr = (d.address ?? {}) as Record<string, string>
+      return {
+        label: d.display_name as string,
+        street: [addr.house_number, addr.road].filter(Boolean).join(' ') || undefined,
+        city: addr.city || addr.town || addr.village || addr.hamlet || undefined,
+        state: addr.state || undefined,
+        zip: addr.postcode || undefined,
+        lat: parseFloat(d.lat as string),
+        lng: parseFloat(d.lon as string),
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
 /** Shared popup form for both creating a new contact and editing an existing one. */
 const REQUIRED_FIELDS = ['name'] as const
 type RequiredField = (typeof REQUIRED_FIELDS)[number]
@@ -192,6 +224,8 @@ type RequiredField = (typeof REQUIRED_FIELDS)[number]
 function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Person }) {
   const [name, setName] = useState(existing?.name ?? '')
   const [street, setStreet] = useState(existing?.street ?? '')
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([])
+  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false)
   const [city, setCity] = useState(existing?.city ?? '')
   const [state, setState] = useState(existing?.state ?? '')
   const [zip, setZip] = useState(existing?.zip ?? '')
@@ -211,20 +245,56 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
   const [petsInfo, setPetsInfo] = useState(existing?.petsInfo ?? '')
 
   // First-visit details (new contact only)
-  const [metAt, setMetAt] = useState(() => toLocalInput(existing?.dateMet ?? Date.now()))
+  const [metDate, setMetDate] = useState(() => toLocalDateStr(existing?.dateMet ?? Date.now()))
+  const [metTime, setMetTime] = useState(() => toLocalTimeStr(existing?.dateMet ?? Date.now()))
   const [conversation, setConversation] = useState('')
   const [scripture, setScripture] = useState('')
+  const [literaturePlaced, setLiteraturePlaced] = useState('')
   const [returnVisitDate, setReturnVisitDate] = useState('')
   const [returnVisitTime, setReturnVisitTime] = useState('10:00')
   const [scriptureSuggestion, setScriptureSuggestion] = useState<{ original: string; suggestion: string } | null>(
     null
   )
   const { getLocation, loading, error } = useCurrentLocation()
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
+  // Seeded from the existing record's coords (if any) so editing an unrelated field
+  // (phone, notes, status…) doesn't trigger a network re-geocode that could silently
+  // overwrite an accurate, GPS-captured position. Cleared to null — forcing a fresh
+  // geocode on save — whenever the address text is hand-edited (see the street/city/
+  // state/zip onChange handlers below), since a stale coordinate for a changed address
+  // is worse than no coordinate at all.
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(() =>
+    existing?.lat != null && existing?.lng != null ? { lat: existing.lat, lng: existing.lng } : null
+  )
 
   async function handleUseLocation() {
     const loc = await getLocation()
     if (loc) setCoords(loc)
+  }
+
+  // Debounced address lookup — waits for a pause in typing before hitting Nominatim,
+  // both to be a reasonable API citizen and to avoid a suggestion list that's constantly
+  // re-fetching mid-keystroke.
+  useEffect(() => {
+    const q = [street, city, state].filter(Boolean).join(', ')
+    if (street.trim().length < 4) {
+      setAddressSuggestions([])
+      return
+    }
+    const t = window.setTimeout(() => {
+      searchAddress(q).then(setAddressSuggestions)
+    }, 500)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [street])
+
+  function pickAddressSuggestion(s: AddressSuggestion) {
+    if (s.street) setStreet(s.street)
+    if (s.city) setCity(s.city)
+    if (s.state) setState(s.state)
+    if (s.zip) setZip(s.zip)
+    setCoords({ lat: s.lat, lng: s.lng })
+    setAddressSuggestions([])
+    setShowAddressSuggestions(false)
   }
 
   function validate(): boolean {
@@ -235,8 +305,10 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
     return missing.size === 0
   }
 
+  const [saving, setSaving] = useState(false)
+
   function save() {
-    if (!validate()) return
+    if (saving || !validate()) return
 
     const scriptureRaw = scripture.trim()
     if (scriptureRaw) {
@@ -252,12 +324,15 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
   }
 
   async function commitSave(finalScripture: string | undefined) {
-    const metMs = metAt ? new Date(metAt).getTime() : Date.now()
-    const hasAddress = street.trim() || city.trim() || state.trim() || zip.trim()
+    setSaving(true)
+    const metMs = metDate ? combineDateTime(metDate, metTime) : Date.now()
+    const hasAddress = Boolean(street.trim() || city.trim() || state.trim() || zip.trim())
 
-    // Geocode address if provided and no manual GPS fix
+    // Only geocode when there's an address but no already-known coordinate for it — a
+    // fresh GPS fix, an autocomplete pick, or (on edit) the contact's existing coords
+    // when the address wasn't touched. Never re-geocode an address the user didn't change.
     let resolvedCoords = coords
-    if (hasAddress && !coords) {
+    if (hasAddress && !resolvedCoords) {
       resolvedCoords = await geocodeAddress(street.trim(), city.trim(), state.trim(), zip.trim())
     }
 
@@ -279,13 +354,12 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
     }
 
     if (existing) {
-      // Geocode for edits only when the existing record has no coords yet
-      const editCoords = resolvedCoords ?? (existing.lat == null && hasAddress
-        ? await geocodeAddress(street.trim(), city.trim(), state.trim(), zip.trim())
-        : null)
+      // hasAddress false means the address was cleared — drop the stale coords along with it
+      // rather than leaving a ghost pin pointing at the old, no-longer-listed address.
       await db.people.update(existing.id, {
         ...record,
-        ...(editCoords ? { lat: editCoords.lat, lng: editCoords.lng } : {}),
+        lat: hasAddress ? resolvedCoords?.lat : undefined,
+        lng: hasAddress ? resolvedCoords?.lng : undefined,
       })
       onClose()
       return
@@ -299,24 +373,22 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
       createdAt: Date.now(),
     } as Person)) as number
 
-    if (conversation.trim() || finalScripture) {
+    if (conversation.trim() || finalScripture || literaturePlaced.trim()) {
       await db.calls.add({
         personId,
         date: metMs,
         notes: conversation.trim() || undefined,
         scriptures: finalScripture || undefined,
-        lat: coords?.lat,
-        lng: coords?.lng,
+        literaturePlaced: literaturePlaced.trim() || undefined,
+        lat: resolvedCoords?.lat,
+        lng: resolvedCoords?.lng,
       } as Call)
     }
 
     if (returnVisitDate) {
-      const [h, m] = returnVisitTime.split(':').map(Number)
-      const d = parseLocalDate(returnVisitDate)
-      d.setHours(h, m, 0, 0)
       await db.appointments.add({
         title: `Return Visit — ${name.trim()}`,
-        date: d.getTime(),
+        date: combineDateTime(returnVisitDate, returnVisitTime),
         durationMinutes: 30,
         personId,
       } as Appointment)
@@ -326,15 +398,16 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-toolbar">
-          <button className="icon-btn close-x" onClick={onClose} title="Close">
-            ×
-          </button>
-        </div>
+    <ModalPortal>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-toolbar">
+            <button className="icon-btn close-x" onClick={onClose} title="Close">
+              ×
+            </button>
+          </div>
 
-        <h3>{existing ? 'Edit Contact' : 'New Contact'}</h3>
+          <h3>{existing ? 'Edit Contact' : 'New Contact'}</h3>
 
         <section className="form-section">
           <h4 className="section-title">Contact Info</h4>
@@ -344,20 +417,38 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
           </label>
           <label className="field">
             <span className="field-label">Street address</span>
-            <input value={street} onChange={(e) => setStreet(e.target.value)} />
+            <div className="combobox">
+              <input
+                value={street}
+                onChange={(e) => { setStreet(e.target.value); setShowAddressSuggestions(true); setCoords(null) }}
+                onFocus={() => setShowAddressSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowAddressSuggestions(false), 120)}
+                placeholder="Start typing to look up a real address…"
+                autoComplete="off"
+              />
+              {showAddressSuggestions && addressSuggestions.length > 0 && (
+                <div className="combobox-list">
+                  {addressSuggestions.map((s, i) => (
+                    <div key={i} className="combobox-option" onMouseDown={() => pickAddressSuggestion(s)}>
+                      {s.label}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </label>
           <div className="field-row">
             <label className="field">
               <span className="field-label">City</span>
-              <input value={city} onChange={(e) => setCity(e.target.value)} />
+              <input value={city} onChange={(e) => { setCity(e.target.value); setCoords(null) }} />
             </label>
             <label className="field">
               <span className="field-label">State</span>
-              <input value={state} onChange={(e) => setState(e.target.value)} />
+              <input value={state} onChange={(e) => { setState(e.target.value); setCoords(null) }} />
             </label>
             <label className="field">
               <span className="field-label">Zip</span>
-              <input value={zip} onChange={(e) => setZip(e.target.value)} />
+              <input value={zip} onChange={(e) => { setZip(e.target.value); setCoords(null) }} />
             </label>
           </div>
           <label className="field">
@@ -431,10 +522,17 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
             <div className="section-divider" />
             <section className="form-section">
               <h4 className="section-title">Visit Details</h4>
-              <label className="field">
-                <span className="field-label">Date &amp; time met</span>
-                <input type="datetime-local" value={metAt} onChange={(e) => setMetAt(e.target.value)} />
-              </label>
+              <p className="field-label">Date &amp; time met</p>
+              <div className="field-row">
+                <label className="field">
+                  <span className="field-label">Date</span>
+                  <input type="date" value={metDate} onChange={(e) => setMetDate(e.target.value)} />
+                </label>
+                <label className="field">
+                  <span className="field-label">Time</span>
+                  <input type="time" value={metTime} onChange={(e) => setMetTime(e.target.value)} />
+                </label>
+              </div>
               <label className="field">
                 <span className="field-label">Conversation notes (optional)</span>
                 <textarea
@@ -446,6 +544,10 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
               <label className="field">
                 <span className="field-label">Scripture shared (optional)</span>
                 <input value={scripture} onChange={(e) => setScripture(e.target.value)} placeholder="e.g. John 3:16" />
+              </label>
+              <label className="field">
+                <span className="field-label">Literature placed (optional)</span>
+                <input value={literaturePlaced} onChange={(e) => setLiteraturePlaced(e.target.value)} placeholder="e.g. Awake! magazine" />
               </label>
               <p className="field-label">Schedule a return visit (optional)</p>
               <div className="field-row">
@@ -463,7 +565,7 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
         )}
 
         <div className="row">
-          <button onClick={save}>{existing ? 'Save Changes' : 'Save Contact'}</button>
+          <button onClick={save} disabled={saving}>{existing ? 'Save Changes' : 'Save Contact'}</button>
           <button className="secondary" onClick={onClose}>
             Cancel
           </button>
@@ -488,7 +590,8 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
           commitSave(original)
         }}
       />
-    </div>
+      </div>
+    </ModalPortal>
   )
 }
 
@@ -519,9 +622,13 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   async function deletePerson() {
-    await db.calls.where('personId').equals(personId).delete()
-    await db.appointments.where('personId').equals(personId).delete()
-    await db.people.delete(personId)
+    // Transactional so an interruption (tab closed, exception) mid-delete can't leave
+    // orphaned calls/appointments behind for a person that's already gone.
+    await db.transaction('rw', [db.calls, db.appointments, db.people], async () => {
+      await db.calls.where('personId').equals(personId).delete()
+      await db.appointments.where('personId').equals(personId).delete()
+      await db.people.delete(personId)
+    })
     onClose()
   }
 
@@ -540,6 +647,7 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
   const household = householdSummary(person)
 
   return (
+    <ModalPortal>
     <div className="modal-backdrop" onClick={onClose}>
       <div className={`modal${expanded ? ' modal-expanded' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-toolbar">
@@ -635,6 +743,7 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
                 </div>
                 {c.notes && <div>{c.notes}</div>}
                 {c.scriptures && <div>Scriptures: {c.scriptures}</div>}
+                {c.literaturePlaced && <div>Literature placed: {c.literaturePlaced}</div>}
                 {c.leftAtDoor && <div>Left at door: {c.leftAtDoor}</div>}
                 {c.followUpDate && <div className="follow-up">Follow up: {new Date(c.followUpDate).toLocaleDateString()}</div>}
               </div>
@@ -670,6 +779,7 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
         onCancel={() => setConfirmDelete(false)}
       />
     </div>
+    </ModalPortal>
   )
 }
 
@@ -684,24 +794,30 @@ function CallLogger({
   onSaved: () => void
   onCancel?: () => void
 }) {
-  const [when, setWhen] = useState(() => toLocalInput(existing?.date ?? Date.now()))
+  const [whenDate, setWhenDate] = useState(() => toLocalDateStr(existing?.date ?? Date.now()))
+  const [whenTime, setWhenTime] = useState(() => toLocalTimeStr(existing?.date ?? Date.now()))
   const [notHome, setNotHome] = useState(existing?.notHome ?? false)
   const [notes, setNotes] = useState(existing?.notes ?? '')
   const [scriptures, setScriptures] = useState(existing?.scriptures ?? '')
   const [leftAtDoor, setLeftAtDoor] = useState(existing?.leftAtDoor ?? '')
+  const [literaturePlaced, setLiteraturePlaced] = useState(existing?.literaturePlaced ?? '')
   const [returnVisitDate, setReturnVisitDate] = useState('')
   const [returnVisitTime, setReturnVisitTime] = useState('10:00')
-  const { getLocation } = useCurrentLocation()
+  const { getLocation, error: locationError } = useCurrentLocation()
+  const [saving, setSaving] = useState(false)
 
   async function saveCall() {
+    if (saving) return
+    setSaving(true)
     const loc = existing ? undefined : await getLocation()
     const record = {
       personId,
-      date: when ? new Date(when).getTime() : Date.now(),
+      date: whenDate ? combineDateTime(whenDate, whenTime) : Date.now(),
       notHome,
       notes: notes || undefined,
       scriptures: notHome ? undefined : scriptures ? formatScripture(scriptures) : undefined,
       leftAtDoor: notHome ? leftAtDoor || undefined : undefined,
+      literaturePlaced: notHome ? undefined : literaturePlaced.trim() || undefined,
     }
 
     if (existing) {
@@ -712,26 +828,31 @@ function CallLogger({
 
     if (returnVisitDate) {
       const person = await db.people.get(personId)
-      const [h, m] = returnVisitTime.split(':').map(Number)
-      const d = parseLocalDate(returnVisitDate)
-      d.setHours(h, m, 0, 0)
       await db.appointments.add({
         title: `Return Visit${person ? ` — ${person.name}` : ''}`,
-        date: d.getTime(),
+        date: combineDateTime(returnVisitDate, returnVisitTime),
         durationMinutes: 30,
         personId,
       } as Appointment)
     }
+    setSaving(false)
     onSaved()
   }
 
   return (
     <div className="card">
       <h4>{existing ? 'Edit Call' : 'Log a Call'}</h4>
-      <label className="field">
-        <span className="field-label">Date &amp; time</span>
-        <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
-      </label>
+      <p className="field-label">Date &amp; time</p>
+      <div className="field-row">
+        <label className="field">
+          <span className="field-label">Date</span>
+          <input type="date" value={whenDate} onChange={(e) => setWhenDate(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field-label">Time</span>
+          <input type="time" value={whenTime} onChange={(e) => setWhenTime(e.target.value)} />
+        </label>
+      </div>
       <label className="checkbox-row">
         <input type="checkbox" checked={notHome} onChange={(e) => setNotHome(e.target.checked)} />
         <span>Not at home</span>
@@ -763,6 +884,10 @@ function CallLogger({
               placeholder="e.g. jn 3:16"
             />
           </label>
+          <label className="field">
+            <span className="field-label">Literature placed (optional)</span>
+            <input value={literaturePlaced} onChange={(e) => setLiteraturePlaced(e.target.value)} placeholder="e.g. Awake! magazine" />
+          </label>
         </>
       )}
 
@@ -778,10 +903,11 @@ function CallLogger({
         </label>
       </div>
 
+      {!existing && locationError && <p className="muted" style={{ fontSize: 13 }}>⚠ Couldn't get your location — this call will be saved without a map pin.</p>}
       <div className="row">
-        <button onClick={saveCall}>{existing ? 'Save Changes' : 'Save Call'}</button>
+        <button onClick={saveCall} disabled={saving}>{existing ? 'Save Changes' : 'Save Call'}</button>
         {onCancel && (
-          <button className="secondary" onClick={onCancel}>
+          <button className="secondary" onClick={onCancel} disabled={saving}>
             Cancel
           </button>
         )}

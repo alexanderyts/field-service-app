@@ -4,6 +4,7 @@
 .splash {
   position: fixed;
   inset: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   background: linear-gradient(160deg, #1e5448 0%, #163d31 60%, #0f2921 100%);
   display: flex;
   align-items: center;
@@ -108,7 +109,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 18px 20px 14px;
+  padding: calc(18px + env(safe-area-inset-top)) 20px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
@@ -174,7 +175,7 @@
 }
 
 .privacy-footer {
-  padding: 14px 20px 28px;
+  padding: 14px 20px calc(28px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
   background: var(--surface);
   display: flex;
@@ -203,23 +204,42 @@
    Main app layout
    ============================================================ */
 .app {
+  /* The page itself scrolls now (the html/body default, not a nested overflow:auto div).
+     Every previous jumping/scroll-lock bug traced back to trapping scroll inside an inner
+     div while trying to position the tab bar relative to it (sticky-in-container, a fixed
+     shell with an absolute child, VisualViewport correction, etc). A plain document with a
+     real position:fixed footer is the standard, well-tested mobile pattern — nothing here
+     needs to be clever. */
   display: flex;
   flex-direction: column;
-  min-height: 100svh;
+  min-height: 100dvh;
   max-width: 720px;
   margin: 0 auto;
 }
 
 .app-header {
-  padding: 18px 16px 14px;
+  /* Standalone PWAs draw under the status bar/Dynamic Island on iOS (viewport-fit=cover) —
+     without the safe-area inset, the header sits right behind that cutout. Sticky (rather
+     than static) keeps it pinned at the top as the page scrolls underneath it, since the
+     page now scrolls for real instead of a clipped inner div hiding this from view.
+     Translucent + blurred rather than a flat solid bar, so content passing underneath
+     reads as blended-through rather than abruptly hidden behind a hard-edged panel —
+     the same "frosted glass" treatment iOS's own nav bars use. */
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bg-translucent);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  padding: calc(10px + env(safe-area-inset-top)) 16px 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .app-header h1 {
-  font-size: 26px;
+  font-size: 19px;
   font-weight: 800;
   margin: 0;
   letter-spacing: -0.03em;
@@ -231,38 +251,41 @@
 }
 
 .brand-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
+  width: 19px;
+  height: 19px;
+  border-radius: 6px;
   background: linear-gradient(135deg, #2f6f5e, #8aa83f);
 }
 
 .app-main {
   flex: 1;
   padding: 16px;
-  padding-bottom: 104px;
-  overflow-y: auto;
+  /* Reserves room so the last bit of real content clears the floating tab bar below
+     instead of it covering the tail end of the page. */
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 
 .tabbar {
-  display: flex;
+  /* A real fixed-position card, anchored to the viewport, floating above the content —
+     not sitting in document flow and not sticky inside a scroll container. Content now
+     scrolls the actual page (see .app-main above) rather than being trapped in a clipped
+     inner div, which is what made every previous attempt at this fight the OS chrome:
+     once the page itself is the thing scrolling, position:fixed behaves exactly the way
+     it does on every other mobile site — same spot, every tab, content passes underneath. */
   position: fixed;
-  bottom: 12px;
-  left: 12px;
-  right: 12px;
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(24px) saturate(1.6);
-  -webkit-backdrop-filter: blur(24px) saturate(1.6);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: 22px;
-  box-shadow:
-    0 2px 8px rgba(33, 30, 26, 0.06),
-    0 8px 32px rgba(33, 30, 26, 0.18),
-    0 20px 60px rgba(33, 30, 26, 0.12);
-  max-width: 696px;
+  left: 16px;
+  right: 16px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  max-width: 688px;
   margin: 0 auto;
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
   padding: 6px;
   gap: 2px;
+  z-index: 10;
 }
 
 .tabbar button {
@@ -294,6 +317,27 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* Suspense fallback while a lazy-loaded tab's chunk fetches — near-instant on repeat
+   visits (cached) and brief enough on first load that a visible spinner would just flash. */
+.tab-loading {
+  min-height: 200px;
+}
+
+@keyframes tab-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.tab-content {
+  /* Opacity only — a `transform` here (even the old translateY(6px)->0 slide), combined
+     with `both` fill mode, leaves a non-'none' computed transform on this element forever
+     after the animation ends. That silently turns it into the CSS containing block for
+     every position:fixed descendant (every modal, the numpad, the calendar picker...),
+     so they'd get positioned/sized relative to this scrolling box instead of the real
+     viewport — which is what was letting the sticky header visually clip open modals. */
+  animation: tab-fade-in 0.22s ease both;
 }
 
 .applet-title {
@@ -479,6 +523,11 @@ button.small {
   width: 100%;
   max-height: 85vh;
   overflow-y: auto;
+  overflow-x: hidden;
+  /* Setting overflow-y alone makes the browser compute overflow-x as auto too (CSS
+     overflow spec quirk) — without this, any child that's even 1px too wide turns the
+     whole modal into a side-scroller. touch-action locks the gesture to vertical only. */
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -518,8 +567,9 @@ button.small {
   color: var(--muted);
   border: 1px solid var(--border);
   border-radius: 8px;
-  width: 30px;
-  height: 30px;
+  /* Apple HIG's 44px minimum tap target — the icon itself stays visually compact via font-size. */
+  width: 44px;
+  height: 44px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -554,6 +604,56 @@ button.small {
   box-shadow: 0 0 0 4px rgba(47, 111, 94, 0.25);
 }
 
+.contact-marker-wrap {
+  background: transparent;
+  border: none;
+}
+
+/* A classic teardrop pin (rotated rounded square) rather than a plain dot — the dot
+   look was too easily confused with the round "you are here" marker. The pointed tip
+   is what actually marks the coordinate; iconAnchor in MapView.tsx lines it up. */
+.contact-pin {
+  width: 24px;
+  height: 24px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  border: 2px solid white;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45);
+  position: relative;
+}
+
+.contact-pin-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+/* Small round swatch for the map legend — same status colors, without the pin shape/rotation. */
+.contact-pin.legend-mini {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: none;
+  border-width: 1px;
+}
+
+.contact-pin.legend-mini .contact-pin-dot {
+  display: none;
+}
+
+.contact-pin.status-interested { background: var(--tag-interested); }
+.contact-pin.status-return-visit { background: var(--tag-return); }
+.contact-pin.status-bible-study { background: var(--tag-study); }
+.contact-pin.status-informal-visit { background: var(--tag-informal); }
+.contact-pin.status-not-interested { background: var(--tag-not); }
+.contact-pin.status-do-not-call { background: var(--tag-dnc); }
+.contact-pin.status-moved { background: var(--tag-moved); }
+
 .tabs-row {
   display: flex;
   gap: 6px;
@@ -576,6 +676,7 @@ button.small {
 }
 
 .progress-bar {
+  position: relative;
   height: 8px;
   background: var(--border);
   border-radius: 999px;
@@ -583,10 +684,19 @@ button.small {
 }
 
 .progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
   background: var(--accent);
   border-radius: 999px;
   transition: width 0.3s ease;
+}
+
+/* Shows ALL hours obtained (uncapped), sitting behind the solid fill that represents
+   what actually counts toward the goal once the 55h/mo credit cap is applied. */
+.progress-fill.raw {
+  background: rgba(47, 111, 94, 0.35);
 }
 
 .cat-breakdown {
@@ -619,10 +729,6 @@ button.small {
   padding: 0;
 }
 
-.progress-fill.alt {
-  background: linear-gradient(90deg, #5a7d3a, #8aa83f);
-}
-
 /* Calendar: survey day toggle */
 .day-toggle {
   display: flex;
@@ -645,6 +751,13 @@ button.small {
 
 .goal-row strong {
   font-size: 15px;
+  color: var(--text-h);
+}
+
+.goal-remaining {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-h);
 }
 
@@ -744,12 +857,19 @@ button.small {
 }
 
 .slot-logged.ministry {
-  background: var(--accent);
+  background: var(--cat-ministry);
 }
 
 .slot-logged.credit {
   background: var(--credit);
 }
+
+.slot-logged.ldc { background: var(--cat-ldc); }
+.slot-logged.hlc { background: var(--cat-hlc); }
+.slot-logged.convention { background: var(--cat-convention); }
+.slot-logged.assembly { background: var(--cat-assembly); }
+.slot-logged.bethel { background: var(--cat-bethel); }
+.slot-logged.other { background: var(--cat-other); }
 
 .day-logged {
   width: 36px;
@@ -762,7 +882,8 @@ button.small {
 
 .legend {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 10px 16px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -795,12 +916,19 @@ button.small {
 }
 
 .legend .sw.ministry {
-  background: var(--accent);
+  background: var(--cat-ministry);
 }
 
 .legend .sw.credit {
   background: var(--credit);
 }
+
+.legend .sw.ldc { background: var(--cat-ldc); }
+.legend .sw.hlc { background: var(--cat-hlc); }
+.legend .sw.convention { background: var(--cat-convention); }
+.legend .sw.assembly { background: var(--cat-assembly); }
+.legend .sw.bethel { background: var(--cat-bethel); }
+.legend .sw.other { background: var(--cat-other); }
 
 .legend.tight {
   gap: 14px;
@@ -866,6 +994,16 @@ button.small {
   align-items: flex-start;
 }
 
+/* Native date/time inputs (used for return-visit scheduling and the schedule survey)
+   ignore flexbox shrinking on iOS and can overflow their half of a side-by-side row,
+   visually overlapping the field next to them. Stacking below phone widths avoids that
+   entirely instead of fighting each input's intrinsic width. */
+@media (max-width: 480px) {
+  .field-row {
+    flex-direction: column;
+  }
+}
+
 .field-row .field {
   flex: 1;
   min-width: 0;
@@ -875,6 +1013,19 @@ button.small {
 .field select,
 .field textarea {
   width: 100%;
+}
+
+/* Hours/Minutes in Add Time — always a uniform 50/50 row regardless of screen width
+   or whether credit-hour categories (and their extra pill wrapping) are enabled. */
+.hours-minutes-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.hours-minutes-row .field {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ---- Sectioned new-contact form ---- */
@@ -1006,6 +1157,12 @@ button.small {
   display: flex;
 }
 
+/* Split bar's fills are laid out side-by-side by flex, not stacked/layered like the
+   single-value bars above, so they need to stay in normal flow. */
+.progress-bar.split .progress-fill {
+  position: relative;
+}
+
 .progress-fill.ministry {
   background: var(--accent);
   border-radius: 999px 0 0 999px;
@@ -1038,6 +1195,7 @@ button.small {
 .badge.status-interested { background: var(--tag-interested-bg); color: var(--tag-interested); }
 .badge.status-return-visit { background: var(--tag-return-bg); color: var(--tag-return); }
 .badge.status-bible-study { background: var(--tag-study-bg); color: var(--tag-study); }
+.badge.status-informal-visit { background: var(--tag-informal-bg); color: var(--tag-informal); }
 .badge.status-not-interested { background: var(--tag-not-bg); color: var(--tag-not); }
 .badge.status-do-not-call { background: var(--tag-dnc-bg); color: var(--tag-dnc); }
 .badge.status-moved { background: var(--tag-moved-bg); color: var(--tag-moved); }
@@ -1103,6 +1261,20 @@ button.small {
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
+}
+
+.beta-pill {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--credit-soft);
+  color: var(--credit);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
 }
 
 .checkbox-row input {
@@ -1194,8 +1366,6 @@ button.small {
 }
 
 .report-nav .icon-btn {
-  width: 36px;
-  height: 36px;
   font-size: 20px;
   flex-shrink: 0;
 }
@@ -1482,6 +1652,62 @@ button.small {
 }
 
 /* ============================================================
+   Read-only schedule calendar view (suggested days + return visits)
+   ============================================================ */
+.cal-modal-view {
+  max-width: 380px;
+  max-height: 80vh;
+}
+
+.cal-day-view {
+  position: relative;
+  border-radius: 8px;
+  padding: 8px 4px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  color: var(--text-h);
+}
+
+.cal-day-view.service {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.cal-day-view.ministry-logged {
+  border: 1.5px solid var(--cat-ministry);
+}
+
+.cal-day-view.today {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.cal-day-appt-dot {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--visit);
+}
+
+.cal-appt-list {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cal-appt-row {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ============================================================
    Numpad modal
    ============================================================ */
 .numpad-modal {
@@ -1616,12 +1842,23 @@ button.small {
   margin-top: 6px;
 }
 
+/* Pulsing icon while the report is "being gathered" — builds a beat of anticipation
+   before the reveal instead of the cards appearing instantly. */
+@keyframes report-icon-pulse {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  50% { transform: scale(1.15) rotate(6deg); opacity: 0.7; }
+}
+
+.report-run-icon.spin {
+  animation: report-icon-pulse 0.9s ease-in-out infinite;
+}
+
 /* ============================================================
    Reports: staggered card reveal animation
    ============================================================ */
 @keyframes report-reveal {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .report-body {
@@ -1629,12 +1866,203 @@ button.small {
 }
 
 .report-body > * {
-  animation: report-reveal 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: report-reveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .report-body > *:nth-child(1) { animation-delay: 0ms; }
-.report-body > *:nth-child(2) { animation-delay: 80ms; }
-.report-body > *:nth-child(3) { animation-delay: 160ms; }
-.report-body > *:nth-child(4) { animation-delay: 240ms; }
-.report-body > *:nth-child(5) { animation-delay: 320ms; }
-.report-body > *:nth-child(6) { animation-delay: 400ms; }
+.report-body > *:nth-child(2) { animation-delay: 200ms; }
+.report-body > *:nth-child(3) { animation-delay: 400ms; }
+.report-body > *:nth-child(4) { animation-delay: 600ms; }
+.report-body > *:nth-child(5) { animation-delay: 800ms; }
+.report-body > *:nth-child(6) { animation-delay: 1000ms; }
+
+/* ============================================================
+   Service Year Review — a slower, more theatrical "wrapped"-style popup
+   ============================================================ */
+.year-review-backdrop {
+  background: radial-gradient(circle at 50% 20%, rgba(47, 111, 94, 0.35), rgba(20, 18, 15, 0.82));
+  z-index: 1200;
+}
+
+.year-review-modal {
+  position: relative;
+  background: linear-gradient(160deg, var(--surface), var(--accent-soft));
+  border-radius: 22px;
+  padding: 32px 24px;
+  max-width: 480px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+}
+
+.year-review-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-h);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.year-review-compiling {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 10px;
+  text-align: center;
+}
+
+.year-review-compiling .year-review-icon {
+  font-size: 46px;
+  animation: report-icon-pulse 1s ease-in-out infinite;
+}
+
+.year-review-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+@keyframes year-review-reveal {
+  from { opacity: 0; transform: translateY(34px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.year-review-slide {
+  text-align: center;
+  animation: year-review-reveal 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.year-review-eyebrow {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.year-review-hero {
+  padding: 10px 0;
+}
+
+.year-review-big-num {
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.year-review-hero p {
+  margin: 6px 0 0;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.year-review-body h4 {
+  margin-bottom: 10px;
+}
+
+.year-review-body .report-cats,
+.year-review-body .report-highlights {
+  justify-content: center;
+  text-align: left;
+}
+
+.year-review-closing {
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.year-review-closing p {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin-bottom: 14px;
+}
+
+/* ============================================================
+   Guided tutorial
+   ============================================================ */
+.tutorial-prompt-modal {
+  max-width: 360px;
+  text-align: center;
+}
+
+.tutorial-icon {
+  font-size: 44px;
+  line-height: 1;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.tutorial-skip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+/* The interactive tour: a dimmed full-screen overlay with either a spotlight cutout
+   around a real element (.tutorial-hole) or a plain dim (.tutorial-dim), plus a
+   floating instruction card that repositions itself near whatever's highlighted. */
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+}
+
+.tutorial-dim {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 20, 18, 0.72);
+}
+
+.tutorial-hole {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(15, 20, 18, 0.72);
+  border: 2px solid var(--accent);
+  transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+  pointer-events: none;
+}
+
+.tutorial-card {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  z-index: 2001;
+  background: var(--surface);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.tutorial-card.centered {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tutorial-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.tutorial-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.tutorial-dot.active {
+  background: var(--accent);
+}

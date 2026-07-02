@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local Netlify folder
+.netlify
+
+# Unrelated local tooling artifact, not part of this app
+rtk-x86_64-pc-windows-msvc/
+rtk-x86_64-pc-windows-msvc.zip

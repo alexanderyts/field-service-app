@@ -1,5 +1,6 @@
 :root {
   --bg: #f3f1ec;
+  --bg-translucent: rgba(243, 241, 236, 0.72);
   --surface: #ffffff;
   --surface-2: #faf8f4;
   --border: #e4e0d8;
@@ -17,6 +18,17 @@
   /* Return visits use a distinct violet so they never get confused with credit hours */
   --visit: #6d5dd3;
   --visit-soft: #e9e6f9;
+
+  /* Time-tracking category colors — one distinct, readable hue per ministry type
+     for the Schedule weekly calendar. Kept apart from --visit's violet so return-visit
+     tick marks in the same view never get confused with a logged category. */
+  --cat-ministry: #2f6f5e;
+  --cat-ldc: #b5651d;
+  --cat-hlc: #2b6cb0;
+  --cat-convention: #b23a6b;
+  --cat-assembly: #9a8b2b;
+  --cat-bethel: #4a4e9e;
+  --cat-other: #8a8478;
   --shadow-sm: 0 1px 2px rgba(33, 30, 26, 0.06);
   --shadow-md: 0 8px 24px rgba(33, 30, 26, 0.08);
 
@@ -27,6 +39,8 @@
   --tag-return-bg: #e4eef8;
   --tag-study: #7c5cbf;
   --tag-study-bg: #efe9f8;
+  --tag-informal: #1f8a8a;
+  --tag-informal-bg: #dff2f2;
   --tag-not: #8a8478;
   --tag-not-bg: #eeece6;
   --tag-dnc: #b3503f;
@@ -41,12 +55,41 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Dark mode (Beta) — toggled from More > Dark Mode. Overrides surfaces, text, and the
+   "soft" tint variants; the saturated brand/category/tag colors stay the same since
+   they already read fine against a dark background. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #17181a;
+  --bg-translucent: rgba(23, 24, 26, 0.72);
+  --surface: #1f2123;
+  --surface-2: #26282b;
+  --border: #38393c;
+  --text: #c9c7c2;
+  --text-h: #f2f1ee;
+  --muted: #93908a;
+  --accent-soft: #16302a;
+  --danger-soft: #3a2420;
+  --credit-soft: #332a18;
+  --visit-soft: #24213a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --tag-interested-bg: #16302a;
+  --tag-return-bg: #17293b;
+  --tag-study-bg: #251f3a;
+  --tag-informal-bg: #163030;
+  --tag-not-bg: #2a2b2d;
+  --tag-dnc-bg: #3a2420;
+  --tag-moved-bg: #332916;
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  overflow-x: hidden;
 }
 
 h1, h2, h3, h4 {
@@ -61,7 +104,9 @@ input, select, textarea {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 9px 12px;
-  font-size: 15px;
+  /* iOS Safari auto-zooms the page on focus for any input under 16px — this is the
+     floor, not a design choice. */
+  font-size: 16px;
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s ease;

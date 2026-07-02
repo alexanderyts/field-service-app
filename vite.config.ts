@@ -11,10 +11,14 @@ export default defineConfig({
         name: 'Field Service App',
         short_name: 'FieldService',
         description: 'Track ministry time, contacts, and territory visits',
-        theme_color: '#1f2937',
-        background_color: '#1f2937',
+        theme_color: '#2f6f5e',
+        background_color: '#f3f1ec',
         display: 'standalone',
-        icons: [],
+        icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],

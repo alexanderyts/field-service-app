@@ -1,3 +1,5 @@
+import ModalPortal from '../ModalPortal'
+
 interface ConfirmDialogProps {
   open: boolean
   title: string
@@ -23,19 +25,21 @@ export default function ConfirmDialog({
   if (!open) return null
 
   return (
-    <div className="modal-backdrop confirm-backdrop" onClick={onCancel}>
-      <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>{title}</h3>
-        {message && <p className="muted">{message}</p>}
-        <div className="row">
-          <button className={tone === 'danger' ? 'danger' : ''} onClick={onConfirm}>
-            {confirmLabel}
-          </button>
-          <button className="secondary" onClick={onCancel}>
-            {cancelLabel}
-          </button>
+    <ModalPortal>
+      <div className="modal-backdrop confirm-backdrop" onClick={onCancel}>
+        <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
+          <h3>{title}</h3>
+          {message && <p className="muted">{message}</p>}
+          <div className="row">
+            <button className={tone === 'danger' ? 'danger' : ''} onClick={onConfirm}>
+              {confirmLabel}
+            </button>
+            <button className="secondary" onClick={onCancel}>
+              {cancelLabel}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }

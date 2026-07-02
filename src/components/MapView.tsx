@@ -3,23 +3,36 @@ import { useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type Person } from '../db'
+import { db, type ContactStatus, type Person } from '../db'
+import { STATUS_LABELS } from '../contactStatus'
 import { useCurrentLocation } from '../useGeolocation'
-
-const STATUS_LABELS: Record<string, string> = {
-  'interested': 'Interested',
-  'return-visit': 'Return Visit',
-  'bible-study': 'Bible Study',
-  'not-interested': 'Not Interested',
-  'do-not-call': 'Do Not Call',
-  'moved': 'Moved',
-}
+import { TerritoryControls, TerritoryStreetsOverlay } from './Territory'
 
 const meIcon = L.divIcon({
   className: 'me-marker',
   html: '<div class="me-dot"></div>',
   iconSize: [16, 16],
 })
+
+// react-leaflet's default Marker icon depends on image assets whose paths don't
+// resolve correctly through Vite's bundler — without a custom icon they render as
+// broken/missing images. A teardrop divIcon sidesteps that entirely, doubles as the
+// status color-coding (same palette as the contact list's tags), and — being pin-shaped
+// rather than a plain dot — doesn't get confused with the round "you are here" marker.
+const contactIcons: Record<ContactStatus, L.DivIcon> = Object.fromEntries(
+  (['interested', 'return-visit', 'bible-study', 'informal-visit', 'not-interested', 'do-not-call', 'moved'] as ContactStatus[]).map(
+    (status) => [
+      status,
+      L.divIcon({
+        className: 'contact-marker-wrap',
+        html: `<div class="contact-pin status-${status}"><span class="contact-pin-dot"></span></div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 24],
+        popupAnchor: [0, -28],
+      }),
+    ]
+  )
+) as Record<ContactStatus, L.DivIcon>
 
 function RecenterButton({ target }: { target: { lat: number; lng: number } | null }) {
   const map = useMap()
@@ -44,12 +57,12 @@ function FocusOnMount({ target }: { target: { lat: number; lng: number } | null 
 
 function ContactPin({ person, onGoToContact }: { person: Person; onGoToContact?: (id: number) => void }) {
   return (
-    <Marker position={[person.lat!, person.lng!]}>
+    <Marker position={[person.lat!, person.lng!]} icon={contactIcons[person.status]}>
       <Popup>
         <div style={{ minWidth: 160 }}>
           <strong style={{ fontSize: 14 }}>{person.name}</strong>
           <div style={{ fontSize: 12, color: '#6d5dd3', fontWeight: 600, marginBottom: 2 }}>
-            {STATUS_LABELS[person.status] ?? person.status}
+            {STATUS_LABELS[person.status]}
           </div>
           {[person.street, person.city, person.state].filter(Boolean).length > 0 && (
             <div style={{ fontSize: 12, color: '#8a8478', marginBottom: 6 }}>
@@ -81,7 +94,15 @@ export default function MapView({
   const { getLocation, loading, error } = useCurrentLocation()
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null)
 
+  const territories = useLiveQuery(() => db.territories.toArray(), []) ?? []
+  const activeTerritory = territories.find((t) => !t.completed)
+
   useEffect(() => {
+    // Don't let an in-flight GPS fix hijack a requested "jump to contact" — RecenterButton
+    // reacts to `me` changing, so if this resolves after FocusOnMount has already centered
+    // on the contact, it would yank the view back to the user's own position. The explicit
+    // "Recenter on Me" button below can still always override, on purpose.
+    if (focusLocation) return
     getLocation().then((loc) => loc && setMe(loc))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -90,6 +111,7 @@ export default function MapView({
   const center = focusLocation
     ?? me
     ?? (pinned[0] ? { lat: pinned[0].lat!, lng: pinned[0].lng! } : { lat: 32.3, lng: -90.0 })
+  const statusesShown = Array.from(new Set(pinned.map((p) => p.status)))
 
   return (
     <div className="view">
@@ -104,11 +126,26 @@ export default function MapView({
         {loading ? 'Locating...' : 'Recenter on Me'}
       </button>
       {error && <p className="error">{error}</p>}
-      <div className="map-wrap">
-        <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: '500px', width: '100%' }}>
+      {statusesShown.length > 0 && (
+        <div className="legend">
+          {statusesShown.map((s) => (
+            <span key={s}><i className={`contact-pin legend-mini status-${s}`} style={{ display: 'inline-block' }} /> {STATUS_LABELS[s]}</span>
+          ))}
+        </div>
+      )}
+
+      {/* The map itself is the main thing this tab is for, so it stays right up top,
+          visible without scrolling — the territory controls below it are a secondary,
+          occasional-use tool. Any active temporary territory's streets are drawn on this
+          map too (TerritoryStreetsOverlay reads the same data the drawing modal writes
+          to), not just inside that modal. */}
+      <div className="map-wrap" data-tutorial="map-view">
+        <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: '440px', width: '100%' }}>
           <TileLayer
-            attribution='&copy; OpenStreetMap contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            subdomains="abcd"
+            maxZoom={20}
           />
           <RecenterButton target={me} />
           <FocusOnMount target={focusLocation ?? null} />
@@ -120,8 +157,14 @@ export default function MapView({
           {pinned.map((p) => (
             <ContactPin key={p.id} person={p} onGoToContact={onGoToContact} />
           ))}
+          {activeTerritory && <TerritoryStreetsOverlay streets={activeTerritory.streets} />}
         </MapContainer>
       </div>
+
+      {/* Drawing happens in its own modal (see Territory.tsx) with its own map instance,
+          not this page's map — that keeps it fully isolated from this page's normal
+          scroll, so panning/zooming there can never fight the page scrolling underneath. */}
+      <TerritoryControls territory={activeTerritory} initialCenter={center} />
     </div>
   )
 }
