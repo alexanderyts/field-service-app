@@ -493,7 +493,12 @@ function ScheduleMain({
     return d.getFullYear() === primaryMonth.year && d.getMonth() === primaryMonth.month
   }).length
 
-  const monthProgress = touchedMonths.map(({ year, month }) => {
+  // Only the "primary" month/service-year is ever shown (never both touched ones at
+  // once) — a straddling week just fades out the other month's day buttons instead of
+  // stacking a second progress bar, so the card is always exactly the height one month's
+  // worth of content needs, with no reserved dead space for a month that isn't shown.
+  const monthProgress = (() => {
+    const { year, month } = primaryMonth
     const stats = monthTotals(monthLogsFor(logs, year, month))
     const goalMin = effectiveMonthlyGoalMin(prefs, auxConfig, year, month)
     return {
@@ -503,7 +508,7 @@ function ScheduleMain({
       goalMin,
       pct: goalMin ? Math.min(100, Math.round((stats.applied / goalMin) * 100)) : 0,
     }
-  })
+  })()
 
   // Navigated week (for the suggested-week section, which can page forward/back)
   const perDayCat: Partial<Record<TimeCategory, number>>[] = Array.from({ length: 7 }, () => ({}))
@@ -521,12 +526,16 @@ function ScheduleMain({
   }
   const weekCategoriesUsed = CATEGORY_ORDER.filter((cat) => perDayCat.some((day) => (day[cat] ?? 0) > 0))
 
-  // Service year (Sept–Aug): running total (all hours) + capped amount applied toward the
-  // goal — one entry per service year the navigated week touches (almost always one; two
-  // only for the week that straddles Sept 1).
+  // Service year (Sept–Aug): running total (all hours) + capped amount applied toward
+  // the goal, for the "primary" service year only — same reasoning as primaryMonth
+  // above (prefers the service year "now" is actually in; falls back to the later one
+  // touched by the navigated week).
   const weeklyGoalMin = prefs.weeklyHours * 60
   const yearlyGoalMin = prefs.yearlyHours * 60
-  const yearProgress = touchedServiceYears.map((label) => {
+  const primaryServiceYear =
+    touchedServiceYears.find((y) => y === serviceYearLabel(now)) ?? touchedServiceYears[touchedServiceYears.length - 1]
+  const yearProgress = (() => {
+    const label = primaryServiceYear
     const stats = serviceYearlyTotals(logs, label)
     const applied = serviceYearlyApplied(logs, label)
     return {
@@ -537,7 +546,7 @@ function ScheduleMain({
       rawPct: yearlyGoalMin ? Math.min(100, (stats.total / yearlyGoalMin) * 100) : 0,
       remainingMin: Math.max(0, yearlyGoalMin - applied),
     }
-  })
+  })()
 
   // A day's suggested window: whatever was explicitly saved for it, or (for the end time)
   // derived live from the weekly goal split evenly across the selected days — so it stays
@@ -559,6 +568,15 @@ function ScheduleMain({
 
   function dayDateFor(day: number): Date {
     return new Date(weekStartMs + day * 24 * 60 * 60 * 1000)
+  }
+
+  // Whether a day in the navigated week falls in the month the progress card is
+  // currently showing (monthProgress) — false for the "other side" of a week that
+  // straddles a month boundary, so those day buttons can be faded instead of implying
+  // they count toward the month shown above.
+  function isDayInShownMonth(day: number): boolean {
+    const d = dayDateFor(day)
+    return d.getFullYear() === monthProgress.year && d.getMonth() === monthProgress.month
   }
 
   // Logging service time for a specific day, right from the day-tap modal — mirrors
@@ -620,7 +638,7 @@ function ScheduleMain({
         <h2 className="applet-title">Schedule</h2>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           {minuteBank > 0 && (
-            <div className="minute-bank-pill" data-tutorial="minute-bank">
+            <div className="minute-bank-pill">
               <span>⏱ {minuteBank}m banked</span>
               <div className="minute-bank-track">
                 <div className="minute-bank-fill" style={{ width: `${(minuteBank / 60) * 100}%` }} />
@@ -679,73 +697,54 @@ function ScheduleMain({
 
         {(isPioneer || nonPioneerTracksHours) && (
           <>
-            {monthProgress.map(({ year, month, applied, goalMin, pct }) => (
-              <div key={`${year}-${month}`} style={{ marginTop: 10 }}>
-                <div className="goal-row">
-                  <span>{MONTH_NAMES_LONG[month]}{monthProgress.length > 1 ? ` ${year}` : ''}</span>
-                  <strong>{fmtDuration(applied)} / {fmtDuration(goalMin)}</strong>
-                </div>
-                <p className="muted" style={{ fontSize: 12, margin: '2px 0 4px' }}>
-                  {!isPioneer && currentlyAux && year === now.getFullYear() && month === now.getMonth()
-                    ? 'Hours logged this month toward your auxiliary pioneering target.'
-                    : 'Hours logged this month toward your monthly goal.'}
-                </p>
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${pct}%` }} />
-                </div>
+            <div style={{ marginTop: 10 }}>
+              <div className="goal-row">
+                <span>{MONTH_NAMES_LONG[monthProgress.month]}</span>
+                <strong>{fmtDuration(monthProgress.applied)} / {fmtDuration(monthProgress.goalMin)}</strong>
               </div>
-            ))}
-            {/* A week can touch at most 2 calendar months — this reserves that second
-                slot's height even when only 1 month is touched, so the card is always
-                the same height as you navigate weeks. Without it, everything below
-                (including the week-nav buttons) shifts position the moment a week
-                straddles a month boundary, which misdirects fast repeated taps. */}
-            {monthProgress.length === 1 && (
-              <div style={{ marginTop: 10, visibility: 'hidden' }} aria-hidden="true">
-                <div className="goal-row">
-                  <span>—</span>
-                  <strong>—</strong>
-                </div>
-                <p className="muted" style={{ fontSize: 12, margin: '2px 0 4px' }}>—</p>
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: '0%' }} />
-                </div>
+              <p className="muted" style={{ fontSize: 12, margin: '2px 0 4px' }}>
+                {!isPioneer && currentlyAux && monthProgress.year === now.getFullYear() && monthProgress.month === now.getMonth()
+                  ? 'Hours logged this month toward your auxiliary pioneering target.'
+                  : 'Hours logged this month toward your monthly goal.'}
+              </p>
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${monthProgress.pct}%` }} />
               </div>
-            )}
+            </div>
 
-            {(isPioneer || prefs.goalPeriod === 'yearly') && yearProgress.map(({ label, stats, applied, pct, rawPct, remainingMin }) => (
-              <div key={label} style={{ marginTop: 10 }}>
+            {(isPioneer || prefs.goalPeriod === 'yearly') && (
+              <div style={{ marginTop: 10 }}>
                 <div className="goal-row">
-                  <span>Service year <span className="muted" style={{ fontSize: 11 }}>({serviceYearRangeLabel(label)})</span></span>
+                  <span>Service year <span className="muted" style={{ fontSize: 11 }}>({serviceYearRangeLabel(yearProgress.label)})</span></span>
                   <strong>
-                    {fmtDuration(applied)} / {fmtDuration(yearlyGoalMin)}
+                    {fmtDuration(yearProgress.applied)} / {fmtDuration(yearlyGoalMin)}
                   </strong>
                 </div>
                 <p className="muted" style={{ fontSize: 12, margin: '2px 0 4px' }}>
                   Hours applied toward your yearly goal{isPioneer ? ' (credit hours capped at 55h/month)' : ''} — the lighter fill shows everything logged, uncapped.
                 </p>
                 <div className="progress-bar">
-                  <div className="progress-fill raw" style={{ width: `${rawPct}%` }} />
-                  <div className="progress-fill" style={{ width: `${pct}%` }} />
+                  <div className="progress-fill raw" style={{ width: `${yearProgress.rawPct}%` }} />
+                  <div className="progress-fill" style={{ width: `${yearProgress.pct}%` }} />
                 </div>
                 {isPioneer && (
                   <div className="legend tight">
-                    <span><i className="sw ministry" /> Ministry {fmtDuration(stats.ministry)}</span>
-                    <span><i className="sw credit" /> Credit {fmtDuration(stats.credit)}</span>
+                    <span><i className="sw ministry" /> Ministry {fmtDuration(yearProgress.stats.ministry)}</span>
+                    <span><i className="sw credit" /> Credit {fmtDuration(yearProgress.stats.credit)}</span>
                   </div>
                 )}
-                {stats.total > applied && (
+                {yearProgress.stats.total > yearProgress.applied && (
                   <p className="muted">
-                    {fmtDuration(stats.total)} logged in total this service year — 55h/mo credit cap applies.
+                    {fmtDuration(yearProgress.stats.total)} logged in total this service year — 55h/mo credit cap applies.
                   </p>
                 )}
                 <p className="goal-remaining">
-                  {remainingMin > 0
-                    ? `${fmtDuration(remainingMin)} left to reach your yearly goal`
+                  {yearProgress.remainingMin > 0
+                    ? `${fmtDuration(yearProgress.remainingMin)} left to reach your yearly goal`
                     : yearlyGoalMin > 0 ? '🎉 Yearly goal reached!' : ''}
                 </p>
               </div>
-            ))}
+            )}
           </>
         )}
 
@@ -809,9 +808,10 @@ function ScheduleMain({
               return (
                 <div
                   key={i}
-                  className={`mini-day${isService ? ' service' : ''}${logged > 0 ? ' done' : ''}`}
+                  className={`mini-day${isService ? ' service' : ''}${logged > 0 ? ' done' : ''}${isDayInShownMonth(i) ? '' : ' faded'}`}
                   onClick={() => setWeekOpen(true)}
                   style={{ cursor: 'pointer' }}
+                  title={isDayInShownMonth(i) ? undefined : `Part of ${MONTH_NAMES_LONG[dayDateFor(i).getMonth()]} — not the month shown above`}
                 >
                   {d[0]}
                   {hasVisit && <span className="mini-day-dot" title="Return visit scheduled" />}
@@ -846,12 +846,14 @@ function ScheduleMain({
                 const dayAppts = perDayAppointments[i]
                 const window = daySessionWindow(i)
                 let cum = 0
+                const inShownMonth = isDayInShownMonth(i)
                 return (
                   <div
                     key={i}
-                    className={`day-row${isToday ? ' today' : ''}${isHighlighted ? ' jump-highlight' : ''}`}
+                    className={`day-row${isToday ? ' today' : ''}${isHighlighted ? ' jump-highlight' : ''}${inShownMonth ? '' : ' faded'}`}
                     onClick={() => setDayModalFor(i)}
                     style={{ cursor: 'pointer' }}
+                    title={inShownMonth ? undefined : `Part of ${MONTH_NAMES_LONG[dayDate.getMonth()]} — not the month shown above`}
                   >
                     <div className="day-label">
                       <span>{d}</span>
@@ -1491,7 +1493,7 @@ function AddTime({
   return (
     <>
       <div className="card">
-        <button className="collapse-header" data-tutorial="add-time-btn" onClick={onToggle}>
+        <button className="collapse-header" onClick={onToggle}>
           <strong>Add Time</strong>
           <span className="add-plus">{open ? '×' : '+'}</span>
         </button>
@@ -1599,7 +1601,7 @@ function MonthlyParticipationBox({
 }) {
   return (
     <div className="card">
-      <button className="collapse-header" data-tutorial="add-time-btn" onClick={onToggle}>
+      <button className="collapse-header" onClick={onToggle}>
         <strong>Participation in the Ministry</strong>
         <span className="add-plus">{open ? '×' : '+'}</span>
       </button>

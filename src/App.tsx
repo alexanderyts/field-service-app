@@ -115,7 +115,12 @@ function App() {
 
       <nav className="tabbar" data-tutorial="tabbar">
         {TABS.map((t) => (
-          <button key={t.key} className={tab === t.key ? 'active' : ''} onClick={() => selectTab(t.key)}>
+          <button
+            key={t.key}
+            className={tab === t.key ? 'active' : ''}
+            data-tutorial={`tab-${t.key}`}
+            onClick={() => selectTab(t.key)}
+          >
             <span className="tab-icon">{t.icon}</span>
             {t.label}
           </button>

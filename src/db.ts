@@ -111,6 +111,16 @@ export interface Territory {
   streets: TerritoryStreet[]
 }
 
+/** A permanent record of a temporary territory being marked complete — written once,
+    right before the Territory itself is deleted, purely so Reports can show how many
+    were finished in a given month/service year. Never edited or deleted afterward. */
+export interface TerritoryCompletion {
+  id: number
+  completedAt: number
+  name: string
+  streetCount: number
+}
+
 export const db = new Dexie('FieldServiceDB') as Dexie & {
   people: EntityTable<Person, 'id'>
   calls: EntityTable<Call, 'id'>
@@ -118,6 +128,7 @@ export const db = new Dexie('FieldServiceDB') as Dexie & {
   appointments: EntityTable<Appointment, 'id'>
   schedulePrefs: EntityTable<SchedulePrefs, 'id'>
   territories: EntityTable<Territory, 'id'>
+  territoryCompletions: EntityTable<TerritoryCompletion, 'id'>
 }
 
 db.version(1).stores({
@@ -186,4 +197,8 @@ db.version(5).stores({
 
 db.version(6).stores({
   territories: '++id, completed',
+})
+
+db.version(7).stores({
+  territoryCompletions: '++id, completedAt',
 })

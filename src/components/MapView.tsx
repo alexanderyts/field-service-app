@@ -139,7 +139,7 @@ export default function MapView({
           occasional-use tool. Any active temporary territory's streets are drawn on this
           map too (TerritoryStreetsOverlay reads the same data the drawing modal writes
           to), not just inside that modal. */}
-      <div className="map-wrap" data-tutorial="map-view">
+      <div className="map-wrap">
         <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: '440px', width: '100%' }}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'

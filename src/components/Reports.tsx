@@ -56,6 +56,7 @@ export default function Reports() {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const appointments = useLiveQuery(() => db.appointments.toArray(), []) ?? []
   const prefs = useLiveQuery(() => db.schedulePrefs.toArray(), [])
+  const territoryCompletions = useLiveQuery(() => db.territoryCompletions.toArray(), []) ?? []
 
   const [email, setEmail] = useState('')
 
@@ -114,6 +115,10 @@ export default function Reports() {
 
   // Service year (Sept–Aug), not the calendar year
   const reportServiceYear = serviceYearLabel(targetDate)
+  const monthTerritoriesCompleted = territoryCompletions.filter((t) => inMonth(t.completedAt)).length
+  const yearTerritoriesCompleted = territoryCompletions.filter(
+    (t) => serviceYearLabel(new Date(t.completedAt)) === reportServiceYear
+  ).length
   const yearAppliedMin = serviceYearlyApplied(logs, reportServiceYear)
   const yearStats = serviceYearlyTotals(logs, reportServiceYear)
   const yearGoalMin = (prefs?.[0]?.yearlyHours ?? 0) * 60
@@ -151,6 +156,7 @@ export default function Reports() {
     if (atHomeCalls) body += `Conversations: ${atHomeCalls}\n`
     if (notHomeCalls) body += `Not at Home: ${notHomeCalls}\n`
     if (scripturesShared) body += `Scriptures Shared: ${scripturesShared}\n`
+    if (monthTerritoriesCompleted) body += `Temporary Territories Completed: ${monthTerritoriesCompleted} this month, ${yearTerritoriesCompleted} this service year\n`
     if (yearGoalMin) body += `\nYearly Goal Progress: ${fmtDuration(yearAppliedMin)} of ${fmtDuration(yearGoalMin)} (${yearPct}%)\n`
     const subject = `Field Service Report — ${monthLabel}`
     window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
@@ -176,7 +182,7 @@ export default function Reports() {
               <div className="report-run-icon">📊</div>
               <h3>Ready when you are</h3>
               <p className="muted">Tap to see your {monthLabel} summary.</p>
-              <button data-tutorial="run-report-btn" onClick={() => generateReport(true)}>Run Report</button>
+              <button onClick={() => generateReport(true)}>Run Report</button>
             </>
           )}
         </div>
@@ -317,6 +323,16 @@ export default function Reports() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Temporary territories completed — independent of any hours goal, so it's its
+          own card rather than folded into the (goal-gated) yearly progress card below. */}
+      {(monthTerritoriesCompleted > 0 || yearTerritoriesCompleted > 0) && (
+        <div className="card">
+          <h4 style={{ marginBottom: 8 }}>Temporary Territories</h4>
+          <p>🗺️ {monthTerritoriesCompleted} completed this month</p>
+          <p className="muted">{yearTerritoriesCompleted} completed this service year ({serviceYearRangeLabel(reportServiceYear)})</p>
         </div>
       )}
 

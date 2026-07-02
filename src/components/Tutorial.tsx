@@ -24,67 +24,51 @@ interface TutorialStep {
   highlight?: string
 }
 
+// A short, one-stop-per-tab overview rather than a granular button-by-button walkthrough
+// — each step highlights that tab's own button in the bar below so it's obvious which
+// tab is being described, then moves on.
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
     icon: '👋',
     title: 'Welcome to Field Service',
-    body: "This tour walks through the app on the real screens, highlighting things as we go. Takes about a minute — replay it anytime from the More tab. That's your navigation below.",
+    body: "A quick look at what each tab does — about 30 seconds. Replay it anytime from the More tab.",
     tab: 'contacts',
     highlight: '[data-tutorial="tabbar"]',
   },
   {
     icon: '◎',
-    title: 'Add a contact',
-    body: "Tap + New Contact to add someone. Only a name is required — start typing a street address and it looks up the real address as you type, so the Map pin lands in the right spot. Tag each contact (Interested, Return Visit, Bible Study, Informal Visit, and more).",
+    title: 'Contacts',
+    body: "Keep track of everyone you talk to in the ministry. Add a contact (just a name is required — typing an address looks up the real one for you), tag their status, and log call history with scriptures shared and follow-up dates.",
     tab: 'contacts',
-    highlight: '[data-tutorial="new-contact-btn"]',
-  },
-  {
-    icon: '🗣️',
-    title: 'Call History & visits',
-    body: "Open any contact and you can log a call: what was discussed, scriptures shared, literature placed, and an optional follow-up date. Not home? Mark it and note what you left at the door.",
-    tab: 'contacts',
+    highlight: '[data-tutorial="tab-contacts"]',
   },
   {
     icon: '◫',
     title: 'Schedule',
-    body: "Answer a few questions once and this tab tracks your weekly and yearly progress, suggests which days to go out, and has a calendar view showing suggested days and return visits together.",
+    body: "Answer a few questions once and this tab tracks your progress toward your goals, suggests which days to go out, and logs your time — with automatic minute-banking so leftover minutes are never lost.",
     tab: 'schedule',
-  },
-  {
-    icon: '🔢',
-    title: 'Add Time',
-    body: "Tap here to log time — pick hours and minutes with the number pad, choose a category, and save. Turn on credit hours in More to also see LDC, Convention, Assembly, Bethel, and Other.",
-    tab: 'schedule',
-    highlight: '[data-tutorial="add-time-btn"]',
-  },
-  {
-    icon: '🏦',
-    title: 'How minutes get banked',
-    body: "Leftover minutes from 1–29 are banked automatically — nothing to round yourself. Enter 30–59 leftover minutes and it asks whether to round up to the next hour or bank them instead. Once the bank reaches 60 minutes, it automatically logs a full hour for you. This pill shows up whenever your bank is holding onto minutes.",
-    tab: 'schedule',
-    highlight: '[data-tutorial="minute-bank"]',
-  },
-  {
-    icon: '▦',
-    title: 'Reports',
-    body: "Tap Run Report anytime for a nice overview of your month and year — a good way to reflect on your progress in the ministry. If you've set a yearly goal, you'll see progress toward it too, with credit hours capped at 55h/month and your true total always shown alongside it.",
-    tab: 'reports',
-    highlight: '[data-tutorial="run-report-btn"]',
+    highlight: '[data-tutorial="tab-schedule"]',
   },
   {
     icon: '◈',
     title: 'Map',
-    body: "Every contact with an address is pinned here automatically, color-coded by status so you can see your territory at a glance.",
+    body: "Every contact with an address is pinned here automatically, color-coded by status. You can also trace out a temporary territory — a group of streets you're working — to keep track of what's left and mark it done.",
     tab: 'map',
-    highlight: '[data-tutorial="map-view"]',
+    highlight: '[data-tutorial="tab-map"]',
+  },
+  {
+    icon: '▦',
+    title: 'Reports',
+    body: "Tap Run Report anytime for an overview of your month and year, including progress toward any goals you've set.",
+    tab: 'reports',
+    highlight: '[data-tutorial="tab-reports"]',
   },
   {
     icon: '⋯',
     title: 'More',
-    body: "Turn on credit hours, try Dark Mode (beta), replay this tour, or review your privacy settings. Everything you enter stays on this device — always.",
+    body: "Turn on credit hours, try Dark Mode, back up your data, replay this tour, or review your privacy settings. Everything you enter stays on this device — always.",
     tab: 'misc',
-    highlight: '[data-tutorial="credit-toggle"]',
+    highlight: '[data-tutorial="tab-misc"]',
   },
 ]
 

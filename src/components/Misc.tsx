@@ -54,7 +54,7 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
       <h2 className="applet-title">More</h2>
 
       {/* ── Credit hours ────────────────────────────────────── */}
-      <div className="card" data-tutorial="credit-toggle">
+      <div className="card">
         <label className="checkbox-row">
           <input type="checkbox" checked={creditEnabled} onChange={(e) => toggleCredit(e.target.checked)} />
           <div>

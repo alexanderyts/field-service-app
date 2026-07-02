@@ -786,6 +786,13 @@ button.small {
   outline-offset: 2px;
 }
 
+/* A week can straddle a month boundary — the days belonging to whichever month isn't
+   the one shown in the progress card above are faded, not hidden, so they're still
+   fully usable (still clickable to add/edit that day), just visually de-emphasized. */
+.day-row.faded {
+  opacity: 0.4;
+}
+
 .week-nav {
   display: flex;
   align-items: center;
@@ -1150,6 +1157,10 @@ button.small {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+.mini-day.faded {
+  opacity: 0.4;
 }
 
 /* ---- Split progress bar (ministry + credit) ---- */

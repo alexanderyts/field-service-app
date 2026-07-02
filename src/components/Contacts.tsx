@@ -104,7 +104,7 @@ export default function Contacts({
     <div className="view">
       <div className="view-header">
         <h2 className="applet-title">Contacts</h2>
-        <button data-tutorial="new-contact-btn" onClick={() => setShowNew(true)}>+ New Contact</button>
+        <button onClick={() => setShowNew(true)}>+ New Contact</button>
       </div>
 
       <input

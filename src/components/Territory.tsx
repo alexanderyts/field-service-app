@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
-import { db, type Territory, type TerritoryStreet } from '../db'
+import { db, type Territory, type TerritoryCompletion, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 
@@ -274,6 +274,11 @@ export function TerritoryControls({
   async function completeTerritory() {
     if (!territory) return
     setConfirmComplete(false)
+    await db.territoryCompletions.add({
+      completedAt: Date.now(),
+      name: territory.name,
+      streetCount: territory.streets.length,
+    } as TerritoryCompletion)
     await db.territories.delete(territory.id)
   }
 
