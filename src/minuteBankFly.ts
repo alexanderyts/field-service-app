@@ -1,8 +1,9 @@
-/** Fires a small flying "ball" from wherever time was just banked (the Save button that
-    was tapped) up to the minute-bank pill in the Schedule header — a quick, playful visual
-    cue for where banked minutes go. Ball is appended straight to document.body (not through
-    React) so it keeps flying and fading even after the modal that started it closes. Purely
-    cosmetic; no-ops safely if either element isn't on screen (different tab, tiny viewport). */
+/** Fires a small flying stopwatch icon from wherever time was just banked (the Save button
+    that was tapped) up to the minute-bank pill in the Add Time card — a quick, playful
+    visual cue for where banked minutes go. The icon is appended straight to document.body
+    (not through React) so it keeps flying and fading even after the modal that started it
+    closes. Purely cosmetic; no-ops safely if either element isn't on screen (different tab,
+    tiny viewport). */
 export function flyToMinuteBank(originEl: HTMLElement | null | undefined) {
   if (!originEl) return
   // Prefer the pill itself (precise target once it exists); fall back to its wrapper for
@@ -20,13 +21,14 @@ export function flyToMinuteBank(originEl: HTMLElement | null | undefined) {
 
   const ball = document.createElement('div')
   ball.className = 'minute-bank-ball'
+  ball.textContent = '⏱'
   ball.style.left = `${fromX}px`
   ball.style.top = `${fromY}px`
   ball.style.setProperty('--dx', `${toX - fromX}px`)
   ball.style.setProperty('--dy', `${toY - fromY}px`)
   document.body.appendChild(ball)
 
-  const FLIGHT_MS = 2200
+  const FLIGHT_MS = 1900
   window.setTimeout(() => {
     target.classList.add('minute-bank-pulse')
     window.setTimeout(() => target.classList.remove('minute-bank-pulse'), 400)

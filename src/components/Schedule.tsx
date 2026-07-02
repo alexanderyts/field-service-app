@@ -707,17 +707,7 @@ function ScheduleMain({
     <div className="view">
       <div className="view-header">
         <h2 className="applet-title">Schedule</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }} data-minute-bank-target>
-          {minuteBank > 0 && (
-            <div className="minute-bank-pill" onClick={() => setConfirmBankRoundUp(true)} title="Tap to round up and add now">
-              <span>⏱ {minuteBank}m banked</span>
-              <div className="minute-bank-track">
-                <div className="minute-bank-fill" style={{ width: `${(minuteBank / 60) * 100}%` }} />
-              </div>
-            </div>
-          )}
-          <button className="secondary small" onClick={onRedo}>Redo survey</button>
-        </div>
+        <button className="secondary small" onClick={onRedo}>Redo survey</button>
       </div>
 
       <div className="card highlight">
@@ -993,7 +983,13 @@ function ScheduleMain({
       {/* Collapsible add time — pioneers and hours-tracking non-pioneers log hours;
           everyone else just checks a single box off once a month */}
       {isPioneer || nonPioneerTracksHours ? (
-        <AddTime open={addOpen} onToggle={() => setAddOpen((o) => !o)} onAdded={() => setAddOpen(false)} />
+        <AddTime
+          open={addOpen}
+          onToggle={() => setAddOpen((o) => !o)}
+          onAdded={() => setAddOpen(false)}
+          minuteBank={minuteBank}
+          onTapBank={() => setConfirmBankRoundUp(true)}
+        />
       ) : (
         <MonthlyParticipationBox
           open={addOpen}
@@ -1489,10 +1485,14 @@ function AddTime({
   open,
   onToggle,
   onAdded,
+  minuteBank,
+  onTapBank,
 }: {
   open: boolean
   onToggle: () => void
   onAdded: () => void
+  minuteBank: number
+  onTapBank: () => void
 }) {
   const [date, setDate] = useState(() => fmtLocalDate(new Date()))
   const [hours, setHours] = useState('0')
@@ -1578,10 +1578,20 @@ function AddTime({
   return (
     <>
       <div className="card">
-        <button className="collapse-header" onClick={onToggle}>
-          <strong>Add Time</strong>
-          <span className="add-plus">{open ? '×' : '+'}</span>
-        </button>
+        <div className="add-time-header-row" data-minute-bank-target>
+          <button className="collapse-header" onClick={onToggle}>
+            <strong>Add Time</strong>
+            <span className="add-plus">{open ? '×' : '+'}</span>
+          </button>
+          {minuteBank > 0 && (
+            <div className="minute-bank-pill" onClick={onTapBank} title="Tap to round up and add now">
+              <span>⏱ {minuteBank}m</span>
+              <div className="minute-bank-track">
+                <div className="minute-bank-fill" style={{ width: `${(minuteBank / 60) * 100}%` }} />
+              </div>
+            </div>
+          )}
+        </div>
 
         {open && (
           <div className="add-time-body">

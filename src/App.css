@@ -1788,6 +1788,20 @@ button.small {
 /* ============================================================
    Minute bank pill (schedule header)
    ============================================================ */
+/* Lives right in the Add Time card's header now (next to the collapse toggle) so the
+   fly-to-bank animation travels a short, sensible distance from the Save button. */
+.add-time-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.add-time-header-row .collapse-header {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
 .minute-bank-pill {
   display: flex;
   align-items: center;
@@ -1802,6 +1816,7 @@ button.small {
   white-space: nowrap;
   cursor: pointer;
   transition: transform 0.15s ease;
+  flex-shrink: 0;
 }
 
 .minute-bank-pulse {
@@ -1814,11 +1829,11 @@ button.small {
   100% { transform: scale(1); }
 }
 
-/* The little "ball" that flies from wherever time was just banked up to this pill —
-   appended straight to document.body (see minuteBankFly.ts), not part of React's tree.
-   Colored to match the pill itself (var(--credit)) so it reads clearly as "headed for
-   the bank" rather than a generic sparkle. A strong ease-in curve makes it hang near the
-   origin at first (so it visibly starts from wherever was tapped) and rush the rest of the
+/* The little stopwatch icon that flies from wherever time was just banked up to this
+   pill — appended straight to document.body (see minuteBankFly.ts), not part of React's
+   tree. Colored to match the pill itself (var(--credit)) so it reads clearly as "headed
+   for the bank" rather than a generic sparkle. An ease-in curve keeps it near the origin
+   at first (so it visibly starts from wherever was tapped) then rushes the rest of the
    way, and the keyframes hold it exactly at the target position for the last stretch —
    growing slightly then collapsing to nothing, like the bank is absorbing it — rather than
    ever traveling past the pill. */
@@ -1830,9 +1845,15 @@ button.small {
   border-radius: 50%;
   background: var(--credit);
   box-shadow: 0 0 0 4px var(--credit-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  color: #fff;
   pointer-events: none;
   transform: translate(-50%, -50%);
-  animation: minute-bank-fly 2.2s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+  animation: minute-bank-fly 1.9s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
 }
 
 @keyframes minute-bank-fly {
