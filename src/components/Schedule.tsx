@@ -632,7 +632,13 @@ function ScheduleMain({
     return sum + (w.end - w.start)
   }, 0)
 
-  function saveDayWindow(day: number, startStr: string, endStr: string, creditHours?: number) {
+  function saveDayWindow(
+    day: number,
+    startStr: string,
+    endStr: string,
+    creditHours?: number,
+    creditCategory?: TimeCategory
+  ) {
     const nextDaysOut = prefs.daysOut.includes(day) ? prefs.daysOut : [...prefs.daysOut, day].sort()
     const nextSchedule = {
       ...(prefs.daySchedule ?? {}),
@@ -640,9 +646,25 @@ function ScheduleMain({
         start: timeInputToMinutes(startStr),
         end: timeInputToMinutes(endStr),
         creditMin: creditHours ? Math.round(creditHours * 60) : undefined,
+        creditCategory: creditHours ? creditCategory : undefined,
       },
     }
     db.schedulePrefs.update(prefs.id, { daysOut: nextDaysOut, daySchedule: nextSchedule })
+    closeDayModalSmoothly()
+  }
+
+  // "Edit" next to the day in DayActionModal offers these as a quick way to redo a day's
+  // (or the whole week's) suggested schedule without going all the way back to Redo Survey.
+  function removeDaySchedule(day: number) {
+    const nextDaysOut = prefs.daysOut.filter((d) => d !== day)
+    const nextSchedule = { ...(prefs.daySchedule ?? {}) }
+    delete nextSchedule[day]
+    db.schedulePrefs.update(prefs.id, { daysOut: nextDaysOut, daySchedule: nextSchedule })
+    closeDayModalSmoothly()
+  }
+
+  function clearAllSuggestedDays() {
+    db.schedulePrefs.update(prefs.id, { daysOut: [], daySchedule: {} })
     closeDayModalSmoothly()
   }
 
@@ -1129,6 +1151,7 @@ function ScheduleMain({
           isSuggestedDay={prefs.daysOut.includes(dayModalFor)}
           currentWindow={daySessionWindow(dayModalFor)}
           currentCreditMin={prefs.daySchedule?.[dayModalFor]?.creditMin}
+          currentCreditCategory={prefs.daySchedule?.[dayModalFor]?.creditCategory}
           weeklyGoalMin={weeklyGoalMin}
           otherDaysSuggestedMin={
             suggestedWeeklyMin -
@@ -1136,7 +1159,11 @@ function ScheduleMain({
               ? daySessionWindow(dayModalFor).end - daySessionWindow(dayModalFor).start
               : 0)
           }
-          onSaveWindow={(start, end, creditHours) => saveDayWindow(dayModalFor, start, end, creditHours)}
+          onSaveWindow={(start, end, creditHours, creditCategory) =>
+            saveDayWindow(dayModalFor, start, end, creditHours, creditCategory)
+          }
+          onRemoveDay={() => removeDaySchedule(dayModalFor)}
+          onClearAllDays={clearAllSuggestedDays}
           onLogTime={(h, m, category, otherNote, originEl) => quickLogTime(dayModalFor, h, m, category, otherNote, originEl)}
           onClose={closeDayModalSmoothly}
           closing={dayModalClosing}
@@ -1251,15 +1278,20 @@ function TimeInputModal({
 /** Opens from clicking a day in the expanded weekly schedule: add/edit that day's
     suggested ministry window, or log actual service time against that specific date
     (right here, without leaving for the separate Add Time panel). */
+const CREDIT_CATEGORIES: TimeCategory[] = ['ldc', 'convention', 'assembly', 'bethel', 'other']
+
 function DayActionModal({
   dayLabel,
   dateLabel,
   isSuggestedDay,
   currentWindow,
   currentCreditMin,
+  currentCreditCategory,
   weeklyGoalMin,
   otherDaysSuggestedMin,
   onSaveWindow,
+  onRemoveDay,
+  onClearAllDays,
   onLogTime,
   onClose,
   closing,
@@ -1269,18 +1301,24 @@ function DayActionModal({
   isSuggestedDay: boolean
   currentWindow: { start: number; end: number }
   currentCreditMin?: number
+  currentCreditCategory?: TimeCategory
   weeklyGoalMin: number
   otherDaysSuggestedMin: number
-  onSaveWindow: (start: string, end: string, creditHours?: number) => void
+  onSaveWindow: (start: string, end: string, creditHours?: number, creditCategory?: TimeCategory) => void
+  onRemoveDay: () => void
+  onClearAllDays: () => void
   onLogTime: (hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
   onClose: () => void
   closing: boolean
 }) {
-  const [step, setStep] = useState<'menu' | 'window' | 'logTime'>('menu')
+  const [step, setStep] = useState<'menu' | 'window' | 'logTime' | 'dayOptions'>('menu')
   const [start, setStart] = useState(minutesToTimeInput(currentWindow.start))
   const [end, setEnd] = useState(minutesToTimeInput(currentWindow.end))
   const [creditHours, setCreditHours] = useState(currentCreditMin ? String(currentCreditMin / 60) : '')
+  const [creditCategory, setCreditCategory] = useState<TimeCategory>(currentCreditCategory ?? 'ldc')
   const [showRepeatConfirm, setShowRepeatConfirm] = useState(false)
+  const [confirmRemoveDay, setConfirmRemoveDay] = useState(false)
+  const [confirmClearAll, setConfirmClearAll] = useState(false)
   const [hours, setHours] = useState('0')
   const [minutes, setMinutes] = useState('0')
   const [category, setCategory] = useState<TimeCategory>('ministry')
@@ -1296,22 +1334,28 @@ function DayActionModal({
 
   const windowDurationMin = Math.max(0, timeInputToMinutes(end) - timeInputToMinutes(start))
   const liveWeeklyTotalMin = otherDaysSuggestedMin + windowDurationMin
+  const creditHoursNum = Number(creditHours) || 0
 
   function confirmSaveWindow() {
-    onSaveWindow(start, end, creditHours ? Number(creditHours) : undefined)
+    onSaveWindow(start, end, creditHoursNum > 0 ? creditHoursNum : undefined, creditCategory)
     setShowRepeatConfirm(false)
   }
 
   return (
     <ModalPortal>
       <div className="modal-backdrop day-modal-backdrop" onClick={onClose}>
-        <div className="modal day-action-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+        <div className="modal day-action-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
           <div className="modal-toolbar">
             <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
           </div>
-          <div style={{ marginTop: -6 }}>
-            <h3 style={{ margin: 0 }}>{dayLabel}</h3>
-            <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>{dateLabel}</p>
+          <div style={{ marginTop: -6, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <div>
+              <h3 style={{ margin: 0 }}>{dayLabel}</h3>
+              <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>{dateLabel}</p>
+            </div>
+            {isSuggestedDay && step !== 'dayOptions' && (
+              <button className="secondary small" onClick={() => setStep('dayOptions')}>Edit</button>
+            )}
           </div>
 
           {step === 'menu' && (
@@ -1322,6 +1366,21 @@ function DayActionModal({
               <button className="secondary" onClick={() => setStep('logTime')}>
                 Add Service Time for This Day
               </button>
+            </div>
+          )}
+
+          {step === 'dayOptions' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                Redo this day's suggested schedule, or start the whole week over.
+              </p>
+              <button className="danger" onClick={() => setConfirmRemoveDay(true)}>
+                Remove This Day's Schedule
+              </button>
+              <button className="danger" onClick={() => setConfirmClearAll(true)}>
+                Clear All Suggested Days
+              </button>
+              <button className="secondary" onClick={() => setStep('menu')}>Back</button>
             </div>
           )}
 
@@ -1346,7 +1405,7 @@ function DayActionModal({
 
               {creditEnabled && (
                 <label className="field">
-                  <span className="field-label">Suggested credit hours this day <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></span>
+                  <span className="field-label">Suggested credit hours <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></span>
                   <input
                     type="number"
                     min="0"
@@ -1357,6 +1416,22 @@ function DayActionModal({
                     placeholder="e.g. 2"
                   />
                 </label>
+              )}
+              {creditEnabled && creditHoursNum > 0 && (
+                <div className="field">
+                  <span className="field-label">Type of credit time</span>
+                  <div className="cat-pills">
+                    {CREDIT_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat}
+                        className={`chip${creditCategory === cat ? ' active' : ''}`}
+                        onClick={() => setCreditCategory(cat)}
+                      >
+                        {CATEGORY_LABELS[cat]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {weeklyGoalMin > 0 && (
@@ -1427,12 +1502,37 @@ function DayActionModal({
       <ConfirmDialog
         open={showRepeatConfirm}
         title={`Repeat every ${dayLabel}?`}
-        message={`This will suggest ${fmtTime(timeInputToMinutes(start))}–${fmtTime(timeInputToMinutes(end))} every ${dayLabel} going forward on your Weekly Schedule.`}
+        message={
+          `This will suggest ${fmtTime(timeInputToMinutes(start))}–${fmtTime(timeInputToMinutes(end))} every ${dayLabel} going forward on your Weekly Schedule.` +
+          (creditHoursNum > 0 ? ` Also suggests ${fmtDuration(creditHoursNum * 60)} of ${CATEGORY_LABELS[creditCategory]} credit time.` : '')
+        }
         confirmLabel={`Yes, repeat every ${dayLabel}`}
         cancelLabel="Cancel"
         tone="primary"
         onConfirm={confirmSaveWindow}
         onCancel={() => setShowRepeatConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmRemoveDay}
+        title={`Remove ${dayLabel} from your schedule?`}
+        message="This day's suggested ministry window (and any suggested credit hours) will be cleared. This can't be undone."
+        confirmLabel="Yes, remove this day"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={() => { setConfirmRemoveDay(false); onRemoveDay() }}
+        onCancel={() => setConfirmRemoveDay(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmClearAll}
+        title="Clear all suggested days?"
+        message="This clears every suggested day and time from your Weekly Schedule, so you can build it again from scratch. Logged time and goals aren't affected. This can't be undone."
+        confirmLabel="Yes, clear all suggested days"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={() => { setConfirmClearAll(false); onClearAllDays() }}
+        onCancel={() => setConfirmClearAll(false)}
       />
     </ModalPortal>
   )
@@ -1582,6 +1682,7 @@ function ScheduleCalendarView({
             const dow = new Date(viewYear, viewMonth, day).getDay()
             const isService = prefs.daysOut.includes(dow)
             const suggestedCredit = prefs.daySchedule?.[dow]?.creditMin
+            const suggestedCreditCategory = prefs.daySchedule?.[dow]?.creditCategory
             const isToday = day === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear()
             const loggedCat = predominantCategory(day)
             const dayAppts = apptsByDay.get(day) ?? []
@@ -1591,7 +1692,9 @@ function ScheduleCalendarView({
             } as React.CSSProperties
             const titleParts = [
               isService ? 'Suggested ministry day' : '',
-              suggestedCredit ? `+ ${fmtDuration(suggestedCredit)} credit suggested` : '',
+              suggestedCredit
+                ? `+ ${fmtDuration(suggestedCredit)} ${suggestedCreditCategory ? CATEGORY_LABELS[suggestedCreditCategory] : 'credit'} suggested`
+                : '',
               loggedCat ? `${CATEGORY_LABELS[loggedCat]} time logged` : '',
               ...dayAppts.map((a) => a.title),
             ].filter(Boolean)

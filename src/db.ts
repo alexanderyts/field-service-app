@@ -82,10 +82,10 @@ export interface SchedulePrefs {
       replaces the old single global startMinutes/sessionHours. `end` is only present once
       explicitly customized (from the Schedule tab); until then it's derived live from
       weeklyHours split evenly across the selected days, so it stays correct as days are
-      added or removed instead of going stale. `creditMin` is an optional planning-only
-      suggestion (credit hours someone hopes to fit in that day) — purely a planning aid,
-      never logged automatically. */
-  daySchedule?: Record<number, { start: number; end?: number; creditMin?: number }>
+      added or removed instead of going stale. `creditMin`/`creditCategory` are an optional
+      planning-only suggestion (credit hours + type someone hopes to fit in that day) —
+      purely a planning aid, never logged automatically. */
+  daySchedule?: Record<number, { start: number; end?: number; creditMin?: number; creditCategory?: TimeCategory }>
   /** Non-pioneers only — an optional self-set goal. Choosing monthly or yearly turns on
       real hour tracking (daysOut/weeklyHours/yearlyHours) for them, same as a pioneer's,
       just measured against their own goal instead of the fixed 600h/year. */
