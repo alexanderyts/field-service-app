@@ -103,6 +103,10 @@ export interface SchedulePrefs {
       blocks?: DayScheduleBlock[]
     }
   >
+  /** One-off suggested schedules for specific dates (keyed `YYYY-MM-DD`) — saved when
+      someone answers "just this day" instead of "repeat weekly". A date present here
+      completely shadows that date's weekly daySchedule entry. */
+  dateOverrides?: Record<string, DayScheduleBlock[]>
   /** Non-pioneers only — an optional self-set goal. Choosing monthly or yearly turns on
       real hour tracking (daysOut/weeklyHours/yearlyHours) for them, same as a pioneer's,
       just measured against their own goal instead of the fixed 600h/year. */

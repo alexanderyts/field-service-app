@@ -24,14 +24,14 @@ interface TutorialStep {
   highlight?: string
 }
 
-// A short, one-stop-per-tab overview rather than a granular button-by-button walkthrough
-// — each step highlights that tab's own button in the bar below so it's obvious which
-// tab is being described, then moves on.
+// A short, tab-by-tab overview rather than a granular button-by-button walkthrough —
+// each step highlights that tab's own button in the bar below so it's obvious which
+// tab is being described. Schedule gets three stops since it's the deepest tab.
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
     icon: '👋',
     title: 'Welcome to Field Service',
-    body: "A quick look at what each tab does — about 30 seconds. Replay it anytime from the More tab.",
+    body: "A quick look at what each tab does — under a minute. Replay it anytime from the More tab.",
     tab: 'contacts',
     highlight: '[data-tutorial="tabbar"]',
   },
@@ -44,29 +44,43 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     icon: '◫',
-    title: 'Schedule',
-    body: "Answer a few questions once and this tab tracks your progress toward your goals, suggests which days to go out, and logs your time — with automatic minute-banking so leftover minutes are never lost.",
+    title: 'Schedule · Your Goals',
+    body: "Answer a few questions once and the progress window at the top tracks your week, month, and service year at a glance. Auxiliary pioneering for a month? Flip it on right at the top of that window and your targets adjust automatically.",
+    tab: 'schedule',
+    highlight: '[data-tutorial="tab-schedule"]',
+  },
+  {
+    icon: '🗓️',
+    title: 'Schedule · Plan Your Week',
+    body: "Tap any day on the Weekly Schedule to plan it — stack multiple kinds of time on one day (ministry in the morning, LDC in the afternoon), then repeat it weekly or keep it just for that date. The app tells you live how much of your weekly goal is covered, and the calendar view color-codes every planned and completed day.",
+    tab: 'schedule',
+    highlight: '[data-tutorial="tab-schedule"]',
+  },
+  {
+    icon: '⏱',
+    title: 'Schedule · The Minute Bank',
+    body: "Log time with Add Time — and watch the leftover minutes fly into your minute bank. When banked minutes fill up, they turn into a full hour automatically, or tap the bank anytime to cash them in early. No minute ever gets lost.",
     tab: 'schedule',
     highlight: '[data-tutorial="tab-schedule"]',
   },
   {
     icon: '◈',
     title: 'Map',
-    body: "Every contact with an address is pinned here automatically, color-coded by status. You can also trace out a temporary territory — a group of streets you're working — to keep track of what's left and mark it done.",
+    body: "Every contact with an address is pinned here automatically, color-coded by status. You can also trace out a temporary territory — a group of streets you're working — mark each street done, and it counts toward your reports when completed.",
     tab: 'map',
     highlight: '[data-tutorial="tab-map"]',
   },
   {
     icon: '▦',
     title: 'Reports',
-    body: "Tap Run Report anytime for an overview of your month and year, including progress toward any goals you've set.",
+    body: "Tap Run Report anytime for an overview of your month and service year — hours, goals, territories completed — and email it out with one tap.",
     tab: 'reports',
     highlight: '[data-tutorial="tab-reports"]',
   },
   {
     icon: '⋯',
     title: 'More',
-    body: "Turn on credit hours, try Dark Mode, back up your data, replay this tour, or review your privacy settings. Everything you enter stays on this device — always.",
+    body: "Pick a theme (Light, Dark, or Pastel), turn on return-visit reminders and credit hours, replay this tour, or review your privacy settings. Everything you enter stays on this device — always.",
     tab: 'misc',
     highlight: '[data-tutorial="tab-misc"]',
   },
