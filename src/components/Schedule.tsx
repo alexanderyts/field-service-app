@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Appointment, type SchedulePrefs, type TimeCategory, type TimeLog } from '../db'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../categories'
-import { flyToMinuteBank } from '../minuteBankFly'
+import { collectAndFlyToMinuteBank } from '../minuteBankFly'
 import {
   effectiveMonthlyGoalMin,
   fmtDuration,
@@ -645,13 +645,13 @@ function ScheduleMain({
     m: number,
     category: TimeCategory,
     otherNote: string,
-    originEl?: HTMLElement
+    minutesFieldEl?: HTMLElement
   ) {
     let bank = getMinuteBank() + m
     const autoHour = bank >= 60
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
-    flyToMinuteBank(originEl)
+    await collectAndFlyToMinuteBank(minutesFieldEl)
     if (autoHour) {
       const d = dayDateFor(day)
       d.setHours(12, 0, 0, 0)
@@ -1177,6 +1177,8 @@ function DayActionModal({
   const [minutes, setMinutes] = useState('0')
   const [category, setCategory] = useState<TimeCategory>('ministry')
   const [otherNote, setOtherNote] = useState('')
+  const [numPad, setNumPad] = useState<'hours' | 'minutes' | null>(null)
+  const minutesBtnRef = useRef<HTMLButtonElement>(null)
 
   const creditEnabled = localStorage.getItem('fieldservice_credit_hours') === 'yes'
   const availableCats: TimeCategory[] = creditEnabled
@@ -1232,14 +1234,14 @@ function DayActionModal({
           {step === 'logTime' && (
             <>
               <div className="hours-minutes-row">
-                <label className="field">
+                <div className="field">
                   <span className="field-label">Hours</span>
-                  <input type="number" min="0" inputMode="numeric" value={hours} onChange={(e) => setHours(e.target.value)} />
-                </label>
-                <label className="field">
+                  <button className="numpad-display-btn" onClick={() => setNumPad('hours')}>{hours}</button>
+                </div>
+                <div className="field">
                   <span className="field-label">Minutes</span>
-                  <input type="number" min="0" max="59" inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
-                </label>
+                  <button ref={minutesBtnRef} className="numpad-display-btn" onClick={() => setNumPad('minutes')}>{minutes}</button>
+                </div>
               </div>
               <div className="field">
                 <span className="field-label">Category</span>
@@ -1262,7 +1264,7 @@ function DayActionModal({
                 </label>
               )}
               <button
-                onClick={(e) => onLogTime(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, otherNote, e.currentTarget)}
+                onClick={() => onLogTime(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, otherNote, minutesBtnRef.current ?? undefined)}
                 disabled={Number(hours) === 0 && Number(minutes) === 0}
               >
                 Save Time
@@ -1271,6 +1273,13 @@ function DayActionModal({
           )}
         </div>
       </div>
+
+      {numPad === 'hours' && (
+        <NumPad initialValue={hours} label="Hours" onConfirm={setHours} onClose={() => setNumPad(null)} />
+      )}
+      {numPad === 'minutes' && (
+        <NumPad initialValue={minutes} label="Minutes" max={59} onConfirm={setMinutes} onClose={() => setNumPad(null)} />
+      )}
     </ModalPortal>
   )
 }
@@ -1503,7 +1512,7 @@ function AddTime({
   const [showCal, setShowCal] = useState(false)
   const [numPad, setNumPad] = useState<'hours' | 'minutes' | null>(null)
   const [showRoundUp, setShowRoundUp] = useState(false)
-  const saveBtnRef = useRef<HTMLButtonElement>(null)
+  const minutesBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     // Re-sync whenever the panel opens — AddTime never unmounts, so without this a stale
@@ -1538,13 +1547,16 @@ function AddTime({
   }
 
   // Banks the leftover minutes (localStorage) and saves the whole-hours part, if any.
+  // Deliberately waits for the minutes field's own collect/shrink animation to finish
+  // before resetting it to '0' below — otherwise the displayed number would flip to 0
+  // mid-shrink instead of appearing to travel away as itself.
   async function bankMinutesAndSave(h: number, m: number) {
     // Compute new bank and save BEFORE any await that might trigger re-render
     let bank = getMinuteBank() + m
     const autoHour = bank >= 60
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
-    flyToMinuteBank(saveBtnRef.current)
+    await collectAndFlyToMinuteBank(minutesBtnRef.current)
 
     if (autoHour) {
       const d = parseLocalDate(date)
@@ -1579,10 +1591,9 @@ function AddTime({
     <>
       <div className="card">
         <div className="add-time-header-row" data-minute-bank-target>
-          <button className="collapse-header" onClick={onToggle}>
-            <strong>Add Time</strong>
-            <span className="add-plus">{open ? '×' : '+'}</span>
-          </button>
+          {/* Pill sits on the opposite side from the collapse toggle (+/×), which lives
+              at the far right of the button below — keeping distance between them avoids
+              accidentally tapping the pill while reaching for the toggle. */}
           {minuteBank > 0 && (
             <div className="minute-bank-pill" onClick={onTapBank} title="Tap to round up and add now">
               <span>⏱ {minuteBank}m</span>
@@ -1591,6 +1602,10 @@ function AddTime({
               </div>
             </div>
           )}
+          <button className="collapse-header" onClick={onToggle}>
+            <strong>Add Time</strong>
+            <span className="add-plus">{open ? '×' : '+'}</span>
+          </button>
         </div>
 
         {open && (
@@ -1614,7 +1629,7 @@ function AddTime({
               </div>
               <div className="field">
                 <span className="field-label">Minutes</span>
-                <button className="numpad-display-btn" onClick={() => setNumPad('minutes')}>{minutes}</button>
+                <button ref={minutesBtnRef} className="numpad-display-btn" onClick={() => setNumPad('minutes')}>{minutes}</button>
               </div>
             </div>
 
@@ -1647,7 +1662,7 @@ function AddTime({
               <input value={note} onChange={(e) => setNote(e.target.value)} />
             </label>
 
-            <button ref={saveBtnRef} onClick={handleSave} disabled={Number(hours) === 0 && Number(minutes) === 0}>
+            <button onClick={handleSave} disabled={Number(hours) === 0 && Number(minutes) === 0}>
               Save Entry
             </button>
           </div>

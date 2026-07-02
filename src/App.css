@@ -1829,14 +1829,31 @@ button.small {
   100% { transform: scale(1); }
 }
 
+/* The field the minutes were entered in briefly "gathers" — highlights orange and shrinks
+   away — right before the ball launches from that same spot (see collectAndFlyToMinuteBank
+   in minuteBankFly.ts), so the ball reads as originating from the minutes themselves. */
+.minute-collecting {
+  animation: minute-collecting 0.42s ease-in forwards;
+  transform-origin: center;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes minute-collecting {
+  0% { transform: scale(1); background: var(--credit-soft); border-color: var(--credit); color: var(--credit); opacity: 1; }
+  40% { transform: scale(1.12); background: var(--credit-soft); border-color: var(--credit); color: var(--credit); opacity: 1; }
+  100% { transform: scale(0); background: var(--credit-soft); border-color: var(--credit); color: var(--credit); opacity: 0; }
+}
+
 /* The little stopwatch icon that flies from wherever time was just banked up to this
    pill — appended straight to document.body (see minuteBankFly.ts), not part of React's
    tree. Colored to match the pill itself (var(--credit)) so it reads clearly as "headed
-   for the bank" rather than a generic sparkle. An ease-in curve keeps it near the origin
-   at first (so it visibly starts from wherever was tapped) then rushes the rest of the
-   way, and the keyframes hold it exactly at the target position for the last stretch —
-   growing slightly then collapsing to nothing, like the bank is absorbing it — rather than
-   ever traveling past the pill. */
+   for the bank" rather than a generic sparkle. A gentle ease-in starts it moving almost
+   right away and builds speed, arcing through a midpoint bulge (--arcX/--arcY, computed
+   per-flight in JS) rather than sliding in a flat line, so the toss feels like it has some
+   weight to it. The keyframes hold it exactly at the target position for the last stretch —
+   growing slightly on "impact" then fading out slowly in place — rather than ever
+   traveling past the pill. */
 .minute-bank-ball {
   position: fixed;
   z-index: 3000;
@@ -1853,13 +1870,14 @@ button.small {
   color: #fff;
   pointer-events: none;
   transform: translate(-50%, -50%);
-  animation: minute-bank-fly 1.9s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
+  animation: minute-bank-fly 1.7s cubic-bezier(0.4, 0, 0.6, 0.3) forwards;
 }
 
 @keyframes minute-bank-fly {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  82% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.2); opacity: 1; }
-  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0); opacity: 0; }
+  45% { transform: translate(calc(-50% + var(--arcX)), calc(-50% + var(--arcY))) scale(1.05); opacity: 1; }
+  80% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.2); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.15); opacity: 0; }
 }
 
 .minute-bank-track {

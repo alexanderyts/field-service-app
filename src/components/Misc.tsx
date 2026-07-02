@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { db } from '../db'
 import ConfirmDialog from './ConfirmDialog'
+import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
 
 const CREDIT_CAT_LABELS: Record<string, string> = {
   ldc: 'LDC (Construction)',
@@ -16,6 +17,7 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
   const [confirmSeed, setConfirmSeed] = useState(false)
   const [creditEnabled, setCreditEnabled] = useState(() => localStorage.getItem('fieldservice_credit_hours') === 'yes')
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('fieldservice_dark_mode') === 'yes')
+  const [minuteAnimEnabled, setMinuteAnimEnabledState] = useState(() => minuteBankAnimationsEnabled())
 
   async function loadDemoData() {
     // Dynamic import so this dev-only generator (and its data) is a separate chunk that
@@ -35,6 +37,11 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
     setDarkMode(v)
     localStorage.setItem('fieldservice_dark_mode', v ? 'yes' : 'no')
     document.documentElement.dataset.theme = v ? 'dark' : ''
+  }
+
+  function toggleMinuteAnim(v: boolean) {
+    setMinuteAnimEnabledState(v)
+    setMinuteBankAnimationsEnabled(v)
   }
 
   async function clearAllData() {
@@ -82,6 +89,19 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
             <strong>Dark Mode <span className="beta-pill">Beta</span></strong>
             <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
               Switches the app to a dark color scheme. Still being refined — if something looks off, let me know.
+            </p>
+          </div>
+        </label>
+      </div>
+
+      {/* ── Minute-bank animation ────────────────────────────── */}
+      <div className="card">
+        <label className="checkbox-row">
+          <input type="checkbox" checked={minuteAnimEnabled} onChange={(e) => toggleMinuteAnim(e.target.checked)} />
+          <div>
+            <strong>Minute-bank animation</strong>
+            <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+              Shows a little flying animation when leftover minutes get banked. Turn off for a plain, instant save.
             </p>
           </div>
         </label>
