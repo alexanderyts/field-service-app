@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Appointment, type SchedulePrefs, type TimeCategory, type TimeLog } from '../db'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../categories'
-import { collectAndFlyToMinuteBank } from '../minuteBankFly'
+import { animateBankValue, collectAndFlyToMinuteBank } from '../minuteBankFly'
 import {
   effectiveMonthlyGoalMin,
   fmtDuration,
@@ -409,7 +409,14 @@ function ScheduleMain({
   const [visibleLogCount, setVisibleLogCount] = useState(4)
   const [showCalendarView, setShowCalendarView] = useState(false)
   const [dayModalFor, setDayModalFor] = useState<number | null>(null)
+  const [dayModalOriginRect, setDayModalOriginRect] = useState<DOMRect | null>(null)
   const [confirmBankRoundUp, setConfirmBankRoundUp] = useState(false)
+  // The bank pill's displayed value — animated (counted up/down) rather than snapping
+  // straight to whatever's in localStorage, so both the Add Time save flow and the
+  // per-day quick-log flow (different code paths, same underlying bank) share one
+  // consistent, always-in-sync visual.
+  const [displayedBank, setDisplayedBank] = useState(() => getMinuteBank())
+  const [bankCollapsing, setBankCollapsing] = useState(false)
 
   const weekStartMs = thisWeekStartMs + weekOffset * 7 * 24 * 60 * 60 * 1000
   const weekEndMs = weekStartMs + 7 * 24 * 60 * 60 * 1000
@@ -608,7 +615,30 @@ function ScheduleMain({
     const nextDaysOut = prefs.daysOut.includes(day) ? prefs.daysOut : [...prefs.daysOut, day].sort()
     const nextSchedule = { ...(prefs.daySchedule ?? {}), [day]: { start: timeInputToMinutes(startStr), end: timeInputToMinutes(endStr) } }
     await db.schedulePrefs.update(prefs.id, { daysOut: nextDaysOut, daySchedule: nextSchedule })
-    setDayModalFor(null)
+    closeDayModalSmoothly()
+  }
+
+  // Closing the day-tap modal by morphing it back down toward the day row it was opened
+  // from (see dayModalOriginRect, captured at the moment that row was tapped) and fading
+  // the backdrop out, rather than instantly unmounting — an instant unmount read as the
+  // dimmed background suddenly flashing bright again.
+  function closeDayModalSmoothly() {
+    const modalEl = document.querySelector('.day-action-modal') as HTMLElement | null
+    const backdropEl = document.querySelector('.day-modal-backdrop') as HTMLElement | null
+    if (modalEl && dayModalOriginRect) {
+      const r = modalEl.getBoundingClientRect()
+      const scaleX = r.width ? dayModalOriginRect.width / r.width : 1
+      const scaleY = r.height ? dayModalOriginRect.height / r.height : 1
+      const tx = (dayModalOriginRect.left + dayModalOriginRect.width / 2) - (r.left + r.width / 2)
+      const ty = (dayModalOriginRect.top + dayModalOriginRect.height / 2) - (r.top + r.height / 2)
+      modalEl.style.setProperty('--closeTX', `${tx}px`)
+      modalEl.style.setProperty('--closeTY', `${ty}px`)
+      modalEl.style.setProperty('--closeSX', `${scaleX}`)
+      modalEl.style.setProperty('--closeSY', `${scaleY}`)
+      modalEl.classList.add('day-modal-closing')
+    }
+    backdropEl?.classList.add('closing')
+    window.setTimeout(() => setDayModalFor(null), 300)
   }
 
   function dayDateFor(day: number): Date {
@@ -647,11 +677,13 @@ function ScheduleMain({
     otherNote: string,
     minutesFieldEl?: HTMLElement
   ) {
-    let bank = getMinuteBank() + m
+    const before = getMinuteBank()
+    let bank = before + m
     const autoHour = bank >= 60
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
     await collectAndFlyToMinuteBank(minutesFieldEl)
+    await animateBankValue(before, bank, 550, setDisplayedBank)
     if (autoHour) {
       const d = dayDateFor(day)
       d.setHours(12, 0, 0, 0)
@@ -670,14 +702,14 @@ function ScheduleMain({
   ) {
     if (h === 0 && m === 0) return
     if (m === 0) {
-      saveQuickLog(day, h * 60, category, otherNote).then(() => setDayModalFor(null))
+      saveQuickLog(day, h * 60, category, otherNote).then(() => closeDayModalSmoothly())
       return
     }
     if (m >= 30) {
       setQuickLogConfirm({ day, hours: h, minutes: m, category, otherNote, originEl })
       return
     }
-    bankQuickLogMinutes(day, h, m, category, otherNote, originEl).then(() => setDayModalFor(null))
+    bankQuickLogMinutes(day, h, m, category, otherNote, originEl).then(() => closeDayModalSmoothly())
   }
 
   const weekMinistryPct = weeklyGoalMin ? Math.min(100, (weekMinistry / weeklyGoalMin) * 100) : 0
@@ -690,17 +722,21 @@ function ScheduleMain({
   // this same flag.
   const hasSchedule = prefs.daysOut.length > 0 || weeklyGoalMin > 0
 
-  const minuteBank = getMinuteBank()
-
   // Tapping the pill lets someone cash in banked minutes early instead of waiting for
   // them to reach a full hour naturally — logged as ministry time, same as an automatic
-  // bank-to-hour conversion.
+  // bank-to-hour conversion. Counts the bank down to 0 (instead of snapping) and then
+  // plays the reverse of the pill's opening animation, mirroring how it appeared.
   async function redeemMinuteBank() {
     setConfirmBankRoundUp(false)
+    const startValue = displayedBank
     const d = new Date()
     d.setHours(12, 0, 0, 0)
     await db.timeLogs.add({ date: d.getTime(), minutes: 60, category: 'ministry', note: 'Added from minute bank' } as TimeLog)
     saveMinuteBank(0)
+    await animateBankValue(startValue, 0, 550, setDisplayedBank)
+    setBankCollapsing(true)
+    await new Promise((resolve) => window.setTimeout(resolve, 400))
+    setBankCollapsing(false)
   }
 
   return (
@@ -913,7 +949,7 @@ function ScheduleMain({
                   <div
                     key={i}
                     className={`day-row${isToday ? ' today' : ''}${isHighlighted ? ' jump-highlight' : ''}${inShownMonth ? '' : ' faded'}`}
-                    onClick={() => setDayModalFor(i)}
+                    onClick={(e) => { setDayModalOriginRect(e.currentTarget.getBoundingClientRect()); setDayModalFor(i) }}
                     style={{ cursor: 'pointer' }}
                     title={inShownMonth ? undefined : `Part of ${MONTH_NAMES_LONG[dayDate.getMonth()]} — not the month shown above`}
                   >
@@ -987,8 +1023,10 @@ function ScheduleMain({
           open={addOpen}
           onToggle={() => setAddOpen((o) => !o)}
           onAdded={() => setAddOpen(false)}
-          minuteBank={minuteBank}
+          displayedBank={displayedBank}
+          bankCollapsing={bankCollapsing}
           onTapBank={() => setConfirmBankRoundUp(true)}
+          onBankIncrease={(before, after) => animateBankValue(before, after, 550, setDisplayedBank)}
         />
       ) : (
         <MonthlyParticipationBox
@@ -1049,7 +1087,7 @@ function ScheduleMain({
           currentWindow={daySessionWindow(dayModalFor)}
           onSaveWindow={(start, end) => saveDayWindow(dayModalFor, start, end)}
           onLogTime={(h, m, category, otherNote, originEl) => quickLogTime(dayModalFor, h, m, category, otherNote, originEl)}
-          onClose={() => setDayModalFor(null)}
+          onClose={closeDayModalSmoothly}
         />
       )}
 
@@ -1065,13 +1103,13 @@ function ScheduleMain({
             const { day, hours, category, otherNote } = quickLogConfirm
             setQuickLogConfirm(null)
             await saveQuickLog(day, (hours + 1) * 60, category, otherNote)
-            setDayModalFor(null)
+            closeDayModalSmoothly()
           }}
           onCancel={async () => {
             const { day, hours, minutes, category, otherNote, originEl } = quickLogConfirm
             setQuickLogConfirm(null)
             await bankQuickLogMinutes(day, hours, minutes, category, otherNote, originEl)
-            setDayModalFor(null)
+            closeDayModalSmoothly()
           }}
         />
       )}
@@ -1079,7 +1117,7 @@ function ScheduleMain({
       <ConfirmDialog
         open={confirmBankRoundUp}
         title="Add your banked minutes now?"
-        message={`You have ${minuteBank}m banked. Round up and add 1 hour of ministry time now, or keep banking until it fills up on its own.`}
+        message={`You have ${displayedBank}m banked. Round up and add 1 hour of ministry time now, or keep banking until it fills up on its own.`}
         confirmLabel="Yes, add now"
         cancelLabel="Keep banking"
         tone="primary"
@@ -1188,8 +1226,8 @@ function DayActionModal({
 
   return (
     <ModalPortal>
-      <div className="modal-backdrop" onClick={onClose}>
-        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+      <div className="modal-backdrop day-modal-backdrop" onClick={onClose}>
+        <div className="modal day-action-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
           <div className="modal-toolbar">
             <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
           </div>
@@ -1494,14 +1532,18 @@ function AddTime({
   open,
   onToggle,
   onAdded,
-  minuteBank,
+  displayedBank,
+  bankCollapsing,
   onTapBank,
+  onBankIncrease,
 }: {
   open: boolean
   onToggle: () => void
   onAdded: () => void
-  minuteBank: number
+  displayedBank: number
+  bankCollapsing: boolean
   onTapBank: () => void
+  onBankIncrease: (before: number, after: number) => Promise<void>
 }) {
   const [date, setDate] = useState(() => fmtLocalDate(new Date()))
   const [hours, setHours] = useState('0')
@@ -1552,11 +1594,13 @@ function AddTime({
   // mid-shrink instead of appearing to travel away as itself.
   async function bankMinutesAndSave(h: number, m: number) {
     // Compute new bank and save BEFORE any await that might trigger re-render
-    let bank = getMinuteBank() + m
+    const before = getMinuteBank()
+    let bank = before + m
     const autoHour = bank >= 60
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
     await collectAndFlyToMinuteBank(minutesBtnRef.current)
+    await onBankIncrease(before, bank)
 
     if (autoHour) {
       const d = parseLocalDate(date)
@@ -1594,11 +1638,15 @@ function AddTime({
           {/* Pill sits on the opposite side from the collapse toggle (+/×), which lives
               at the far right of the button below — keeping distance between them avoids
               accidentally tapping the pill while reaching for the toggle. */}
-          {minuteBank > 0 && (
-            <div className="minute-bank-pill" onClick={onTapBank} title="Tap to round up and add now">
-              <span>⏱ {minuteBank}m</span>
+          {(displayedBank > 0 || bankCollapsing) && (
+            <div
+              className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
+              onClick={onTapBank}
+              title="Tap to round up and add now"
+            >
+              <span>⏱ {displayedBank}m</span>
               <div className="minute-bank-track">
-                <div className="minute-bank-fill" style={{ width: `${(minuteBank / 60) * 100}%` }} />
+                <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
               </div>
             </div>
           )}
@@ -1608,7 +1656,8 @@ function AddTime({
           </button>
         </div>
 
-        {open && (
+        <div className={`collapsible${open ? ' collapsible-open' : ''}`}>
+          <div className="collapsible-inner">
           <div className="add-time-body">
             {/* Date */}
             <div className="field">
@@ -1666,7 +1715,8 @@ function AddTime({
               Save Entry
             </button>
           </div>
-        )}
+          </div>
+        </div>
       </div>
 
       {showCal && <CalendarPicker value={date} onChange={setDate} onClose={() => setShowCal(false)} />}

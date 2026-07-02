@@ -540,6 +540,28 @@ button.small {
   max-height: 92vh;
 }
 
+/* Day-tap modal (Weekly Schedule) closes by morphing back down toward the day row it was
+   opened from, instead of the backdrop instantly vanishing (which read as the screen
+   suddenly flashing bright again) — see closeDayModalSmoothly in Schedule.tsx, which
+   computes --closeTX/TY/SX/SY per-close from the day row's actual position. */
+.day-action-modal {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.day-action-modal.day-modal-closing {
+  transform: translate(var(--closeTX, 0px), var(--closeTY, 0px)) scale(var(--closeSX, 1), var(--closeSY, 1));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.day-modal-backdrop {
+  transition: opacity 0.3s ease;
+}
+
+.day-modal-backdrop.closing {
+  opacity: 0;
+}
+
 .confirm-backdrop {
   z-index: 1100;
 }
@@ -1114,6 +1136,25 @@ button.small {
   flex-direction: column;
   gap: 10px;
   margin-top: 12px;
+}
+
+/* Smooth expand/collapse for the Add Time card — the grid-rows trick lets a container
+   animate to/from its natural content height without JS measuring it. Used instead of
+   conditionally mounting/unmounting add-time-body, whose instant unmount read as a jerky,
+   sudden close (especially right after the minutes-gathering animation). */
+.collapsible {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.32s ease;
+}
+
+.collapsible.collapsible-open {
+  grid-template-rows: 1fr;
+}
+
+.collapsible-inner {
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* ---- Mini week overview ---- */
@@ -1802,6 +1843,9 @@ button.small {
   min-width: 0;
 }
 
+/* The reveal animation plays automatically whenever this node mounts — the very first
+   time any minutes are banked (no pill existed before) as well as any later reappearance —
+   so the bank visibly "opens up" rather than just popping into existence. */
 .minute-bank-pill {
   display: flex;
   align-items: center;
@@ -1817,6 +1861,24 @@ button.small {
   cursor: pointer;
   transition: transform 0.15s ease;
   flex-shrink: 0;
+  animation: minute-bank-reveal 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes minute-bank-reveal {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Reverse of the reveal — played by adding this class (not by unmounting) when the bank
+   is redeemed down to zero, so it visibly closes instead of vanishing. */
+.minute-bank-collapsing {
+  animation: minute-bank-collapse 0.4s ease forwards;
+}
+
+@keyframes minute-bank-collapse {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
 }
 
 .minute-bank-pulse {
@@ -1848,12 +1910,15 @@ button.small {
 /* The little stopwatch icon that flies from wherever time was just banked up to this
    pill — appended straight to document.body (see minuteBankFly.ts), not part of React's
    tree. Colored to match the pill itself (var(--credit)) so it reads clearly as "headed
-   for the bank" rather than a generic sparkle. A gentle ease-in starts it moving almost
-   right away and builds speed, arcing through a midpoint bulge (--arcX/--arcY, computed
-   per-flight in JS) rather than sliding in a flat line, so the toss feels like it has some
-   weight to it. The keyframes hold it exactly at the target position for the last stretch —
-   growing slightly on "impact" then fading out slowly in place — rather than ever
-   traveling past the pill. */
+   for the bank" rather than a generic sparkle. A gentle, mostly-monotonic ease keeps it
+   moving toward the target the whole time (no flat runway, no hard direction change) —
+   the midpoint bulge (--arcX/--arcY, computed per-flight in JS) is kept small and biased
+   toward the target rather than perpendicular, so it reads as a gentle, weighted toss
+   rather than a sideways dart that then corrects. A touch of motion blur through the
+   fastest part of the flight sells the speed and smooths over the keyframe seams. The
+   keyframes hold it exactly at the target position for the last stretch — growing
+   slightly on "impact" then fading out slowly in place — rather than ever traveling past
+   the pill. */
 .minute-bank-ball {
   position: fixed;
   z-index: 3000;
@@ -1870,14 +1935,14 @@ button.small {
   color: #fff;
   pointer-events: none;
   transform: translate(-50%, -50%);
-  animation: minute-bank-fly 1.7s cubic-bezier(0.4, 0, 0.6, 0.3) forwards;
+  animation: minute-bank-fly 1.7s cubic-bezier(0.32, 0.04, 0.4, 1) forwards;
 }
 
 @keyframes minute-bank-fly {
-  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  45% { transform: translate(calc(-50% + var(--arcX)), calc(-50% + var(--arcY))) scale(1.05); opacity: 1; }
-  80% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.2); opacity: 1; }
-  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.15); opacity: 0; }
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; filter: blur(0px); }
+  55% { transform: translate(calc(-50% + var(--arcX)), calc(-50% + var(--arcY))) scale(1.05); opacity: 1; filter: blur(1px); }
+  82% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.2); opacity: 1; filter: blur(0.3px); }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.15); opacity: 0; filter: blur(0px); }
 }
 
 .minute-bank-track {
