@@ -616,10 +616,10 @@ function ScheduleMain({
     return { start, end }
   }
 
-  async function saveDayWindow(day: number, startStr: string, endStr: string) {
+  function saveDayWindow(day: number, startStr: string, endStr: string) {
     const nextDaysOut = prefs.daysOut.includes(day) ? prefs.daysOut : [...prefs.daysOut, day].sort()
     const nextSchedule = { ...(prefs.daySchedule ?? {}), [day]: { start: timeInputToMinutes(startStr), end: timeInputToMinutes(endStr) } }
-    await db.schedulePrefs.update(prefs.id, { daysOut: nextDaysOut, daySchedule: nextSchedule })
+    db.schedulePrefs.update(prefs.id, { daysOut: nextDaysOut, daySchedule: nextSchedule })
     closeDayModalSmoothly()
   }
 
@@ -707,15 +707,21 @@ function ScheduleMain({
   ) {
     if (h === 0 && m === 0) return
     if (m === 0) {
-      saveQuickLog(day, h * 60, category, otherNote).then(() => closeDayModalSmoothly())
+      saveQuickLog(day, h * 60, category, otherNote)
+      closeDayModalSmoothly()
       return
     }
     if (m >= 30) {
       setQuickLogConfirm({ day, hours: h, minutes: m, category, otherNote, originEl })
       return
     }
+    // Close right away — the modal morphs shut at the same moment the minutes field
+    // starts gathering into the ball, rather than waiting for the whole flight (and the
+    // bank update after it) to finish. The ball itself keeps flying independently after
+    // the modal is gone, since it's a separate fixed-position element.
     setDayModalClosing(true)
-    bankQuickLogMinutes(day, h, m, category, otherNote, originEl).then(() => closeDayModalSmoothly())
+    closeDayModalSmoothly()
+    bankQuickLogMinutes(day, h, m, category, otherNote, originEl)
   }
 
   const weekMinistryPct = weeklyGoalMin ? Math.min(100, (weekMinistry / weeklyGoalMin) * 100) : 0
@@ -1106,18 +1112,18 @@ function ScheduleMain({
           confirmLabel="Yes, round up"
           cancelLabel="No, bank the minutes"
           tone="primary"
-          onConfirm={async () => {
+          onConfirm={() => {
             const { day, hours, category, otherNote } = quickLogConfirm
             setQuickLogConfirm(null)
-            await saveQuickLog(day, (hours + 1) * 60, category, otherNote)
+            saveQuickLog(day, (hours + 1) * 60, category, otherNote)
             closeDayModalSmoothly()
           }}
-          onCancel={async () => {
+          onCancel={() => {
             const { day, hours, minutes, category, otherNote, originEl } = quickLogConfirm
             setQuickLogConfirm(null)
             setDayModalClosing(true)
-            await bankQuickLogMinutes(day, hours, minutes, category, otherNote, originEl)
             closeDayModalSmoothly()
+            bankQuickLogMinutes(day, hours, minutes, category, otherNote, originEl)
           }}
         />
       )}
@@ -1604,14 +1610,14 @@ function AddTime({
     await commitSave((Number(hours) + 1) * 60)
   }
 
-  // Banks the leftover minutes (localStorage) and saves the whole-hours part, if any.
-  // Deliberately waits for the minutes field's own collect/shrink animation to finish
-  // before resetting it to '0' below — otherwise the displayed number would flip to 0
-  // mid-shrink instead of appearing to travel away as itself. The card itself starts
-  // minimizing (setClosing) immediately, concurrently with that collect+fly, rather than
-  // waiting for it to finish first — so the minutes field is the last thing left on
-  // screen as everything around it recedes, instead of nothing happening until the whole
-  // sequence is done and the card then snaps shut.
+  // Banks the leftover minutes (localStorage) and saves the whole-hours part, if any. The
+  // card closes right away — collapsing at the same moment the minutes field starts
+  // gathering into the ball, instead of waiting for the whole flight (and the db writes
+  // after it) to finish first. The ball itself is a separate fixed-position element
+  // appended once the field finishes gathering, so it's entirely unaffected by the card
+  // closing around it and keeps flying on its own toward the bank after the card is
+  // already gone — everything closes fast, the flight and the bank update just keep going
+  // in the background.
   async function bankMinutesAndSave(h: number, m: number) {
     // Compute new bank and save BEFORE any await that might trigger re-render
     const before = getMinuteBank()
@@ -1619,7 +1625,10 @@ function AddTime({
     const autoHour = bank >= 60
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
+
     setClosing(true)
+    onAdded()
+
     await collectAndFlyToMinuteBank(minutesBtnRef.current)
     await onBankIncrease(before, bank)
 
@@ -1628,13 +1637,13 @@ function AddTime({
       d.setHours(12, 0, 0, 0)
       await db.timeLogs.add({ date: d.getTime(), minutes: 60, category: effectiveCategory, note: 'Added from minute bank' } as TimeLog)
     }
-
     if (h > 0) {
-      await commitSave(h * 60)
-    } else {
-      setHours('0'); setMinutes('0'); setNote(''); setOtherNote('')
-      onAdded()
+      const d = parseLocalDate(date)
+      d.setHours(12, 0, 0, 0)
+      const finalNote = (effectiveCategory === 'other' && otherNote.trim()) ? otherNote.trim() : (note || undefined)
+      await db.timeLogs.add({ date: d.getTime(), minutes: h * 60, category: effectiveCategory, note: finalNote } as TimeLog)
     }
+    setHours('0'); setMinutes('0'); setNote(''); setOtherNote('')
   }
 
   async function handleRoundUpNo() {
