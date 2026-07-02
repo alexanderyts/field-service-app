@@ -1800,6 +1800,35 @@ button.small {
   font-weight: 600;
   color: var(--credit);
   white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.minute-bank-pulse {
+  animation: minute-bank-pulse 0.4s ease;
+}
+
+@keyframes minute-bank-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+/* The little "ball" that flies from wherever time was just banked up to this pill —
+   appended straight to document.body (see minuteBankFly.ts), not part of React's tree. */
+.minute-bank-ball {
+  position: fixed;
+  z-index: 3000;
+  font-size: 20px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: minute-bank-fly 0.7s cubic-bezier(0.3, 0.6, 0.4, 1) forwards;
+}
+
+@keyframes minute-bank-fly {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  70% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.6); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.3); opacity: 0; }
 }
 
 .minute-bank-track {

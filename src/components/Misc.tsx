@@ -46,6 +46,7 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
       db.schedulePrefs.clear(),
     ])
     localStorage.removeItem('fieldservice_privacy_v1')
+    localStorage.removeItem('fieldservice_minute_bank')
     window.location.reload()
   }
 

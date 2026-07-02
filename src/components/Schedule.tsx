@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Appointment, type SchedulePrefs, type TimeCategory, type TimeLog } from '../db'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../categories'
+import { flyToMinuteBank } from '../minuteBankFly'
 import {
   effectiveMonthlyGoalMin,
   fmtDuration,
@@ -408,6 +409,7 @@ function ScheduleMain({
   const [visibleLogCount, setVisibleLogCount] = useState(4)
   const [showCalendarView, setShowCalendarView] = useState(false)
   const [dayModalFor, setDayModalFor] = useState<number | null>(null)
+  const [confirmBankRoundUp, setConfirmBankRoundUp] = useState(false)
 
   const weekStartMs = thisWeekStartMs + weekOffset * 7 * 24 * 60 * 60 * 1000
   const weekEndMs = weekStartMs + 7 * 24 * 60 * 60 * 1000
@@ -626,7 +628,7 @@ function ScheduleMain({
   // AddTime's own save/banking rules (1-29 leftover minutes bank automatically; 30-59
   // asks to round up) so time logged this way is never treated differently.
   const [quickLogConfirm, setQuickLogConfirm] = useState<
-    { day: number; hours: number; minutes: number; category: TimeCategory; otherNote: string } | null
+    { day: number; hours: number; minutes: number; category: TimeCategory; otherNote: string; originEl?: HTMLElement } | null
   >(null)
 
   async function saveQuickLog(day: number, totalMin: number, category: TimeCategory, otherNote: string) {
@@ -637,11 +639,19 @@ function ScheduleMain({
     await db.timeLogs.add({ date: d.getTime(), minutes: totalMin, category, note } as TimeLog)
   }
 
-  async function bankQuickLogMinutes(day: number, h: number, m: number, category: TimeCategory, otherNote: string) {
+  async function bankQuickLogMinutes(
+    day: number,
+    h: number,
+    m: number,
+    category: TimeCategory,
+    otherNote: string,
+    originEl?: HTMLElement
+  ) {
     let bank = getMinuteBank() + m
     const autoHour = bank >= 60
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
+    flyToMinuteBank(originEl)
     if (autoHour) {
       const d = dayDateFor(day)
       d.setHours(12, 0, 0, 0)
@@ -650,17 +660,24 @@ function ScheduleMain({
     if (h > 0) await saveQuickLog(day, h * 60, category, otherNote)
   }
 
-  function quickLogTime(day: number, h: number, m: number, category: TimeCategory, otherNote: string) {
+  function quickLogTime(
+    day: number,
+    h: number,
+    m: number,
+    category: TimeCategory,
+    otherNote: string,
+    originEl?: HTMLElement
+  ) {
     if (h === 0 && m === 0) return
     if (m === 0) {
       saveQuickLog(day, h * 60, category, otherNote).then(() => setDayModalFor(null))
       return
     }
     if (m >= 30) {
-      setQuickLogConfirm({ day, hours: h, minutes: m, category, otherNote })
+      setQuickLogConfirm({ day, hours: h, minutes: m, category, otherNote, originEl })
       return
     }
-    bankQuickLogMinutes(day, h, m, category, otherNote).then(() => setDayModalFor(null))
+    bankQuickLogMinutes(day, h, m, category, otherNote, originEl).then(() => setDayModalFor(null))
   }
 
   const weekMinistryPct = weeklyGoalMin ? Math.min(100, (weekMinistry / weeklyGoalMin) * 100) : 0
@@ -675,13 +692,24 @@ function ScheduleMain({
 
   const minuteBank = getMinuteBank()
 
+  // Tapping the pill lets someone cash in banked minutes early instead of waiting for
+  // them to reach a full hour naturally — logged as ministry time, same as an automatic
+  // bank-to-hour conversion.
+  async function redeemMinuteBank() {
+    setConfirmBankRoundUp(false)
+    const d = new Date()
+    d.setHours(12, 0, 0, 0)
+    await db.timeLogs.add({ date: d.getTime(), minutes: 60, category: 'ministry', note: 'Added from minute bank' } as TimeLog)
+    saveMinuteBank(0)
+  }
+
   return (
     <div className="view">
       <div className="view-header">
         <h2 className="applet-title">Schedule</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }} data-minute-bank-target>
           {minuteBank > 0 && (
-            <div className="minute-bank-pill">
+            <div className="minute-bank-pill" onClick={() => setConfirmBankRoundUp(true)} title="Tap to round up and add now">
               <span>⏱ {minuteBank}m banked</span>
               <div className="minute-bank-track">
                 <div className="minute-bank-fill" style={{ width: `${(minuteBank / 60) * 100}%` }} />
@@ -1024,7 +1052,7 @@ function ScheduleMain({
           isSuggestedDay={prefs.daysOut.includes(dayModalFor)}
           currentWindow={daySessionWindow(dayModalFor)}
           onSaveWindow={(start, end) => saveDayWindow(dayModalFor, start, end)}
-          onLogTime={(h, m, category, otherNote) => quickLogTime(dayModalFor, h, m, category, otherNote)}
+          onLogTime={(h, m, category, otherNote, originEl) => quickLogTime(dayModalFor, h, m, category, otherNote, originEl)}
           onClose={() => setDayModalFor(null)}
         />
       )}
@@ -1044,13 +1072,24 @@ function ScheduleMain({
             setDayModalFor(null)
           }}
           onCancel={async () => {
-            const { day, hours, minutes, category, otherNote } = quickLogConfirm
+            const { day, hours, minutes, category, otherNote, originEl } = quickLogConfirm
             setQuickLogConfirm(null)
-            await bankQuickLogMinutes(day, hours, minutes, category, otherNote)
+            await bankQuickLogMinutes(day, hours, minutes, category, otherNote, originEl)
             setDayModalFor(null)
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmBankRoundUp}
+        title="Add your banked minutes now?"
+        message={`You have ${minuteBank}m banked. Round up and add 1 hour of ministry time now, or keep banking until it fills up on its own.`}
+        confirmLabel="Yes, add now"
+        cancelLabel="Keep banking"
+        tone="primary"
+        onConfirm={redeemMinuteBank}
+        onCancel={() => setConfirmBankRoundUp(false)}
+      />
     </div>
   )
 }
@@ -1132,7 +1171,7 @@ function DayActionModal({
   isSuggestedDay: boolean
   currentWindow: { start: number; end: number }
   onSaveWindow: (start: string, end: string) => void
-  onLogTime: (hours: number, minutes: number, category: TimeCategory, otherNote: string) => void
+  onLogTime: (hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
   onClose: () => void
 }) {
   const [step, setStep] = useState<'menu' | 'window' | 'logTime'>('menu')
@@ -1227,7 +1266,7 @@ function DayActionModal({
                 </label>
               )}
               <button
-                onClick={() => onLogTime(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, otherNote)}
+                onClick={(e) => onLogTime(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, otherNote, e.currentTarget)}
                 disabled={Number(hours) === 0 && Number(minutes) === 0}
               >
                 Save Time
@@ -1464,6 +1503,7 @@ function AddTime({
   const [showCal, setShowCal] = useState(false)
   const [numPad, setNumPad] = useState<'hours' | 'minutes' | null>(null)
   const [showRoundUp, setShowRoundUp] = useState(false)
+  const saveBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     // Re-sync whenever the panel opens — AddTime never unmounts, so without this a stale
@@ -1504,6 +1544,7 @@ function AddTime({
     const autoHour = bank >= 60
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
+    flyToMinuteBank(saveBtnRef.current)
 
     if (autoHour) {
       const d = parseLocalDate(date)
@@ -1596,7 +1637,7 @@ function AddTime({
               <input value={note} onChange={(e) => setNote(e.target.value)} />
             </label>
 
-            <button onClick={handleSave} disabled={Number(hours) === 0 && Number(minutes) === 0}>
+            <button ref={saveBtnRef} onClick={handleSave} disabled={Number(hours) === 0 && Number(minutes) === 0}>
               Save Entry
             </button>
           </div>
