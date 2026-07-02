@@ -1815,20 +1815,26 @@ button.small {
 }
 
 /* The little "ball" that flies from wherever time was just banked up to this pill —
-   appended straight to document.body (see minuteBankFly.ts), not part of React's tree. */
+   appended straight to document.body (see minuteBankFly.ts), not part of React's tree.
+   Colored to match the pill itself (var(--credit)) so it reads clearly as "headed for
+   the bank" rather than a generic sparkle. */
 .minute-bank-ball {
   position: fixed;
   z-index: 3000;
-  font-size: 20px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--credit);
+  box-shadow: 0 0 0 3px var(--credit-soft);
   pointer-events: none;
   transform: translate(-50%, -50%);
-  animation: minute-bank-fly 0.7s cubic-bezier(0.3, 0.6, 0.4, 1) forwards;
+  animation: minute-bank-fly 1.8s cubic-bezier(0.3, 0.6, 0.4, 1) forwards;
 }
 
 @keyframes minute-bank-fly {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  70% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.6); opacity: 1; }
-  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.3); opacity: 0; }
+  70% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.85); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.4); opacity: 0; }
 }
 
 .minute-bank-track {

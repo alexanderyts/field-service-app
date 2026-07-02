@@ -20,14 +20,13 @@ export function flyToMinuteBank(originEl: HTMLElement | null | undefined) {
 
   const ball = document.createElement('div')
   ball.className = 'minute-bank-ball'
-  ball.textContent = '⏱'
   ball.style.left = `${fromX}px`
   ball.style.top = `${fromY}px`
   ball.style.setProperty('--dx', `${toX - fromX}px`)
   ball.style.setProperty('--dy', `${toY - fromY}px`)
   document.body.appendChild(ball)
 
-  const FLIGHT_MS = 700
+  const FLIGHT_MS = 1800
   window.setTimeout(() => {
     target.classList.add('minute-bank-pulse')
     window.setTimeout(() => target.classList.remove('minute-bank-pulse'), 400)
