@@ -410,6 +410,11 @@ function ScheduleMain({
   const [showCalendarView, setShowCalendarView] = useState(false)
   const [dayModalFor, setDayModalFor] = useState<number | null>(null)
   const [dayModalOriginRect, setDayModalOriginRect] = useState<DOMRect | null>(null)
+  // Set immediately (before the bank write/collect/fly chain even starts) so the modal's
+  // other fields can start fading right away — see .time-entry-closing — while the
+  // minutes field is left alone to finish its own collect animation. The modal's actual
+  // morph-close only happens afterward, via closeDayModalSmoothly.
+  const [dayModalClosing, setDayModalClosing] = useState(false)
   const [confirmBankRoundUp, setConfirmBankRoundUp] = useState(false)
   // The bank pill's displayed value — animated (counted up/down) rather than snapping
   // straight to whatever's in localStorage, so both the Add Time save flow and the
@@ -683,7 +688,7 @@ function ScheduleMain({
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
     await collectAndFlyToMinuteBank(minutesFieldEl)
-    await animateBankValue(before, bank, 550, setDisplayedBank)
+    await animateBankValue(before, bank, 380, setDisplayedBank)
     if (autoHour) {
       const d = dayDateFor(day)
       d.setHours(12, 0, 0, 0)
@@ -709,6 +714,7 @@ function ScheduleMain({
       setQuickLogConfirm({ day, hours: h, minutes: m, category, otherNote, originEl })
       return
     }
+    setDayModalClosing(true)
     bankQuickLogMinutes(day, h, m, category, otherNote, originEl).then(() => closeDayModalSmoothly())
   }
 
@@ -733,9 +739,9 @@ function ScheduleMain({
     d.setHours(12, 0, 0, 0)
     await db.timeLogs.add({ date: d.getTime(), minutes: 60, category: 'ministry', note: 'Added from minute bank' } as TimeLog)
     saveMinuteBank(0)
-    await animateBankValue(startValue, 0, 550, setDisplayedBank)
+    await animateBankValue(startValue, 0, 380, setDisplayedBank)
     setBankCollapsing(true)
-    await new Promise((resolve) => window.setTimeout(resolve, 400))
+    await new Promise((resolve) => window.setTimeout(resolve, 260))
     setBankCollapsing(false)
   }
 
@@ -949,7 +955,7 @@ function ScheduleMain({
                   <div
                     key={i}
                     className={`day-row${isToday ? ' today' : ''}${isHighlighted ? ' jump-highlight' : ''}${inShownMonth ? '' : ' faded'}`}
-                    onClick={(e) => { setDayModalOriginRect(e.currentTarget.getBoundingClientRect()); setDayModalFor(i) }}
+                    onClick={(e) => { setDayModalOriginRect(e.currentTarget.getBoundingClientRect()); setDayModalClosing(false); setDayModalFor(i) }}
                     style={{ cursor: 'pointer' }}
                     title={inShownMonth ? undefined : `Part of ${MONTH_NAMES_LONG[dayDate.getMonth()]} — not the month shown above`}
                   >
@@ -1026,7 +1032,7 @@ function ScheduleMain({
           displayedBank={displayedBank}
           bankCollapsing={bankCollapsing}
           onTapBank={() => setConfirmBankRoundUp(true)}
-          onBankIncrease={(before, after) => animateBankValue(before, after, 550, setDisplayedBank)}
+          onBankIncrease={(before, after) => animateBankValue(before, after, 380, setDisplayedBank)}
         />
       ) : (
         <MonthlyParticipationBox
@@ -1088,6 +1094,7 @@ function ScheduleMain({
           onSaveWindow={(start, end) => saveDayWindow(dayModalFor, start, end)}
           onLogTime={(h, m, category, otherNote, originEl) => quickLogTime(dayModalFor, h, m, category, otherNote, originEl)}
           onClose={closeDayModalSmoothly}
+          closing={dayModalClosing}
         />
       )}
 
@@ -1108,6 +1115,7 @@ function ScheduleMain({
           onCancel={async () => {
             const { day, hours, minutes, category, otherNote, originEl } = quickLogConfirm
             setQuickLogConfirm(null)
+            setDayModalClosing(true)
             await bankQuickLogMinutes(day, hours, minutes, category, otherNote, originEl)
             closeDayModalSmoothly()
           }}
@@ -1199,6 +1207,7 @@ function DayActionModal({
   onSaveWindow,
   onLogTime,
   onClose,
+  closing,
 }: {
   dayLabel: string
   dateLabel: string
@@ -1207,6 +1216,7 @@ function DayActionModal({
   onSaveWindow: (start: string, end: string) => void
   onLogTime: (hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
   onClose: () => void
+  closing: boolean
 }) {
   const [step, setStep] = useState<'menu' | 'window' | 'logTime'>('menu')
   const [start, setStart] = useState(minutesToTimeInput(currentWindow.start))
@@ -1270,7 +1280,7 @@ function DayActionModal({
           )}
 
           {step === 'logTime' && (
-            <>
+            <div className={closing ? 'time-entry-closing' : ''}>
               <div className="hours-minutes-row">
                 <div className="field">
                   <span className="field-label">Hours</span>
@@ -1307,7 +1317,7 @@ function DayActionModal({
               >
                 Save Time
               </button>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -1554,12 +1564,17 @@ function AddTime({
   const [showCal, setShowCal] = useState(false)
   const [numPad, setNumPad] = useState<'hours' | 'minutes' | null>(null)
   const [showRoundUp, setShowRoundUp] = useState(false)
+  // Set the instant a save starts, independent of (and ahead of) the `open` prop actually
+  // flipping false — lets the card start minimizing immediately, concurrent with the
+  // minutes field's own collect animation, instead of waiting for everything (bank writes,
+  // the fly animation, db saves) to finish first.
+  const [closing, setClosing] = useState(false)
   const minutesBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     // Re-sync whenever the panel opens — AddTime never unmounts, so without this a stale
     // manual edit from a prior open would still be showing the next time it's reopened.
-    if (open) setDate(fmtLocalDate(new Date()))
+    if (open) { setDate(fmtLocalDate(new Date())); setClosing(false) }
   }, [open])
 
   const creditEnabled = localStorage.getItem('fieldservice_credit_hours') === 'yes'
@@ -1575,6 +1590,7 @@ function AddTime({
 
   async function commitSave(totalMin: number) {
     if (totalMin <= 0) return
+    setClosing(true)
     const d = parseLocalDate(date)
     d.setHours(12, 0, 0, 0)
     const finalNote = (effectiveCategory === 'other' && otherNote.trim()) ? otherNote.trim() : (note || undefined)
@@ -1591,7 +1607,11 @@ function AddTime({
   // Banks the leftover minutes (localStorage) and saves the whole-hours part, if any.
   // Deliberately waits for the minutes field's own collect/shrink animation to finish
   // before resetting it to '0' below — otherwise the displayed number would flip to 0
-  // mid-shrink instead of appearing to travel away as itself.
+  // mid-shrink instead of appearing to travel away as itself. The card itself starts
+  // minimizing (setClosing) immediately, concurrently with that collect+fly, rather than
+  // waiting for it to finish first — so the minutes field is the last thing left on
+  // screen as everything around it recedes, instead of nothing happening until the whole
+  // sequence is done and the card then snaps shut.
   async function bankMinutesAndSave(h: number, m: number) {
     // Compute new bank and save BEFORE any await that might trigger re-render
     const before = getMinuteBank()
@@ -1599,6 +1619,7 @@ function AddTime({
     const autoHour = bank >= 60
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
+    setClosing(true)
     await collectAndFlyToMinuteBank(minutesBtnRef.current)
     await onBankIncrease(before, bank)
 
@@ -1634,10 +1655,13 @@ function AddTime({
   return (
     <>
       <div className="card">
-        <div className="add-time-header-row" data-minute-bank-target>
+        <div className="add-time-header-row">
           {/* Pill sits on the opposite side from the collapse toggle (+/×), which lives
               at the far right of the button below — keeping distance between them avoids
-              accidentally tapping the pill while reaching for the toggle. */}
+              accidentally tapping the pill while reaching for the toggle. The anchor marks
+              exactly where the pill will render, so the very first fly-to-bank animation
+              (before any pill exists) still has a precise, stable target. */}
+          <span className="minute-bank-anchor" aria-hidden="true" />
           {(displayedBank > 0 || bankCollapsing) && (
             <div
               className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
@@ -1658,7 +1682,7 @@ function AddTime({
 
         <div className={`collapsible${open ? ' collapsible-open' : ''}`}>
           <div className="collapsible-inner">
-          <div className="add-time-body">
+          <div className={`add-time-body${closing ? ' time-entry-closing' : ''}`}>
             {/* Date */}
             <div className="field">
               <span className="field-label">Date</span>

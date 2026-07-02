@@ -545,7 +545,7 @@ button.small {
    suddenly flashing bright again) — see closeDayModalSmoothly in Schedule.tsx, which
    computes --closeTX/TY/SX/SY per-close from the day row's actual position. */
 .day-action-modal {
-  transition: transform 0.3s ease, opacity 0.3s ease;
+  transition: transform 0.24s ease, opacity 0.24s ease;
 }
 
 .day-action-modal.day-modal-closing {
@@ -555,7 +555,7 @@ button.small {
 }
 
 .day-modal-backdrop {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.24s ease;
 }
 
 .day-modal-backdrop.closing {
@@ -1057,6 +1057,20 @@ button.small {
   min-width: 0;
 }
 
+/* Applied to a time-entry form's body the moment a save that will bank leftover minutes
+   starts — fades/shrinks everything except the minutes field itself (which is busy doing
+   its own collect-into-ball animation, see .minute-collecting), so the whole form visibly
+   recedes AROUND the minutes field rather than sitting frozen until the flight finishes
+   and then snapping shut all at once. Targets the Hours field specifically (not Minutes)
+   via :first-child, since both live inside .hours-minutes-row. */
+.time-entry-closing > :not(.hours-minutes-row),
+.time-entry-closing .hours-minutes-row > .field:first-child {
+  transition: opacity 0.24s ease, transform 0.24s ease;
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+}
+
 /* ---- Sectioned new-contact form ---- */
 .form-card {
   gap: 14px;
@@ -1145,7 +1159,7 @@ button.small {
 .collapsible {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.32s ease;
+  transition: grid-template-rows 0.22s ease;
 }
 
 .collapsible.collapsible-open {
@@ -1843,9 +1857,20 @@ button.small {
   min-width: 0;
 }
 
+/* A zero-size marker sitting exactly where the pill will render (see the JSX — it's the
+   first child of .add-time-header-row, same as the pill) so the very first coin ever
+   banked has a precise, stable flight target even before the pill exists. */
+.minute-bank-anchor {
+  width: 1px;
+  height: 1px;
+}
+
 /* The reveal animation plays automatically whenever this node mounts — the very first
    time any minutes are banked (no pill existed before) as well as any later reappearance —
-   so the bank visibly "opens up" rather than just popping into existence. */
+   so the bank visibly "opens up" rather than just popping into existence. Animating
+   max-width alongside scale/opacity means the "Add Time" label next to it (which shares
+   this flex row) slides over gradually in step with the reveal, instead of the label's
+   available space snapping over instantly the moment the pill mounts. */
 .minute-bank-pill {
   display: flex;
   align-items: center;
@@ -1858,36 +1883,37 @@ button.small {
   font-weight: 600;
   color: var(--credit);
   white-space: nowrap;
+  overflow: hidden;
   cursor: pointer;
   transition: transform 0.15s ease;
   flex-shrink: 0;
-  animation: minute-bank-reveal 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: minute-bank-reveal 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 @keyframes minute-bank-reveal {
-  0% { transform: scale(0); opacity: 0; }
-  60% { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+  0% { transform: scale(0); opacity: 0; max-width: 0; }
+  100% { transform: scale(1); opacity: 1; max-width: 150px; }
 }
 
 /* Reverse of the reveal — played by adding this class (not by unmounting) when the bank
-   is redeemed down to zero, so it visibly closes instead of vanishing. */
+   is redeemed down to zero, so it visibly closes (label sliding back over as it does)
+   instead of vanishing. */
 .minute-bank-collapsing {
-  animation: minute-bank-collapse 0.4s ease forwards;
+  animation: minute-bank-collapse 0.26s ease-in forwards;
 }
 
 @keyframes minute-bank-collapse {
-  0% { transform: scale(1); opacity: 1; }
-  100% { transform: scale(0); opacity: 0; }
+  0% { transform: scale(1); opacity: 1; max-width: 150px; }
+  100% { transform: scale(0.6); opacity: 0; max-width: 0; }
 }
 
 .minute-bank-pulse {
-  animation: minute-bank-pulse 0.4s ease;
+  animation: minute-bank-pulse 0.3s ease;
 }
 
 @keyframes minute-bank-pulse {
   0% { transform: scale(1); }
-  40% { transform: scale(1.18); }
+  40% { transform: scale(1.15); }
   100% { transform: scale(1); }
 }
 
@@ -1895,7 +1921,7 @@ button.small {
    away — right before the ball launches from that same spot (see collectAndFlyToMinuteBank
    in minuteBankFly.ts), so the ball reads as originating from the minutes themselves. */
 .minute-collecting {
-  animation: minute-collecting 0.42s ease-in forwards;
+  animation: minute-collecting 0.26s ease-in forwards;
   transform-origin: center;
   position: relative;
   z-index: 1;
@@ -1909,18 +1935,16 @@ button.small {
 
 /* The little stopwatch icon that flies from wherever time was just banked up to this
    pill — appended straight to document.body (see minuteBankFly.ts), not part of React's
-   tree. Colored to match the pill itself (var(--credit)) so it reads clearly as "headed
-   for the bank" rather than a generic sparkle. A gentle, mostly-monotonic ease keeps it
-   moving toward the target the whole time (no flat runway, no hard direction change) —
-   the midpoint bulge (--arcX/--arcY, computed per-flight in JS) is kept small and biased
-   toward the target rather than perpendicular, so it reads as a gentle, weighted toss
-   rather than a sideways dart that then corrects. A touch of motion blur through the
-   fastest part of the flight sells the speed and smooths over the keyframe seams. The
-   keyframes hold it exactly at the target position for the last stretch — growing
-   slightly on "impact" then fading out slowly in place — rather than ever traveling past
-   the pill. */
+   tree, and positioned entirely via JS writing `transform` every frame (a rAF loop, not a
+   CSS @keyframes path) so it can re-track the target's live position — staying correct
+   even if the page scrolls mid-flight — without ever touching a layout-triggering
+   property. Colored to match the pill itself (var(--credit)) so it reads clearly as
+   "headed for the bank". `transition` is intentionally absent here — it's set briefly via
+   inline style only for the final landing fade, once there's nothing left to track. */
 .minute-bank-ball {
   position: fixed;
+  top: 0;
+  left: 0;
   z-index: 3000;
   width: 24px;
   height: 24px;
@@ -1934,15 +1958,7 @@ button.small {
   line-height: 1;
   color: #fff;
   pointer-events: none;
-  transform: translate(-50%, -50%);
-  animation: minute-bank-fly 1.7s cubic-bezier(0.32, 0.04, 0.4, 1) forwards;
-}
-
-@keyframes minute-bank-fly {
-  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; filter: blur(0px); }
-  55% { transform: translate(calc(-50% + var(--arcX)), calc(-50% + var(--arcY))) scale(1.05); opacity: 1; filter: blur(1px); }
-  82% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.2); opacity: 1; filter: blur(0.3px); }
-  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.15); opacity: 0; filter: blur(0px); }
+  will-change: transform;
 }
 
 .minute-bank-track {

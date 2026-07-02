@@ -1,10 +1,4 @@
 const ANIM_PREF_KEY = 'fieldservice_minute_bank_anim'
-const FLIGHT_MS = 1700
-/** Fraction of the flight where the ball actually reaches the pill (see the 82% keyframe
-    in App.css) — the pill's little pulse (and the caller awaiting flyToMinuteBank) should
-    land right at that moment, not at 100%, since the last stretch is just the ball fading
-    out in place. */
-const ARRIVAL_FRACTION = 0.82
 
 export function minuteBankAnimationsEnabled(): boolean {
   try { return localStorage.getItem(ANIM_PREF_KEY) !== 'off' } catch { return true }
@@ -14,62 +8,94 @@ export function setMinuteBankAnimationsEnabled(v: boolean) {
   try { localStorage.setItem(ANIM_PREF_KEY, v ? 'on' : 'off') } catch { /* localStorage unavailable */ }
 }
 
-/** Fires a small flying stopwatch icon from the given element up to the minute-bank pill
-    in the Add Time card — a quick, playful visual cue for where banked minutes go. The
-    icon is appended straight to document.body (not through React) so it keeps flying and
-    fading even after the modal that started it closes. Resolves once the icon visually
-    reaches the pill (not once it's fully faded out), so callers can sync a follow-up
-    effect — like counting the bank up — to the moment of "arrival". No-ops safely if
-    either element isn't on screen, or if the user has turned the animation off. */
+function findBankTarget(): HTMLElement | null {
+  // Prefer the pill itself (once it exists); otherwise fall back to the small fixed anchor
+  // rendered right where the pill will appear — so the very first coin ever banked still
+  // has a precise, stable landing spot instead of the pill's whole wrapper row.
+  return (document.querySelector('.minute-bank-pill') ??
+    document.querySelector('.minute-bank-anchor')) as HTMLElement | null
+}
+
+const FLIGHT_MS = 950
+
+/** Fires a small flying stopwatch icon from the given element to the minute-bank pill (or
+    its anchor, before the pill exists) — a quick, playful visual cue for where banked
+    minutes go. Runs as a rAF loop that re-reads the target's live position every frame
+    (rather than a fixed CSS keyframe path), so it keeps a correct, stable-looking
+    trajectory even if the page scrolls or reflows mid-flight. Only ever writes
+    `transform`/`opacity` (no layout-triggering properties), and the icon is appended
+    straight to document.body so it survives the modal that started it closing mid-flight.
+    Resolves once the icon visually reaches the pill (not once it's fully faded out), so
+    callers can sync a follow-up effect — like counting the bank up — to the moment of
+    "arrival". No-ops safely if either element isn't on screen, or if the user has turned
+    the animation off. */
 export function flyToMinuteBank(originEl: HTMLElement | null | undefined): Promise<void> {
   if (!originEl || !minuteBankAnimationsEnabled()) return Promise.resolve()
-  // Prefer the pill itself (precise target once it exists); fall back to its wrapper for
-  // the very first minute ever banked, when the pill hasn't rendered yet.
-  const target = (document.querySelector('.minute-bank-pill') ??
-    document.querySelector('[data-minute-bank-target]')) as HTMLElement | null
-  if (!target) return Promise.resolve()
+  if (!findBankTarget()) return Promise.resolve()
 
   const from = originEl.getBoundingClientRect()
-  const to = target.getBoundingClientRect()
-  const fromX = from.left + from.width / 2
-  const fromY = from.top + from.height / 2
-  const toX = to.left + to.width / 2
-  const toY = to.top + to.height / 2
-  const dx = toX - fromX
-  const dy = toY - fromY
-
-  // A gentle bend rather than a straight line, so the toss reads as having some weight —
-  // but kept small and biased mostly toward the target (not perpendicular), so it never
-  // reads as darting sideways before correcting hard back onto course.
-  const dist = Math.hypot(dx, dy) || 1
-  const perpX = -dy / dist
-  const perpY = dx / dist
-  const bulge = Math.min(16, dist * 0.1)
-  const arcX = dx * 0.55 + perpX * bulge
-  const arcY = dy * 0.55 + perpY * bulge
+  const startX = from.left + from.width / 2
+  const startY = from.top + from.height / 2
 
   const ball = document.createElement('div')
   ball.className = 'minute-bank-ball'
   ball.textContent = '⏱'
-  ball.style.left = `${fromX}px`
-  ball.style.top = `${fromY}px`
-  ball.style.setProperty('--dx', `${dx}px`)
-  ball.style.setProperty('--dy', `${dy}px`)
-  ball.style.setProperty('--arcX', `${arcX}px`)
-  ball.style.setProperty('--arcY', `${arcY}px`)
   document.body.appendChild(ball)
-  ball.addEventListener('animationend', () => ball.remove())
 
   return new Promise((resolve) => {
-    window.setTimeout(() => {
+    const start = performance.now()
+
+    function frame(now: number) {
+      const t = Math.min(1, (now - start) / FLIGHT_MS)
+      const target = findBankTarget()
+      if (!target) { ball.remove(); resolve(); return }
+      const to = target.getBoundingClientRect()
+      const endX = to.left + to.width / 2
+      const endY = to.top + to.height / 2
+
+      // Re-derived every frame from the target's current (live) position, so a scroll or
+      // layout shift mid-flight bends the path smoothly toward the new spot instead of
+      // the ball arriving somewhere stale. Eased out (quick start, gentle landing).
+      const eased = 1 - (1 - t) * (1 - t)
+      const dx = endX - startX
+      const dy = endY - startY
+      const dist = Math.hypot(dx, dy) || 1
+      const perpX = -dy / dist
+      const perpY = dx / dist
+      // Small, mostly-forward bend — enough to read as a toss with some weight, never
+      // enough to look like it darts sideways before correcting back on course.
+      const bulge = Math.min(12, dist * 0.07) * Math.sin(eased * Math.PI)
+      const oneMinusT = 1 - eased
+      const px = oneMinusT * oneMinusT * startX + 2 * oneMinusT * eased * (startX + dx * 0.5 + perpX * bulge) + eased * eased * endX
+      const py = oneMinusT * oneMinusT * startY + 2 * oneMinusT * eased * (startY + dy * 0.5 + perpY * bulge) + eased * eased * endY
+
+      const scale = t < 0.88 ? 1 : 1 + ((t - 0.88) / 0.12) * 0.25
+      ball.style.transform = `translate(${px}px, ${py}px) translate(-50%, -50%) scale(${scale})`
+
+      if (t < 1) {
+        requestAnimationFrame(frame)
+        return
+      }
+
       target.classList.add('minute-bank-pulse')
-      window.setTimeout(() => target.classList.remove('minute-bank-pulse'), 400)
+      window.setTimeout(() => target.classList.remove('minute-bank-pulse'), 350)
       resolve()
-    }, FLIGHT_MS * ARRIVAL_FRACTION)
+
+      // Fade/shrink the icon away in place — set up as a genuine CSS transition (not a
+      // per-frame rAF write) since there's nothing left to track once it's landed.
+      requestAnimationFrame(() => {
+        ball.style.transition = 'transform 0.28s ease, opacity 0.28s ease'
+        ball.style.transform = `translate(${endX}px, ${endY}px) translate(-50%, -50%) scale(0.2)`
+        ball.style.opacity = '0'
+        window.setTimeout(() => ball.remove(), 300)
+      })
+    }
+
+    requestAnimationFrame(frame)
   })
 }
 
-const COLLECT_MS = 420
+const COLLECT_MS = 260
 
 /** Plays a quick "gathering" highlight+shrink on the field the minutes were entered in
     (see .minute-collecting in App.css), then launches the flying ball from that same spot
