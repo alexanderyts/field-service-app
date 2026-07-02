@@ -1725,6 +1725,10 @@ button.small {
   max-height: 80vh;
 }
 
+/* Suggested days get a dashed outline (color set per-cell via --suggest-color, since it
+   can vary by what's suggested); days with time actually logged get a soft shaded fill
+   (--log-color, from the predominant category logged that day) — so at a glance, a dotted
+   ring means "planned" and a filled tint means "done", each colored by ministry type. */
 .cal-day-view {
   position: relative;
   border-radius: 8px;
@@ -1733,15 +1737,16 @@ button.small {
   font-weight: 500;
   text-align: center;
   color: var(--text-h);
+  border: 1.5px dashed transparent;
 }
 
 .cal-day-view.service {
-  background: var(--accent-soft);
+  border-color: var(--suggest-color, var(--cat-ministry));
   font-weight: 600;
 }
 
-.cal-day-view.ministry-logged {
-  border: 1.5px solid var(--cat-ministry);
+.cal-day-view.logged {
+  background: color-mix(in srgb, var(--log-color, var(--cat-ministry)) 16%, var(--surface));
 }
 
 .cal-day-view.today {

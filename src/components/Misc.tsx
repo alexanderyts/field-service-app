@@ -2,6 +2,16 @@ import { useState } from 'react'
 import { db } from '../db'
 import ConfirmDialog from './ConfirmDialog'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
+import {
+  NOTIFY_LEAD_OPTIONS,
+  getNotifyLeadMinutes,
+  notificationsEnabled,
+  notificationsSupported,
+  requestNotificationPermission,
+  setNotificationsEnabled,
+  setNotifyLeadMinutes,
+  type NotifyLeadMinutes,
+} from '../notifications'
 
 const CREDIT_CAT_LABELS: Record<string, string> = {
   ldc: 'LDC (Construction)',
@@ -18,6 +28,11 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
   const [creditEnabled, setCreditEnabled] = useState(() => localStorage.getItem('fieldservice_credit_hours') === 'yes')
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('fieldservice_dark_mode') === 'yes')
   const [minuteAnimEnabled, setMinuteAnimEnabledState] = useState(() => minuteBankAnimationsEnabled())
+  const [notifyEnabled, setNotifyEnabledState] = useState(() => notificationsEnabled())
+  const [notifyLead, setNotifyLeadState] = useState<NotifyLeadMinutes>(() => getNotifyLeadMinutes())
+  const [notifyPermission, setNotifyPermission] = useState<NotificationPermission | 'unsupported'>(() =>
+    notificationsSupported() ? Notification.permission : 'unsupported'
+  )
 
   async function loadDemoData() {
     // Dynamic import so this dev-only generator (and its data) is a separate chunk that
@@ -42,6 +57,22 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
   function toggleMinuteAnim(v: boolean) {
     setMinuteAnimEnabledState(v)
     setMinuteBankAnimationsEnabled(v)
+  }
+
+  async function toggleNotify(v: boolean) {
+    if (v) {
+      if (!notificationsSupported()) return
+      const perm = await requestNotificationPermission()
+      setNotifyPermission(perm)
+      if (perm !== 'granted') return // denied or dismissed — don't turn it on
+    }
+    setNotifyEnabledState(v)
+    setNotificationsEnabled(v)
+  }
+
+  function changeNotifyLead(v: NotifyLeadMinutes) {
+    setNotifyLeadState(v)
+    setNotifyLeadMinutes(v)
   }
 
   async function clearAllData() {
@@ -105,6 +136,47 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
             </p>
           </div>
         </label>
+      </div>
+
+      {/* ── Return visit notifications ───────────────────────── */}
+      <div className="card">
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={notifyEnabled}
+            disabled={notifyPermission === 'unsupported'}
+            onChange={(e) => toggleNotify(e.target.checked)}
+          />
+          <div>
+            <strong>Return visit reminders</strong>
+            <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+              {notifyPermission === 'unsupported'
+                ? "Notifications aren't supported in this browser."
+                : "Sends a notification as a return visit's time approaches. Since this app has no backend server, this only works while the app is open — it won't wake your phone if it's fully closed."}
+            </p>
+          </div>
+        </label>
+        {notifyPermission === 'denied' && (
+          <p className="muted" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>
+            Notifications are blocked for this app in your browser/device settings — you'll need to allow them there first.
+          </p>
+        )}
+        {notifyEnabled && notifyPermission === 'granted' && (
+          <div className="field" style={{ marginTop: 8 }}>
+            <span className="field-label">Remind me</span>
+            <div className="cat-pills">
+              {NOTIFY_LEAD_OPTIONS.map((opt) => (
+                <button
+                  key={opt.minutes}
+                  className={`chip${notifyLead === opt.minutes ? ' active' : ''}`}
+                  onClick={() => changeNotifyLead(opt.minutes)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Guided tour ─────────────────────────────────────── */}

@@ -215,10 +215,13 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
     setWeeklyTouched(true)
   }
 
-  function saveDayStart(startTime: string) {
+  function saveDayWindow(startTime: string, endTime?: string) {
     if (editingDay == null) return
     setDaysOut((prev) => (prev.includes(editingDay) ? prev : [...prev, editingDay].sort()))
-    setDaySchedule((prev) => ({ ...prev, [editingDay]: { start: timeInputToMinutes(startTime) } }))
+    setDaySchedule((prev) => ({
+      ...prev,
+      [editingDay]: { start: timeInputToMinutes(startTime), end: endTime ? timeInputToMinutes(endTime) : undefined },
+    }))
     setEditingDay(null)
   }
 
@@ -368,10 +371,12 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
 
       {editingDay != null && (
         <TimeInputModal
-          title={`What time do you want to start on ${DAY_NAMES_FULL[editingDay]}?`}
+          title={`What time range works for ${DAY_NAMES_FULL[editingDay]}?`}
+          subtitle="You'll be able to customize this further later, on the Weekly Schedule."
           initialStart={minutesToTimeInput(daySchedule[editingDay]?.start ?? 9 * 60)}
-          showEnd={false}
-          onSave={saveDayStart}
+          initialEnd={minutesToTimeInput(daySchedule[editingDay]?.end ?? 15 * 60)}
+          showEnd
+          onSave={saveDayWindow}
           onRemove={daysOut.includes(editingDay) ? removeDay : undefined}
           onClose={() => setEditingDay(null)}
         />
@@ -608,17 +613,35 @@ function ScheduleMain({
   // A day's suggested window: whatever was explicitly saved for it, or (for the end time)
   // derived live from the weekly goal split evenly across the selected days — so it stays
   // right even as days are added/removed, instead of going stale like a stored value would.
+  // A day with no saved schedule at all (never touched) defaults to a plain 9am–3pm rather
+  // than that derived split, as a sensible starting point for a brand-new suggestion.
   const sessionMinutes = prefs.daysOut.length ? (prefs.weeklyHours * 60) / prefs.daysOut.length : 0
   function daySessionWindow(day: number): { start: number; end: number } {
     const entry = prefs.daySchedule?.[day]
-    const start = entry?.start ?? DAY_START
-    const end = Math.max(start, entry?.end ?? Math.min(DAY_END, start + sessionMinutes))
+    if (!entry) return { start: 9 * 60, end: 15 * 60 }
+    const start = entry.start
+    const end = Math.max(start, entry.end ?? Math.min(DAY_END, start + sessionMinutes))
     return { start, end }
   }
 
-  function saveDayWindow(day: number, startStr: string, endStr: string) {
+  // Total suggested (planned) ministry minutes across the whole week — compared against
+  // the weekly goal so someone can see how much of their target is already scheduled, both
+  // here and live while editing an individual day's window.
+  const suggestedWeeklyMin = prefs.daysOut.reduce((sum, d) => {
+    const w = daySessionWindow(d)
+    return sum + (w.end - w.start)
+  }, 0)
+
+  function saveDayWindow(day: number, startStr: string, endStr: string, creditHours?: number) {
     const nextDaysOut = prefs.daysOut.includes(day) ? prefs.daysOut : [...prefs.daysOut, day].sort()
-    const nextSchedule = { ...(prefs.daySchedule ?? {}), [day]: { start: timeInputToMinutes(startStr), end: timeInputToMinutes(endStr) } }
+    const nextSchedule = {
+      ...(prefs.daySchedule ?? {}),
+      [day]: {
+        start: timeInputToMinutes(startStr),
+        end: timeInputToMinutes(endStr),
+        creditMin: creditHours ? Math.round(creditHours * 60) : undefined,
+      },
+    }
     db.schedulePrefs.update(prefs.id, { daysOut: nextDaysOut, daySchedule: nextSchedule })
     closeDayModalSmoothly()
   }
@@ -874,6 +897,14 @@ function ScheduleMain({
         <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
           Your suggested ministry days and times, plus anything already logged this week.
         </p>
+        {weeklyGoalMin > 0 && (
+          <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
+            Planned this week: {fmtDuration(suggestedWeeklyMin)} / {fmtDuration(weeklyGoalMin)} goal
+            {suggestedWeeklyMin >= weeklyGoalMin
+              ? ' — 🎉 goal covered!'
+              : ` — ${fmtDuration(weeklyGoalMin - suggestedWeeklyMin)} more to schedule`}
+          </p>
+        )}
         <div className="week-nav">
           <button
             className="icon-btn"
@@ -1097,7 +1128,15 @@ function ScheduleMain({
           dateLabel={fmtDayMonth(dayDateFor(dayModalFor).getTime())}
           isSuggestedDay={prefs.daysOut.includes(dayModalFor)}
           currentWindow={daySessionWindow(dayModalFor)}
-          onSaveWindow={(start, end) => saveDayWindow(dayModalFor, start, end)}
+          currentCreditMin={prefs.daySchedule?.[dayModalFor]?.creditMin}
+          weeklyGoalMin={weeklyGoalMin}
+          otherDaysSuggestedMin={
+            suggestedWeeklyMin -
+            (prefs.daysOut.includes(dayModalFor)
+              ? daySessionWindow(dayModalFor).end - daySessionWindow(dayModalFor).start
+              : 0)
+          }
+          onSaveWindow={(start, end, creditHours) => saveDayWindow(dayModalFor, start, end, creditHours)}
           onLogTime={(h, m, category, otherNote, originEl) => quickLogTime(dayModalFor, h, m, category, otherNote, originEl)}
           onClose={closeDayModalSmoothly}
           closing={dayModalClosing}
@@ -1146,6 +1185,7 @@ function ScheduleMain({
     "edit suggested schedule"), with an optional "remove this day" action. */
 function TimeInputModal({
   title,
+  subtitle,
   initialStart,
   initialEnd,
   showEnd,
@@ -1154,6 +1194,7 @@ function TimeInputModal({
   onClose,
 }: {
   title: string
+  subtitle?: string
   initialStart: string
   initialEnd?: string
   showEnd: boolean
@@ -1163,6 +1204,7 @@ function TimeInputModal({
 }) {
   const [start, setStart] = useState(initialStart)
   const [end, setEnd] = useState(initialEnd ?? initialStart)
+  const durationMin = timeInputToMinutes(end) - timeInputToMinutes(start)
 
   return (
     <ModalPortal>
@@ -1172,6 +1214,7 @@ function TimeInputModal({
             <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
           </div>
           <h3>{title}</h3>
+          {subtitle && <p className="muted" style={{ marginTop: -8, fontSize: 13 }}>{subtitle}</p>}
           <div className={showEnd ? 'field-row' : undefined}>
             <label className="field">
               <span className="field-label">Start time</span>
@@ -1184,12 +1227,15 @@ function TimeInputModal({
               </label>
             )}
           </div>
-          {showEnd && timeInputToMinutes(end) <= timeInputToMinutes(start) && (
+          {showEnd && durationMin > 0 && (
+            <p className="muted" style={{ fontSize: 13, marginTop: -4 }}>That's {fmtDuration(durationMin)} of service time.</p>
+          )}
+          {showEnd && durationMin <= 0 && (
             <p className="muted" style={{ fontSize: 13 }}>⚠ End time must be after start time.</p>
           )}
           <button
             onClick={() => onSave(start, showEnd ? end : undefined)}
-            disabled={showEnd && timeInputToMinutes(end) <= timeInputToMinutes(start)}
+            disabled={showEnd && durationMin <= 0}
           >
             Save
           </button>
@@ -1210,6 +1256,9 @@ function DayActionModal({
   dateLabel,
   isSuggestedDay,
   currentWindow,
+  currentCreditMin,
+  weeklyGoalMin,
+  otherDaysSuggestedMin,
   onSaveWindow,
   onLogTime,
   onClose,
@@ -1219,7 +1268,10 @@ function DayActionModal({
   dateLabel: string
   isSuggestedDay: boolean
   currentWindow: { start: number; end: number }
-  onSaveWindow: (start: string, end: string) => void
+  currentCreditMin?: number
+  weeklyGoalMin: number
+  otherDaysSuggestedMin: number
+  onSaveWindow: (start: string, end: string, creditHours?: number) => void
   onLogTime: (hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
   onClose: () => void
   closing: boolean
@@ -1227,6 +1279,8 @@ function DayActionModal({
   const [step, setStep] = useState<'menu' | 'window' | 'logTime'>('menu')
   const [start, setStart] = useState(minutesToTimeInput(currentWindow.start))
   const [end, setEnd] = useState(minutesToTimeInput(currentWindow.end))
+  const [creditHours, setCreditHours] = useState(currentCreditMin ? String(currentCreditMin / 60) : '')
+  const [showRepeatConfirm, setShowRepeatConfirm] = useState(false)
   const [hours, setHours] = useState('0')
   const [minutes, setMinutes] = useState('0')
   const [category, setCategory] = useState<TimeCategory>('ministry')
@@ -1239,6 +1293,14 @@ function DayActionModal({
     ? ['ministry', 'ldc', 'convention', 'assembly', 'bethel', 'other']
     : ['ministry', 'other']
   const effectiveCategory = availableCats.includes(category) ? category : 'ministry'
+
+  const windowDurationMin = Math.max(0, timeInputToMinutes(end) - timeInputToMinutes(start))
+  const liveWeeklyTotalMin = otherDaysSuggestedMin + windowDurationMin
+
+  function confirmSaveWindow() {
+    onSaveWindow(start, end, creditHours ? Number(creditHours) : undefined)
+    setShowRepeatConfirm(false)
+  }
 
   return (
     <ModalPortal>
@@ -1276,10 +1338,37 @@ function DayActionModal({
                   <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
                 </label>
               </div>
-              {timeInputToMinutes(end) <= timeInputToMinutes(start) && (
+              {windowDurationMin <= 0 ? (
                 <p className="muted" style={{ fontSize: 13 }}>⚠ End time must be after start time.</p>
+              ) : (
+                <p className="muted" style={{ fontSize: 13, margin: 0 }}>That's {fmtDuration(windowDurationMin)} of service time this day.</p>
               )}
-              <button onClick={() => onSaveWindow(start, end)} disabled={timeInputToMinutes(end) <= timeInputToMinutes(start)}>
+
+              {creditEnabled && (
+                <label className="field">
+                  <span className="field-label">Suggested credit hours this day <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    inputMode="decimal"
+                    value={creditHours}
+                    onChange={(e) => setCreditHours(e.target.value)}
+                    placeholder="e.g. 2"
+                  />
+                </label>
+              )}
+
+              {weeklyGoalMin > 0 && (
+                <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                  Week total with this day: {fmtDuration(liveWeeklyTotalMin)} / {fmtDuration(weeklyGoalMin)} goal
+                  {liveWeeklyTotalMin >= weeklyGoalMin
+                    ? ' — 🎉 that covers your weekly goal!'
+                    : ` — ${fmtDuration(weeklyGoalMin - liveWeeklyTotalMin)} more to schedule`}
+                </p>
+              )}
+
+              <button onClick={() => setShowRepeatConfirm(true)} disabled={windowDurationMin <= 0}>
                 Save
               </button>
             </>
@@ -1334,6 +1423,17 @@ function DayActionModal({
       {numPad === 'minutes' && (
         <NumPad initialValue={minutes} label="Minutes" max={59} onConfirm={setMinutes} onClose={() => setNumPad(null)} />
       )}
+
+      <ConfirmDialog
+        open={showRepeatConfirm}
+        title={`Repeat every ${dayLabel}?`}
+        message={`This will suggest ${fmtTime(timeInputToMinutes(start))}–${fmtTime(timeInputToMinutes(end))} every ${dayLabel} going forward on your Weekly Schedule.`}
+        confirmLabel={`Yes, repeat every ${dayLabel}`}
+        cancelLabel="Cancel"
+        tone="primary"
+        onConfirm={confirmSaveWindow}
+        onCancel={() => setShowRepeatConfirm(false)}
+      />
     </ModalPortal>
   )
 }
@@ -1444,11 +1544,26 @@ function ScheduleCalendarView({
   }
   const monthAppts = Array.from(apptsByDay.entries()).sort((a, b) => a[0] - b[0])
 
-  const ministryDays = new Set<number>()
+  // Predominant logged category per day (by total minutes) — colors the shaded fill so a
+  // day of credit time reads differently from a day of ministry time at a glance.
+  const loggedByDay = new Map<number, Partial<Record<TimeCategory, number>>>()
   for (const l of logs) {
-    if (l.category !== 'ministry') continue
     const d = new Date(l.date)
-    if (d.getFullYear() === viewYear && d.getMonth() === viewMonth) ministryDays.add(d.getDate())
+    if (d.getFullYear() !== viewYear || d.getMonth() !== viewMonth) continue
+    const entry = loggedByDay.get(d.getDate()) ?? {}
+    entry[l.category] = (entry[l.category] ?? 0) + l.minutes
+    loggedByDay.set(d.getDate(), entry)
+  }
+  function predominantCategory(day: number): TimeCategory | null {
+    const entry = loggedByDay.get(day)
+    if (!entry) return null
+    let best: TimeCategory | null = null
+    let bestMin = 0
+    for (const cat of CATEGORY_ORDER) {
+      const m = entry[cat] ?? 0
+      if (m > bestMin) { bestMin = m; best = cat }
+    }
+    return best
   }
 
   return (
@@ -1464,15 +1579,28 @@ function ScheduleCalendarView({
           {DOW_SHORT.map((h, i) => <span key={i} className="cal-dow">{h}</span>)}
           {cells.map((day, i) => {
             if (day === null) return <span key={`e${i}`} />
-            const isService = prefs.daysOut.includes(new Date(viewYear, viewMonth, day).getDay())
+            const dow = new Date(viewYear, viewMonth, day).getDay()
+            const isService = prefs.daysOut.includes(dow)
+            const suggestedCredit = prefs.daySchedule?.[dow]?.creditMin
             const isToday = day === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear()
-            const hasMinistry = ministryDays.has(day)
+            const loggedCat = predominantCategory(day)
             const dayAppts = apptsByDay.get(day) ?? []
+            const cellVars = {
+              ...(isService && { '--suggest-color': 'var(--cat-ministry)' }),
+              ...(loggedCat && { '--log-color': `var(--cat-${loggedCat})` }),
+            } as React.CSSProperties
+            const titleParts = [
+              isService ? 'Suggested ministry day' : '',
+              suggestedCredit ? `+ ${fmtDuration(suggestedCredit)} credit suggested` : '',
+              loggedCat ? `${CATEGORY_LABELS[loggedCat]} time logged` : '',
+              ...dayAppts.map((a) => a.title),
+            ].filter(Boolean)
             return (
               <div
                 key={day}
-                className={['cal-day-view', isService ? 'service' : '', hasMinistry ? 'ministry-logged' : '', isToday ? 'today' : ''].filter(Boolean).join(' ')}
-                title={[hasMinistry ? 'Ministry time logged' : '', ...dayAppts.map((a) => a.title)].filter(Boolean).join(', ')}
+                className={['cal-day-view', isService ? 'service' : '', loggedCat ? 'logged' : '', isToday ? 'today' : ''].filter(Boolean).join(' ')}
+                style={cellVars}
+                title={titleParts.join(', ')}
               >
                 {day}
                 {dayAppts.length > 0 && <span className="cal-day-appt-dot" />}
@@ -1483,7 +1611,7 @@ function ScheduleCalendarView({
 
         <div className="legend">
           <span><i className="sw suggested" /> Suggested day</span>
-          <span><i className="sw ministry" /> Ministry logged</span>
+          <span><i className="sw logged" /> Time logged (colored by type)</span>
           <span><i className="sw appt" /> Return visit</span>
         </div>
 

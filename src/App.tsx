@@ -5,6 +5,7 @@ import Reports from './components/Reports'
 import Misc from './components/Misc'
 import { SplashScreen, PrivacyGate, hasAcceptedPolicy } from './components/Onboarding'
 import Tutorial, { TutorialPrompt, hasSeenTutorialPrompt, markTutorialPromptSeen } from './components/Tutorial'
+import { checkReturnVisitNotifications } from './notifications'
 import './App.css'
 
 // Map is the one tab worth deferring — Leaflet alone is ~150KB. The other four are
@@ -42,6 +43,17 @@ function App() {
     if (phase === 'app' && !hasSeenTutorialPrompt()) {
       setShowTutorialPrompt(true)
     }
+  }, [phase])
+
+  // Return-visit reminders only fire while the app is actually open (no backend to wake
+  // the phone otherwise) — checked once on reaching the app, then every few minutes for
+  // as long as it stays open, so a visit that enters its lead window while someone's
+  // mid-session still gets caught.
+  useEffect(() => {
+    if (phase !== 'app') return
+    checkReturnVisitNotifications()
+    const interval = window.setInterval(checkReturnVisitNotifications, 5 * 60 * 1000)
+    return () => window.clearInterval(interval)
   }, [phase])
 
   // The splash screen is a fixed dark-green overlay; without this, any gap around it
