@@ -95,33 +95,6 @@ function monthsTouchedByRange(startMs: number, endMs: number): { year: number; m
   return out
 }
 
-/** Every distinct JW service year (Sept–Aug) touched by [startMs, endMs) — usually one,
-    occasionally two for the week that straddles Sept 1. */
-function serviceYearsTouchedByRange(startMs: number, endMs: number): number[] {
-  const out: number[] = []
-  const seen = new Set<number>()
-  for (let t = startMs; t < endMs; t += 24 * 60 * 60 * 1000) {
-    const label = serviceYearLabel(new Date(t))
-    if (!seen.has(label)) {
-      seen.add(label)
-      out.push(label)
-    }
-  }
-  return out
-}
-
-/** "September 2026", or "August / September 2026" (same year) / "Dec 2025 / Jan 2026"
-    (different years) when the range straddles a month or year boundary. */
-function weekMonthYearLabel(startMs: number, endMs: number): string {
-  const months = monthsTouchedByRange(startMs, endMs)
-  if (months.length === 1) {
-    return `${MONTH_NAMES_LONG[months[0].month]} ${months[0].year}`
-  }
-  const sameYear = months[0].year === months[months.length - 1].year
-  return months
-    .map(({ year, month }, i) => (sameYear && i < months.length - 1 ? MONTH_NAMES_LONG[month] : `${MONTH_NAMES_LONG[month]} ${year}`))
-    .join(' / ')
-}
 
 function monthLogsFor(logs: TimeLog[], year: number, month: number): TimeLog[] {
   return logs.filter((l) => {
@@ -409,6 +382,13 @@ function ScheduleMain({
   const [weekOpen, setWeekOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
+  // When the navigated week straddles a month boundary, this picks which of the two
+  // months' days are "active" (the other side fades) — null means "use the natural
+  // default" (today's month, for the current week; the earlier month, for a navigated
+  // one). Explicitly set only by the prev/next week-nav buttons flipping within a
+  // straddling week; cleared whenever weekOffset changes some other way (jump-to-current,
+  // jump-to-return-visit) so that week starts at its own natural default again.
+  const [segmentOverride, setSegmentOverride] = useState<number | null>(null)
   const [highlightTs, setHighlightTs] = useState<number | null>(null)
   const [confirmDeleteLogId, setConfirmDeleteLogId] = useState<number | null>(null)
   const [visibleLogCount, setVisibleLogCount] = useState(4)
@@ -422,6 +402,7 @@ function ScheduleMain({
     const next = appointments.filter((a) => a.date >= Date.now()).sort((a, b) => a.date - b.date)[0]
     if (!next) return
     const targetWeekStart = startOfWeek(new Date(next.date)).getTime()
+    setSegmentOverride(null)
     setWeekOffset(Math.round((targetWeekStart - thisWeekStartMs) / (7 * 24 * 60 * 60 * 1000)))
     setWeekOpen(true)
     setHighlightTs(next.date)
@@ -454,15 +435,63 @@ function ScheduleMain({
   }
   const weekTotal = weekMinistry + weekCredit
 
+  // touchedMonths is chronological (day-by-day from weekStartMs), so [0] is always the
+  // earlier month and [1] (if present) the later one — a week can touch at most 2.
   const touchedMonths = monthsTouchedByRange(weekStartMs, weekEndMs)
-  const touchedServiceYears = serviceYearsTouchedByRange(weekStartMs, weekEndMs)
-  const monthYearLabel = weekMonthYearLabel(weekStartMs, weekEndMs)
-  // Prefer whichever touched month is the actual current month (so "this week" straddling
-  // a month boundary still reports against today's month, not whichever month the week's
-  // Sunday happened to fall in); otherwise fall back to the latest touched month.
-  const primaryMonth =
-    touchedMonths.find((m) => m.year === now.getFullYear() && m.month === now.getMonth()) ??
-    touchedMonths[touchedMonths.length - 1]
+  const isSplitWeek = touchedMonths.length > 1
+  const todaySegment = touchedMonths.findIndex((m) => m.year === now.getFullYear() && m.month === now.getMonth())
+  const defaultSegment = weekOffset === 0 && todaySegment >= 0 ? todaySegment : 0
+  const segment = isSplitWeek ? (segmentOverride ?? defaultSegment) : 0
+  const primaryMonth = touchedMonths[segment] ?? touchedMonths[0]
+  const monthYearLabel = `${MONTH_NAMES_LONG[primaryMonth.month]} ${primaryMonth.year}`
+  // Only meaningful for a split week — the exact day range within it that belongs to
+  // whichever month is currently shown, for the "June 28 – 30" style partial label.
+  const segmentBoundaryMs = (() => {
+    if (!isSplitWeek) return weekStartMs
+    let boundary = weekStartMs
+    for (let t = weekStartMs; t < weekEndMs; t += 24 * 60 * 60 * 1000) {
+      const d = new Date(t)
+      if (d.getFullYear() === touchedMonths[0].year && d.getMonth() === touchedMonths[0].month) {
+        boundary = t + 24 * 60 * 60 * 1000
+      } else break
+    }
+    return boundary
+  })()
+  const segmentStartMs = isSplitWeek && segment === 1 ? segmentBoundaryMs : weekStartMs
+  const segmentEndMs = isSplitWeek && segment === 0 ? segmentBoundaryMs : weekEndMs
+
+  // Landing on a fresh week (not flipping segments within the current one) always
+  // starts fresh — the natural default is recomputed above from weekOffset/todaySegment.
+  function goToWeekOffset(next: number) {
+    setSegmentOverride(null)
+    setWeekOffset(next)
+  }
+
+  function goNextWeek() {
+    if (isSplitWeek && segment === 0) {
+      setSegmentOverride(1)
+    } else {
+      // Entering a new week forward always starts at its earlier month, if it splits.
+      setSegmentOverride(0)
+      setWeekOffset((o) => o + 1)
+    }
+    setHighlightTs(null)
+  }
+
+  function goPrevWeek() {
+    if (isSplitWeek && segment === 1) {
+      setSegmentOverride(0)
+    } else {
+      // Entering a new week backward lands on its later month first, if it splits —
+      // the natural "last thing before where you were," matching chronological order.
+      const prevOffset = weekOffset - 1
+      const prevStart = thisWeekStartMs + prevOffset * 7 * 24 * 60 * 60 * 1000
+      const prevMonths = monthsTouchedByRange(prevStart, prevStart + 7 * 24 * 60 * 60 * 1000)
+      setSegmentOverride(prevMonths.length > 1 ? 1 : null)
+      setWeekOffset(prevOffset)
+    }
+    setHighlightTs(null)
+  }
 
   // How many days remain in the month being viewed — only meaningful when that's the
   // actual current month, since a past/future navigated week isn't "the month you live in".
@@ -527,13 +556,13 @@ function ScheduleMain({
   const weekCategoriesUsed = CATEGORY_ORDER.filter((cat) => perDayCat.some((day) => (day[cat] ?? 0) > 0))
 
   // Service year (Sept–Aug): running total (all hours) + capped amount applied toward
-  // the goal, for the "primary" service year only — same reasoning as primaryMonth
-  // above (prefers the service year "now" is actually in; falls back to the later one
-  // touched by the navigated week).
+  // the goal, for the "primary" service year only. A service-year boundary (Sept 1) is
+  // always also a month boundary, so it's always a subset of the month-split cases
+  // above — deriving it straight from primaryMonth keeps the two perfectly consistent
+  // without a separate segment concept for service years.
   const weeklyGoalMin = prefs.weeklyHours * 60
   const yearlyGoalMin = prefs.yearlyHours * 60
-  const primaryServiceYear =
-    touchedServiceYears.find((y) => y === serviceYearLabel(now)) ?? touchedServiceYears[touchedServiceYears.length - 1]
+  const primaryServiceYear = serviceYearLabel(new Date(primaryMonth.year, primaryMonth.month, 1))
   const yearProgress = (() => {
     const label = primaryServiceYear
     const stats = serviceYearlyTotals(logs, label)
@@ -770,19 +799,18 @@ function ScheduleMain({
             className="icon-btn"
             onClick={(e) => {
               e.stopPropagation()
-              setWeekOffset((o) => o - 1)
-              setHighlightTs(null)
+              goPrevWeek()
             }}
-            title="Previous week"
+            title="Previous"
           >
             ‹
           </button>
           <button className="collapse-header week-nav-label" onClick={() => setWeekOpen((o) => !o)}>
             <span>
               <strong>
-                {fmtDayMonth(weekStartMs)} – {fmtDayMonth(weekEndMs - 86400000)}
+                {fmtDayMonth(segmentStartMs)} – {fmtDayMonth(segmentEndMs - 86400000)}
               </strong>
-              {weekOffset === 0 && <span className="muted"> · This week</span>}
+              {weekOffset === 0 && segment === defaultSegment && <span className="muted"> · This week</span>}
             </span>
             <span className="chevron">{weekOpen ? '▾' : '▸'}</span>
           </button>
@@ -790,10 +818,9 @@ function ScheduleMain({
             className="icon-btn"
             onClick={(e) => {
               e.stopPropagation()
-              setWeekOffset((o) => o + 1)
-              setHighlightTs(null)
+              goNextWeek()
             }}
-            title="Next week"
+            title="Next"
           >
             ›
           </button>
@@ -821,8 +848,8 @@ function ScheduleMain({
           </div>
         ) : (
           <>
-            {weekOffset !== 0 && (
-              <button className="secondary small" onClick={() => { setWeekOffset(0); setHighlightTs(null) }}>
+            {(weekOffset !== 0 || segment !== defaultSegment) && (
+              <button className="secondary small" onClick={() => { goToWeekOffset(0); setHighlightTs(null) }}>
                 Jump to current week
               </button>
             )}

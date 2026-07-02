@@ -2030,13 +2030,13 @@ button.small {
 .tutorial-dim {
   position: fixed;
   inset: 0;
-  background: rgba(15, 20, 18, 0.72);
+  background: rgba(15, 20, 18, 0.45);
 }
 
 .tutorial-hole {
   position: fixed;
   border-radius: 14px;
-  box-shadow: 0 0 0 9999px rgba(15, 20, 18, 0.72);
+  box-shadow: 0 0 0 9999px rgba(15, 20, 18, 0.45);
   border: 2px solid var(--accent);
   transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
   pointer-events: none;
@@ -2044,6 +2044,7 @@ button.small {
 
 .tutorial-card {
   position: fixed;
+  top: 16px;
   left: 16px;
   right: 16px;
   z-index: 2001;
@@ -2053,11 +2054,10 @@ button.small {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
   max-width: 400px;
   margin: 0 auto;
-}
-
-.tutorial-card.centered {
-  top: 50%;
-  transform: translateY(-50%);
+  /* Guarantees the card can never grow tall enough to reach down and cover the tab
+     bar (which every step highlights) — long step text scrolls inside instead. */
+  max-height: calc(100vh - 132px - env(safe-area-inset-bottom));
+  overflow-y: auto;
 }
 
 .tutorial-dots {

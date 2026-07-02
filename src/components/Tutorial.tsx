@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState } from 'react'
 import ModalPortal from '../ModalPortal'
 
 const TUTORIAL_KEY = 'fieldservice_tutorial_seen'
@@ -70,6 +70,11 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     tab: 'misc',
     highlight: '[data-tutorial="tab-misc"]',
   },
+  {
+    icon: '🙏',
+    title: 'Thank you',
+    body: "Thanks so much for giving this app a try — I built it hoping it'd make keeping track of your ministry just a little easier. I hope you enjoy using it!\n\n— Alexander",
+  },
 ]
 
 export function TutorialPrompt({ onYes, onNo }: { onYes: () => void; onNo: () => void }) {
@@ -92,17 +97,11 @@ export function TutorialPrompt({ onYes, onNo }: { onYes: () => void; onNo: () =>
   )
 }
 
-/** Places the instruction card below the highlighted element, or above it if there's not enough room below. */
-function cardStyle(rect: DOMRect | null): CSSProperties {
-  if (!rect) return {}
-  const viewportH = window.innerHeight
-  const estimatedCardHeight = 260
-  const spaceBelow = viewportH - rect.bottom
-  if (spaceBelow > estimatedCardHeight || spaceBelow > rect.top) {
-    return { top: Math.min(rect.bottom + 14, viewportH - 40) }
-  }
-  return { top: Math.max(16, rect.top - estimatedCardHeight) }
-}
+// Every highlight target is the bottom tab bar these days, so "place it below the
+// highlight" is never viable — the card just anchors near the top instead. Its own
+// max-height + overflow (see .tutorial-card in App.css) is what actually guarantees it
+// can never grow tall enough to reach back down and cover the bar, regardless of how
+// long a given step's text runs — no per-step height guessing needed.
 
 export default function Tutorial({
   currentTab,
@@ -150,12 +149,12 @@ export default function Tutorial({
         <div className="tutorial-dim" />
       )}
 
-      <div className={`tutorial-card${rect ? '' : ' centered'}`} style={cardStyle(rect)}>
+      <div className="tutorial-card">
         <button className="icon-btn tutorial-skip" onClick={onClose} title="Skip tour">×</button>
 
         <div className="tutorial-icon">{current.icon}</div>
         <h3 style={{ textAlign: 'center' }}>{current.title}</h3>
-        <p style={{ textAlign: 'center', lineHeight: 1.6 }}>{current.body}</p>
+        <p style={{ textAlign: 'center', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{current.body}</p>
 
         <div className="tutorial-dots">
           {TUTORIAL_STEPS.map((_, i) => (
