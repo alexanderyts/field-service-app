@@ -26,11 +26,11 @@ export function flyToMinuteBank(originEl: HTMLElement | null | undefined) {
   ball.style.setProperty('--dy', `${toY - fromY}px`)
   document.body.appendChild(ball)
 
-  const FLIGHT_MS = 1800
+  const FLIGHT_MS = 2200
   window.setTimeout(() => {
     target.classList.add('minute-bank-pulse')
     window.setTimeout(() => target.classList.remove('minute-bank-pulse'), 400)
-  }, FLIGHT_MS - 150)
+  }, FLIGHT_MS - 120)
 
   ball.addEventListener('animationend', () => ball.remove())
 }
