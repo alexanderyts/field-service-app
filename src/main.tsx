@@ -5,12 +5,16 @@ import './index.css'
 import App from './App.tsx'
 import ErrorBoundary from './ErrorBoundary.tsx'
 
-// Applied before first paint so dark mode doesn't flash light on load. Guarded because
-// some browser configs (Safari "Block All Cookies", managed profiles) throw synchronously
-// on localStorage access — unguarded, that would throw before the app ever mounts.
+// Applied before first paint so a non-light theme doesn't flash light on load. Guarded
+// because some browser configs (Safari "Block All Cookies", managed profiles) throw
+// synchronously on localStorage access — unguarded, that would throw before the app
+// ever mounts. The old dark-mode boolean key is read as a fallback so devices that
+// enabled dark mode before the theme picker existed keep it without re-choosing.
 try {
-  if (localStorage.getItem('fieldservice_dark_mode') === 'yes') {
-    document.documentElement.dataset.theme = 'dark'
+  let theme = localStorage.getItem('fieldservice_theme')
+  if (!theme && localStorage.getItem('fieldservice_dark_mode') === 'yes') theme = 'dark'
+  if (theme === 'dark' || theme === 'pastel') {
+    document.documentElement.dataset.theme = theme
   }
 } catch { /* localStorage unavailable — default (light) theme */ }
 

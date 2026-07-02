@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type Appointment, type SchedulePrefs, type TimeCategory, type TimeLog } from '../db'
+import { db, type Appointment, type DayScheduleBlock, type SchedulePrefs, type TimeCategory, type TimeLog } from '../db'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../categories'
 import { animateBankValue, collectAndFlyToMinuteBank } from '../minuteBankFly'
 import {
@@ -184,6 +184,24 @@ function timeInputToMinutes(v: string): number {
   return h * 60 + m
 }
 
+/** All suggested time blocks for a weekly-schedule day, normalized. New-style entries
+    store `blocks` directly; legacy entries (a single ministry window from the survey or
+    older app versions) are converted on the fly — end derived from the weekly goal split
+    evenly across selected days when absent — so stored data never needs a migration. A
+    day that's selected but has no entry at all defaults to a 9am–3pm ministry block. */
+function dayScheduleBlocks(prefs: SchedulePrefs, day: number): DayScheduleBlock[] {
+  const entry = prefs.daySchedule?.[day]
+  if (entry?.blocks?.length) return entry.blocks
+  if (entry?.start != null) {
+    const sessionMinutes = prefs.daysOut.length ? (prefs.weeklyHours * 60) / prefs.daysOut.length : 0
+    const start = entry.start
+    const end = Math.max(start, entry.end ?? Math.min(DAY_END, start + sessionMinutes))
+    return [{ start, end, category: 'ministry' }]
+  }
+  if (prefs.daysOut.includes(day)) return [{ start: 9 * 60, end: 15 * 60, category: 'ministry' }]
+  return []
+}
+
 function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => void }) {
   // Matches db.ts's documented default: a legacy record that predates this field is
   // treated as a pioneer everywhere else in the app, so redoing the survey on one
@@ -196,7 +214,10 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
   // Days start unselected either way — this is a plan the person builds, not a default
   // guessed on their behalf.
   const [daysOut, setDaysOut] = useState<number[]>(existing?.daysOut ?? [])
-  const [daySchedule, setDaySchedule] = useState<Record<number, { start: number; end?: number }>>(existing?.daySchedule ?? {})
+  // Same shape as SchedulePrefs.daySchedule — the survey writes simple {start,end}
+  // ministry windows (normalized into blocks at read time), but redoing the survey must
+  // round-trip any block-style entries built later from the Weekly Schedule untouched.
+  const [daySchedule, setDaySchedule] = useState<NonNullable<SchedulePrefs['daySchedule']>>(existing?.daySchedule ?? {})
   const [editingDay, setEditingDay] = useState<number | null>(null)
   const [yearlyHours, setYearlyHours] = useState(String(existing?.yearlyHours ?? 600))
   const [weeklyHours, setWeeklyHours] = useState(() => (existing ? String(existing.weeklyHours) : weeklyFromYearly(600)))
@@ -309,14 +330,20 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
           <h4>Which days do you want to go out in service?</h4>
           <p className="muted" style={{ marginTop: -6 }}>Tap a day to set (or change) what time you want to start.</p>
           <div className="day-toggle">
-            {DAYS.map((d, i) => (
-              <button key={i} className={daysOut.includes(i) ? 'chip active' : 'chip'} onClick={() => setEditingDay(i)}>
-                {d}
-                {daysOut.includes(i) && daySchedule[i] && (
-                  <span style={{ display: 'block', fontSize: 10, fontWeight: 500 }}>{fmtTime(daySchedule[i].start)}</span>
-                )}
-              </button>
-            ))}
+            {DAYS.map((d, i) => {
+              // Chip caption: the day's earliest start — first block for block-style
+              // entries (built on the Weekly Schedule), legacy top-level start otherwise.
+              const entry = daySchedule[i]
+              const startMin = entry?.blocks?.length ? entry.blocks[0].start : entry?.start
+              return (
+                <button key={i} className={daysOut.includes(i) ? 'chip active' : 'chip'} onClick={() => setEditingDay(i)}>
+                  {d}
+                  {daysOut.includes(i) && startMin != null && (
+                    <span style={{ display: 'block', fontSize: 10, fontWeight: 500 }}>{fmtTime(startMin)}</span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
@@ -610,45 +637,23 @@ function ScheduleMain({
     }
   })()
 
-  // A day's suggested window: whatever was explicitly saved for it, or (for the end time)
-  // derived live from the weekly goal split evenly across the selected days — so it stays
-  // right even as days are added/removed, instead of going stale like a stored value would.
-  // A day with no saved schedule at all (never touched) defaults to a plain 9am–3pm rather
-  // than that derived split, as a sensible starting point for a brand-new suggestion.
-  const sessionMinutes = prefs.daysOut.length ? (prefs.weeklyHours * 60) / prefs.daysOut.length : 0
-  function daySessionWindow(day: number): { start: number; end: number } {
-    const entry = prefs.daySchedule?.[day]
-    if (!entry) return { start: 9 * 60, end: 15 * 60 }
-    const start = entry.start
-    const end = Math.max(start, entry.end ?? Math.min(DAY_END, start + sessionMinutes))
-    return { start, end }
+  function dayBlocks(day: number): DayScheduleBlock[] {
+    return dayScheduleBlocks(prefs, day)
   }
 
-  // Total suggested (planned) ministry minutes across the whole week — compared against
-  // the weekly goal so someone can see how much of their target is already scheduled, both
-  // here and live while editing an individual day's window.
-  const suggestedWeeklyMin = prefs.daysOut.reduce((sum, d) => {
-    const w = daySessionWindow(d)
-    return sum + (w.end - w.start)
-  }, 0)
+  // Total suggested (planned) minutes across the whole week, all block types — compared
+  // against the weekly goal so someone can see how much of their target is already
+  // scheduled, both here and live while editing an individual day's blocks.
+  const suggestedWeeklyMin = prefs.daysOut.reduce(
+    (sum, d) => sum + dayBlocks(d).reduce((s, b) => s + (b.end - b.start), 0),
+    0
+  )
 
-  function saveDayWindow(
-    day: number,
-    startStr: string,
-    endStr: string,
-    creditHours?: number,
-    creditCategory?: TimeCategory
-  ) {
+  function saveDayBlocks(day: number, blocks: DayScheduleBlock[]) {
     const nextDaysOut = prefs.daysOut.includes(day) ? prefs.daysOut : [...prefs.daysOut, day].sort()
-    const nextSchedule = {
-      ...(prefs.daySchedule ?? {}),
-      [day]: {
-        start: timeInputToMinutes(startStr),
-        end: timeInputToMinutes(endStr),
-        creditMin: creditHours ? Math.round(creditHours * 60) : undefined,
-        creditCategory: creditHours ? creditCategory : undefined,
-      },
-    }
+    // Storing only { blocks } intentionally drops any legacy start/end/credit fields for
+    // this day — blocks are the authoritative shape from here on.
+    const nextSchedule = { ...(prefs.daySchedule ?? {}), [day]: { blocks } }
     db.schedulePrefs.update(prefs.id, { daysOut: nextDaysOut, daySchedule: nextSchedule })
     closeDayModalSmoothly()
   }
@@ -1007,7 +1012,6 @@ function ScheduleMain({
                 const isToday = dayDate.toDateString() === now.toDateString()
                 const isHighlighted = highlightTs != null && new Date(highlightTs).toDateString() === dayDate.toDateString()
                 const dayAppts = perDayAppointments[i]
-                const window = daySessionWindow(i)
                 let cum = 0
                 const inShownMonth = isDayInShownMonth(i)
                 return (
@@ -1023,17 +1027,23 @@ function ScheduleMain({
                       <span className="day-num">{dayDate.getDate()}</span>
                     </div>
                     <div className="day-track">
-                      {isService && (() => {
-                        const left = dayTrackPct(window.start)
-                        const right = dayTrackPct(window.end)
+                      {isService && dayBlocks(i).map((b, bi) => {
+                        const left = dayTrackPct(b.start)
+                        const right = dayTrackPct(b.end)
                         return (
                           <div
+                            key={`sug-${bi}`}
                             className="slot-suggested"
-                            style={{ left: `${left}%`, width: `${Math.max(0, right - left)}%` }}
-                            title={`${fmtTime(window.start)} – ${fmtTime(window.end)}`}
+                            style={{
+                              left: `${left}%`,
+                              width: `${Math.max(0, right - left)}%`,
+                              borderColor: `var(--cat-${b.category})`,
+                              background: `color-mix(in srgb, var(--cat-${b.category}) 14%, transparent)`,
+                            }}
+                            title={`${CATEGORY_LABELS[b.category]} · ${fmtTime(b.start)} – ${fmtTime(b.end)}`}
                           />
                         )
-                      })()}
+                      })}
                       {dayEntries.map(([cat, min]) => {
                         const left = (cum / trackScale) * 100
                         cum += min
@@ -1149,19 +1159,12 @@ function ScheduleMain({
           dayLabel={DAY_NAMES_FULL[dayModalFor]}
           dateLabel={fmtDayMonth(dayDateFor(dayModalFor).getTime())}
           isSuggestedDay={prefs.daysOut.includes(dayModalFor)}
-          currentWindow={daySessionWindow(dayModalFor)}
-          currentCreditMin={prefs.daySchedule?.[dayModalFor]?.creditMin}
-          currentCreditCategory={prefs.daySchedule?.[dayModalFor]?.creditCategory}
+          currentBlocks={dayBlocks(dayModalFor)}
           weeklyGoalMin={weeklyGoalMin}
           otherDaysSuggestedMin={
-            suggestedWeeklyMin -
-            (prefs.daysOut.includes(dayModalFor)
-              ? daySessionWindow(dayModalFor).end - daySessionWindow(dayModalFor).start
-              : 0)
+            suggestedWeeklyMin - dayBlocks(dayModalFor).reduce((s, b) => s + (b.end - b.start), 0)
           }
-          onSaveWindow={(start, end, creditHours, creditCategory) =>
-            saveDayWindow(dayModalFor, start, end, creditHours, creditCategory)
-          }
+          onSaveBlocks={(blocks) => saveDayBlocks(dayModalFor, blocks)}
           onRemoveDay={() => removeDaySchedule(dayModalFor)}
           onClearAllDays={clearAllSuggestedDays}
           onLogTime={(h, m, category, otherNote, originEl) => quickLogTime(dayModalFor, h, m, category, otherNote, originEl)}
@@ -1278,18 +1281,21 @@ function TimeInputModal({
 /** Opens from clicking a day in the expanded weekly schedule: add/edit that day's
     suggested ministry window, or log actual service time against that specific date
     (right here, without leaving for the separate Add Time panel). */
-const CREDIT_CATEGORIES: TimeCategory[] = ['ldc', 'convention', 'assembly', 'bethel', 'other']
+/** A block being edited in the day modal — times as HH:MM strings for the inputs. */
+interface EditableBlock {
+  start: string
+  end: string
+  category: TimeCategory
+}
 
 function DayActionModal({
   dayLabel,
   dateLabel,
   isSuggestedDay,
-  currentWindow,
-  currentCreditMin,
-  currentCreditCategory,
+  currentBlocks,
   weeklyGoalMin,
   otherDaysSuggestedMin,
-  onSaveWindow,
+  onSaveBlocks,
   onRemoveDay,
   onClearAllDays,
   onLogTime,
@@ -1299,12 +1305,10 @@ function DayActionModal({
   dayLabel: string
   dateLabel: string
   isSuggestedDay: boolean
-  currentWindow: { start: number; end: number }
-  currentCreditMin?: number
-  currentCreditCategory?: TimeCategory
+  currentBlocks: DayScheduleBlock[]
   weeklyGoalMin: number
   otherDaysSuggestedMin: number
-  onSaveWindow: (start: string, end: string, creditHours?: number, creditCategory?: TimeCategory) => void
+  onSaveBlocks: (blocks: DayScheduleBlock[]) => void
   onRemoveDay: () => void
   onClearAllDays: () => void
   onLogTime: (hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
@@ -1312,10 +1316,11 @@ function DayActionModal({
   closing: boolean
 }) {
   const [step, setStep] = useState<'menu' | 'window' | 'logTime' | 'dayOptions'>('menu')
-  const [start, setStart] = useState(minutesToTimeInput(currentWindow.start))
-  const [end, setEnd] = useState(minutesToTimeInput(currentWindow.end))
-  const [creditHours, setCreditHours] = useState(currentCreditMin ? String(currentCreditMin / 60) : '')
-  const [creditCategory, setCreditCategory] = useState<TimeCategory>(currentCreditCategory ?? 'ldc')
+  const [blocks, setBlocks] = useState<EditableBlock[]>(() =>
+    (currentBlocks.length ? currentBlocks : [{ start: 9 * 60, end: 15 * 60, category: 'ministry' as TimeCategory }]).map(
+      (b) => ({ start: minutesToTimeInput(b.start), end: minutesToTimeInput(b.end), category: b.category })
+    )
+  )
   const [showRepeatConfirm, setShowRepeatConfirm] = useState(false)
   const [confirmRemoveDay, setConfirmRemoveDay] = useState(false)
   const [confirmClearAll, setConfirmClearAll] = useState(false)
@@ -1332,14 +1337,41 @@ function DayActionModal({
     : ['ministry', 'other']
   const effectiveCategory = availableCats.includes(category) ? category : 'ministry'
 
-  const windowDurationMin = Math.max(0, timeInputToMinutes(end) - timeInputToMinutes(start))
-  const liveWeeklyTotalMin = otherDaysSuggestedMin + windowDurationMin
-  const creditHoursNum = Number(creditHours) || 0
+  function blockDuration(b: EditableBlock): number {
+    return timeInputToMinutes(b.end) - timeInputToMinutes(b.start)
+  }
+  const allBlocksValid = blocks.every((b) => blockDuration(b) > 0)
+  const dayTotalMin = blocks.reduce((s, b) => s + Math.max(0, blockDuration(b)), 0)
+  const liveWeeklyTotalMin = otherDaysSuggestedMin + dayTotalMin
 
-  function confirmSaveWindow() {
-    onSaveWindow(start, end, creditHoursNum > 0 ? creditHoursNum : undefined, creditCategory)
+  function updateBlock(i: number, patch: Partial<EditableBlock>) {
+    setBlocks((prev) => prev.map((b, bi) => (bi === i ? { ...b, ...patch } : b)))
+  }
+
+  function addBlock() {
+    setBlocks((prev) => {
+      // New block picks up where the last one ends (falling back to 1pm if that field
+      // is currently cleared/invalid), for a natural morning → afternoon flow.
+      const lastEnd = timeInputToMinutes(prev[prev.length - 1].end) || 13 * 60
+      const start = Math.min(lastEnd, 22 * 60)
+      return [...prev, { start: minutesToTimeInput(start), end: minutesToTimeInput(Math.min(start + 120, 23 * 60)), category: 'ministry' }]
+    })
+  }
+
+  function removeBlock(i: number) {
+    setBlocks((prev) => prev.filter((_, bi) => bi !== i))
+  }
+
+  function confirmSaveBlocks() {
+    onSaveBlocks(
+      blocks.map((b) => ({ start: timeInputToMinutes(b.start), end: timeInputToMinutes(b.end), category: b.category }))
+    )
     setShowRepeatConfirm(false)
   }
+
+  const blocksSummary = blocks
+    .map((b) => `${CATEGORY_LABELS[b.category]} ${fmtTime(timeInputToMinutes(b.start))}–${fmtTime(timeInputToMinutes(b.end))}`)
+    .join(', ')
 
   return (
     <ModalPortal>
@@ -1386,54 +1418,54 @@ function DayActionModal({
 
           {step === 'window' && (
             <>
-              <p className="muted" style={{ margin: 0 }}>Pick a window of time for the ministry on this day.</p>
-              <div className="field-row">
-                <label className="field">
-                  <span className="field-label">Start time</span>
-                  <input type="time" value={start} onChange={(e) => setStart(e.target.value)} />
-                </label>
-                <label className="field">
-                  <span className="field-label">End time</span>
-                  <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
-                </label>
-              </div>
-              {windowDurationMin <= 0 ? (
-                <p className="muted" style={{ fontSize: 13 }}>⚠ End time must be after start time.</p>
-              ) : (
-                <p className="muted" style={{ fontSize: 13, margin: 0 }}>That's {fmtDuration(windowDurationMin)} of service time this day.</p>
-              )}
+              <p className="muted" style={{ margin: 0 }}>
+                Plan this day's time — pick a type and window for each stretch you want to schedule.
+              </p>
 
-              {creditEnabled && (
-                <label className="field">
-                  <span className="field-label">Suggested credit hours <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    inputMode="decimal"
-                    value={creditHours}
-                    onChange={(e) => setCreditHours(e.target.value)}
-                    placeholder="e.g. 2"
-                  />
-                </label>
-              )}
-              {creditEnabled && creditHoursNum > 0 && (
-                <div className="field">
-                  <span className="field-label">Type of credit time</span>
-                  <div className="cat-pills">
-                    {CREDIT_CATEGORIES.map((cat) => (
-                      <button
-                        key={cat}
-                        className={`chip${creditCategory === cat ? ' active' : ''}`}
-                        onClick={() => setCreditCategory(cat)}
-                      >
-                        {CATEGORY_LABELS[cat]}
-                      </button>
-                    ))}
+              {blocks.map((b, i) => {
+                const dur = blockDuration(b)
+                return (
+                  <div key={i} className="schedule-block" style={{ borderLeftColor: `var(--cat-${b.category})` }}>
+                    <div className="schedule-block-head">
+                      <div className="cat-pills">
+                        {availableCats.map((cat) => (
+                          <button
+                            key={cat}
+                            className={`chip${b.category === cat ? ' active' : ''}`}
+                            onClick={() => updateBlock(i, { category: cat })}
+                          >
+                            {CATEGORY_LABELS[cat]}
+                          </button>
+                        ))}
+                      </div>
+                      {blocks.length > 1 && (
+                        <button className="icon-btn" title="Remove this time" onClick={() => removeBlock(i)}>×</button>
+                      )}
+                    </div>
+                    <div className="field-row">
+                      <label className="field">
+                        <span className="field-label">Start time</span>
+                        <input type="time" value={b.start} onChange={(e) => updateBlock(i, { start: e.target.value })} />
+                      </label>
+                      <label className="field">
+                        <span className="field-label">End time</span>
+                        <input type="time" value={b.end} onChange={(e) => updateBlock(i, { end: e.target.value })} />
+                      </label>
+                    </div>
+                    <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                      {dur <= 0
+                        ? '⚠ End time must be after start time.'
+                        : `${fmtDuration(dur)} of ${CATEGORY_LABELS[b.category]} time.`}
+                    </p>
                   </div>
-                </div>
-              )}
+                )
+              })}
 
+              {dayTotalMin > 0 && blocks.length > 1 && (
+                <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                  Total this day: {fmtDuration(dayTotalMin)}.
+                </p>
+              )}
               {weeklyGoalMin > 0 && (
                 <p className="muted" style={{ fontSize: 13, margin: 0 }}>
                   Week total with this day: {fmtDuration(liveWeeklyTotalMin)} / {fmtDuration(weeklyGoalMin)} goal
@@ -1443,7 +1475,8 @@ function DayActionModal({
                 </p>
               )}
 
-              <button onClick={() => setShowRepeatConfirm(true)} disabled={windowDurationMin <= 0}>
+              <button className="secondary" onClick={addBlock}>＋ Add More Time for This Day</button>
+              <button onClick={() => setShowRepeatConfirm(true)} disabled={!allBlocksValid}>
                 Save
               </button>
             </>
@@ -1502,14 +1535,11 @@ function DayActionModal({
       <ConfirmDialog
         open={showRepeatConfirm}
         title={`Repeat every ${dayLabel}?`}
-        message={
-          `This will suggest ${fmtTime(timeInputToMinutes(start))}–${fmtTime(timeInputToMinutes(end))} every ${dayLabel} going forward on your Weekly Schedule.` +
-          (creditHoursNum > 0 ? ` Also suggests ${fmtDuration(creditHoursNum * 60)} of ${CATEGORY_LABELS[creditCategory]} credit time.` : '')
-        }
+        message={`This will suggest ${blocksSummary} every ${dayLabel} going forward on your Weekly Schedule.`}
         confirmLabel={`Yes, repeat every ${dayLabel}`}
         cancelLabel="Cancel"
         tone="primary"
-        onConfirm={confirmSaveWindow}
+        onConfirm={confirmSaveBlocks}
         onCancel={() => setShowRepeatConfirm(false)}
       />
 
@@ -1666,6 +1696,24 @@ function ScheduleCalendarView({
     return best
   }
 
+  // Unique suggested categories per day-of-week — drives each cell's dashed outline color
+  // (two-tone when a day mixes types, e.g. ministry + LDC) and which "Suggested …" legend
+  // entries appear below. Category order kept stable via CATEGORY_ORDER.
+  function suggestedCatsFor(dow: number): TimeCategory[] {
+    if (!prefs.daysOut.includes(dow)) return []
+    const present = new Set(dayScheduleBlocks(prefs, dow).map((b) => b.category))
+    return CATEGORY_ORDER.filter((c) => present.has(c))
+  }
+
+  // Everything actually visible this month, so the legend only explains what's on screen.
+  const suggestedCatsInMonth = CATEGORY_ORDER.filter((c) =>
+    prefs.daysOut.some((dow) => suggestedCatsFor(dow).includes(c))
+  )
+  const loggedCatsInMonth = CATEGORY_ORDER.filter((c) =>
+    Array.from(loggedByDay.keys()).some((day) => predominantCategory(day) === c)
+  )
+  const monthHasToday = viewYear === today.getFullYear() && viewMonth === today.getMonth()
+
   return (
     <ModalPortal>
     <div className="modal-backdrop" onClick={onClose}>
@@ -1680,21 +1728,27 @@ function ScheduleCalendarView({
           {cells.map((day, i) => {
             if (day === null) return <span key={`e${i}`} />
             const dow = new Date(viewYear, viewMonth, day).getDay()
-            const isService = prefs.daysOut.includes(dow)
-            const suggestedCredit = prefs.daySchedule?.[dow]?.creditMin
-            const suggestedCreditCategory = prefs.daySchedule?.[dow]?.creditCategory
-            const isToday = day === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear()
+            const suggestedCats = suggestedCatsFor(dow)
+            const isService = suggestedCats.length > 0
+            const isToday = monthHasToday && day === today.getDate()
             const loggedCat = predominantCategory(day)
             const dayAppts = apptsByDay.get(day) ?? []
-            const cellVars = {
-              ...(isService && { '--suggest-color': 'var(--cat-ministry)' }),
-              ...(loggedCat && { '--log-color': `var(--cat-${loggedCat})` }),
-            } as React.CSSProperties
+            // One suggested type → a solid-color dashed ring; two or more → the ring is
+            // split two-tone (top/right vs bottom/left) so both types show at a glance.
+            const cellStyle: CSSProperties = {}
+            if (suggestedCats.length === 1) {
+              cellStyle.borderColor = `var(--cat-${suggestedCats[0]})`
+            } else if (suggestedCats.length >= 2) {
+              cellStyle.borderTopColor = `var(--cat-${suggestedCats[0]})`
+              cellStyle.borderRightColor = `var(--cat-${suggestedCats[0]})`
+              cellStyle.borderBottomColor = `var(--cat-${suggestedCats[1]})`
+              cellStyle.borderLeftColor = `var(--cat-${suggestedCats[1]})`
+            }
+            if (loggedCat) {
+              cellStyle.background = `color-mix(in srgb, var(--cat-${loggedCat}) 30%, var(--surface))`
+            }
             const titleParts = [
-              isService ? 'Suggested ministry day' : '',
-              suggestedCredit
-                ? `+ ${fmtDuration(suggestedCredit)} ${suggestedCreditCategory ? CATEGORY_LABELS[suggestedCreditCategory] : 'credit'} suggested`
-                : '',
+              ...suggestedCats.map((c) => `Suggested ${CATEGORY_LABELS[c]}`),
               loggedCat ? `${CATEGORY_LABELS[loggedCat]} time logged` : '',
               ...dayAppts.map((a) => a.title),
             ].filter(Boolean)
@@ -1702,7 +1756,7 @@ function ScheduleCalendarView({
               <div
                 key={day}
                 className={['cal-day-view', isService ? 'service' : '', loggedCat ? 'logged' : '', isToday ? 'today' : ''].filter(Boolean).join(' ')}
-                style={cellVars}
+                style={cellStyle}
                 title={titleParts.join(', ')}
               >
                 {day}
@@ -1712,10 +1766,24 @@ function ScheduleCalendarView({
           })}
         </div>
 
+        {/* Contextual legend — each entry only appears when something on the calendar
+            above actually uses it, and every swatch is drawn with the exact same style
+            as the cells it explains. */}
         <div className="legend">
-          <span><i className="sw suggested" /> Suggested day</span>
-          <span><i className="sw logged" /> Time logged (colored by type)</span>
-          <span><i className="sw appt" /> Return visit</span>
+          {monthHasToday && (
+            <span><i className="cal-sw" style={{ outline: '2px solid var(--accent)', outlineOffset: -2 }} /> Today</span>
+          )}
+          {suggestedCatsInMonth.map((cat) => (
+            <span key={`sug-${cat}`}>
+              <i className="cal-sw" style={{ border: `1.5px dashed var(--cat-${cat})` }} /> Suggested {CATEGORY_LABELS[cat]}
+            </span>
+          ))}
+          {loggedCatsInMonth.map((cat) => (
+            <span key={`log-${cat}`}>
+              <i className="cal-sw" style={{ background: `color-mix(in srgb, var(--cat-${cat}) 30%, var(--surface))` }} /> {CATEGORY_LABELS[cat]} logged
+            </span>
+          ))}
+          {monthAppts.length > 0 && <span><i className="sw appt" /> Return visit</span>}
         </div>
 
         {monthAppts.length > 0 && (

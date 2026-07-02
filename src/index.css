@@ -31,6 +31,9 @@
   --cat-other: #8a8478;
   --shadow-sm: 0 1px 2px rgba(33, 30, 26, 0.06);
   --shadow-md: 0 8px 24px rgba(33, 30, 26, 0.08);
+  /* Subtle white "lift" under big headings — light themes only; dark mode zeroes it
+     out since a white halo under light text reads as fuzz there. */
+  --title-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 6px rgba(33, 30, 26, 0.1);
 
   /* Contact tag palette (text + soft background pairs) */
   --tag-interested: #2f6f5e;
@@ -64,23 +67,95 @@
   --bg-translucent: rgba(23, 24, 26, 0.72);
   --surface: #1f2123;
   --surface-2: #26282b;
-  --border: #38393c;
-  --text: #c9c7c2;
+  --border: #3e4044;
+  --text: #cfcdc8;
   --text-h: #f2f1ee;
-  --muted: #93908a;
-  --accent-soft: #16302a;
+  --muted: #9d9a93;
+  /* Accent lifted slightly vs light mode's #2f6f5e — the deeper green loses too much
+     contrast against dark surfaces for links, active tabs, and progress fills. */
+  --accent: #4a9480;
+  --accent-soft: #1a3a32;
+  --accent-hover: #5aa892;
+  --danger: #d0705d;
   --danger-soft: #3a2420;
+  --credit: #d99934;
   --credit-soft: #332a18;
+  --visit: #8d7fe0;
   --visit-soft: #24213a;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --title-shadow: none;
+  /* Category colors brightened for dark surfaces — the light-theme hues are tuned for
+     contrast against white and go muddy on near-black. */
+  --cat-ministry: #4a9480;
+  --cat-ldc: #d08544;
+  --cat-hlc: #5b96d6;
+  --cat-convention: #d16a97;
+  --cat-assembly: #b5a545;
+  --cat-bethel: #7d81cf;
+  --cat-other: #a09a8d;
+  --tag-interested: #6fbba5;
   --tag-interested-bg: #16302a;
+  --tag-return: #6ba3dc;
   --tag-return-bg: #17293b;
+  --tag-study: #a98fdc;
   --tag-study-bg: #251f3a;
+  --tag-informal: #55b8b8;
   --tag-informal-bg: #163030;
+  --tag-not: #a29d92;
   --tag-not-bg: #2a2b2d;
+  --tag-dnc: #d0705d;
   --tag-dnc-bg: #3a2420;
+  --tag-moved: #d0a04f;
   --tag-moved-bg: #332916;
+}
+
+/* Pastel — soft lavender-blush surfaces with gently muted accents. Text and interactive
+   colors stay dark enough to keep contrast comfortable; only backgrounds and tints go
+   pastel, since readability wins over palette purity. */
+:root[data-theme='pastel'] {
+  color-scheme: light;
+  --bg: #f7f1f5;
+  --bg-translucent: rgba(247, 241, 245, 0.72);
+  --surface: #fffdfe;
+  --surface-2: #faf4f8;
+  --border: #eadfe7;
+  --text: #575060;
+  --text-h: #363042;
+  --muted: #9c91a4;
+  --accent: #7a5fa0;
+  --accent-soft: #ece5f5;
+  --accent-hover: #66508a;
+  --danger: #b0526b;
+  --danger-soft: #f9e8ee;
+  --credit: #b07c30;
+  --credit-soft: #f8eedd;
+  --visit: #7b6fd0;
+  --visit-soft: #ebe8fa;
+  --shadow-sm: 0 1px 2px rgba(70, 55, 80, 0.06);
+  --shadow-md: 0 8px 24px rgba(70, 55, 80, 0.1);
+  --title-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 6px rgba(70, 55, 80, 0.08);
+  --cat-ministry: #5c8d7d;
+  --cat-ldc: #bd7a45;
+  --cat-hlc: #5c85b8;
+  --cat-convention: #bb6390;
+  --cat-assembly: #a29655;
+  --cat-bethel: #7478b8;
+  --cat-other: #9c91a4;
+  --tag-interested: #4f8271;
+  --tag-interested-bg: #e4f0ea;
+  --tag-return: #4f79a8;
+  --tag-return-bg: #e6eef8;
+  --tag-study: #8a6cc0;
+  --tag-study-bg: #f0e9f9;
+  --tag-informal: #3f9494;
+  --tag-informal-bg: #e2f2f2;
+  --tag-not: #968c9e;
+  --tag-not-bg: #f0ebef;
+  --tag-dnc: #b0526b;
+  --tag-dnc-bg: #f9e8ee;
+  --tag-moved: #b1823a;
+  --tag-moved-bg: #f8efdd;
 }
 
 * {
@@ -146,8 +221,13 @@ button {
   transition: background 0.15s ease, transform 0.05s ease;
 }
 
-button:hover {
-  background: var(--accent-hover);
+/* Hover styles only where a real hover pointer exists — on touch screens, a tap
+   otherwise leaves the browser's emulated :hover stuck on until the next tap
+   elsewhere, which reads as buttons staying "semi-selected" after use. */
+@media (hover: hover) {
+  button:hover {
+    background: var(--accent-hover);
+  }
 }
 
 button:active {
@@ -160,18 +240,20 @@ button.secondary {
   border: 1px solid var(--border);
 }
 
-button.secondary:hover {
-  background: var(--border);
-}
-
 button.danger {
   background: var(--danger-soft);
   color: var(--danger);
 }
 
-button.danger:hover {
-  background: var(--danger);
-  color: white;
+@media (hover: hover) {
+  button.secondary:hover {
+    background: var(--border);
+  }
+
+  button.danger:hover {
+    background: var(--danger);
+    color: white;
+  }
 }
 
 button:disabled {

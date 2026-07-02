@@ -345,14 +345,14 @@
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text-h);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 6px rgba(33, 30, 26, 0.1);
+  text-shadow: var(--title-shadow);
 }
 
 .view > h2 {
   font-size: 27px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 6px rgba(33, 30, 26, 0.1);
+  text-shadow: var(--title-shadow);
 }
 
 button.small {
@@ -473,8 +473,10 @@ button.small {
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
-.list-item.clickable:hover {
-  box-shadow: var(--shadow-md);
+@media (hover: hover) {
+  .list-item.clickable:hover {
+    box-shadow: var(--shadow-md);
+  }
 }
 
 .muted {
@@ -562,6 +564,26 @@ button.small {
   opacity: 0;
 }
 
+/* One suggested-time block in the day editor — left edge colored by the block's
+   category (inline) so multiple stacked blocks read apart at a glance. */
+.schedule-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.schedule-block-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .confirm-backdrop {
   z-index: 1100;
 }
@@ -605,9 +627,11 @@ button.small {
   font-weight: 700;
 }
 
-.icon-btn:hover {
-  background: var(--border);
-  color: var(--text-h);
+@media (hover: hover) {
+  .icon-btn:hover {
+    background: var(--border);
+    color: var(--text-h);
+  }
 }
 
 .map-wrap {
@@ -860,17 +884,12 @@ button.small {
   overflow: hidden;
 }
 
+/* Border color and tinted background are set inline per block, from the block's
+   category color — the class only provides the shared geometry. */
 .slot-suggested {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(47, 111, 94, 0.16),
-    rgba(47, 111, 94, 0.16) 6px,
-    rgba(47, 111, 94, 0.06) 6px,
-    rgba(47, 111, 94, 0.06) 12px
-  );
   border: 1px dashed var(--accent);
   border-radius: 6px;
 }
@@ -1109,8 +1128,10 @@ button.small {
   font-size: 16px;
 }
 
-.collapse-header:hover {
-  background: transparent;
+@media (hover: hover) {
+  .collapse-header:hover {
+    background: transparent;
+  }
 }
 
 .collapse-header .chevron {
@@ -1378,8 +1399,10 @@ button.small {
   cursor: pointer;
 }
 
-.combobox-option:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .combobox-option:hover {
+    background: var(--surface-2);
+  }
 }
 
 /* ---- Contact detail: compact summary lines + household pills ---- */
@@ -1628,8 +1651,10 @@ button.small {
   text-align: left;
 }
 
-.date-display-btn:hover {
-  background: var(--border);
+@media (hover: hover) {
+  .date-display-btn:hover {
+    background: var(--border);
+  }
 }
 
 /* ============================================================
@@ -1648,8 +1673,10 @@ button.small {
   letter-spacing: -0.02em;
 }
 
-.numpad-display-btn:hover {
-  background: var(--border);
+@media (hover: hover) {
+  .numpad-display-btn:hover {
+    background: var(--border);
+  }
 }
 
 /* ============================================================
@@ -1703,8 +1730,10 @@ button.small {
   width: 100%;
 }
 
-.cal-day:hover {
-  background: var(--accent-soft);
+@media (hover: hover) {
+  .cal-day:hover {
+    background: var(--accent-soft);
+  }
 }
 
 .cal-day.today {
@@ -1725,10 +1754,10 @@ button.small {
   max-height: 80vh;
 }
 
-/* Suggested days get a dashed outline (color set per-cell via --suggest-color, since it
-   can vary by what's suggested); days with time actually logged get a soft shaded fill
-   (--log-color, from the predominant category logged that day) — so at a glance, a dotted
-   ring means "planned" and a filled tint means "done", each colored by ministry type. */
+/* Suggested days get a dashed outline and logged days a shaded fill — both colored
+   inline per-cell from the category involved (two-tone border when a day mixes types),
+   so a dotted ring means "planned" and a filled tint means "done", each colored by
+   ministry type. The class rules here are just geometry + fallbacks. */
 .cal-day-view {
   position: relative;
   border-radius: 8px;
@@ -1741,17 +1770,27 @@ button.small {
 }
 
 .cal-day-view.service {
-  border-color: var(--suggest-color, var(--cat-ministry));
+  border-color: var(--cat-ministry);
   font-weight: 600;
 }
 
 .cal-day-view.logged {
-  background: color-mix(in srgb, var(--log-color, var(--cat-ministry)) 16%, var(--surface));
+  background: color-mix(in srgb, var(--cat-ministry) 30%, var(--surface));
 }
 
 .cal-day-view.today {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+/* Legend swatch for the calendar view — sized like a mini day cell; its border/fill/
+   outline is applied inline to exactly mirror the cell style it explains. */
+.cal-sw {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 .cal-day-appt-dot {
@@ -1830,8 +1869,10 @@ button.small {
   text-align: center;
 }
 
-.numpad-key:hover {
-  background: var(--border);
+@media (hover: hover) {
+  .numpad-key:hover {
+    background: var(--border);
+  }
 }
 
 .numpad-key.done {
@@ -1841,8 +1882,10 @@ button.small {
   font-size: 22px;
 }
 
-.numpad-key.done:hover {
-  background: var(--accent-hover);
+@media (hover: hover) {
+  .numpad-key.done:hover {
+    background: var(--accent-hover);
+  }
 }
 
 /* ============================================================
@@ -1926,16 +1969,22 @@ button.small {
    away — right before the ball launches from that same spot (see collectAndFlyToMinuteBank
    in minuteBankFly.ts), so the ball reads as originating from the minutes themselves. */
 .minute-collecting {
+  /* Colors are set statically here (not animated in the keyframes) so the animation
+     itself only touches transform/opacity — both compositor-friendly, no repaints. */
+  background: var(--credit-soft);
+  border-color: var(--credit);
+  color: var(--credit);
   animation: minute-collecting 0.26s ease-in forwards;
   transform-origin: center;
   position: relative;
   z-index: 1;
+  will-change: transform, opacity;
 }
 
 @keyframes minute-collecting {
-  0% { transform: scale(1); background: var(--credit-soft); border-color: var(--credit); color: var(--credit); opacity: 1; }
-  40% { transform: scale(1.12); background: var(--credit-soft); border-color: var(--credit); color: var(--credit); opacity: 1; }
-  100% { transform: scale(0); background: var(--credit-soft); border-color: var(--credit); color: var(--credit); opacity: 0; }
+  0% { transform: scale(1); opacity: 1; }
+  40% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
 }
 
 /* The little stopwatch icon that flies from wherever time was just banked up to this

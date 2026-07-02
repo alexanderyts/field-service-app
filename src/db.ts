@@ -50,6 +50,15 @@ export interface Call {
 
 export type TimeCategory = 'ministry' | 'ldc' | 'hlc' | 'convention' | 'assembly' | 'bethel' | 'other'
 
+/** One suggested (planned) window of time on a weekly-schedule day — minutes since
+    midnight, typed by ministry category so a morning of ministry and an afternoon of
+    LDC can coexist on the same day. */
+export interface DayScheduleBlock {
+  start: number
+  end: number
+  category: TimeCategory
+}
+
 export interface TimeLog {
   id: number
   date: number
@@ -77,15 +86,23 @@ export interface SchedulePrefs {
   daysOut: number[]
   weeklyHours: number
   yearlyHours: number
-  /** Per-day suggested ministry window (day-of-week key, 0=Sun..6=Sat, -> minutes since
-      midnight) for whichever days are in daysOut. Each day can have its own start time —
-      replaces the old single global startMinutes/sessionHours. `end` is only present once
-      explicitly customized (from the Schedule tab); until then it's derived live from
-      weeklyHours split evenly across the selected days, so it stays correct as days are
-      added or removed instead of going stale. `creditMin`/`creditCategory` are an optional
-      planning-only suggestion (credit hours + type someone hopes to fit in that day) —
-      purely a planning aid, never logged automatically. */
-  daySchedule?: Record<number, { start: number; end?: number; creditMin?: number; creditCategory?: TimeCategory }>
+  /** Per-day suggested schedule (day-of-week key, 0=Sun..6=Sat). The current shape is
+      `blocks` — any number of typed time windows per day (e.g. ministry in the morning,
+      LDC in the afternoon), each purely a planning suggestion, never logged automatically.
+      The loose top-level `start`/`end`/`creditMin`/`creditCategory` fields are legacy
+      shapes from before blocks existed (single ministry window + optional credit amount);
+      records that still carry them are normalized into blocks at read time (see
+      dayScheduleBlocks in Schedule.tsx) rather than migrated in place. */
+  daySchedule?: Record<
+    number,
+    {
+      start?: number
+      end?: number
+      creditMin?: number
+      creditCategory?: TimeCategory
+      blocks?: DayScheduleBlock[]
+    }
+  >
   /** Non-pioneers only — an optional self-set goal. Choosing monthly or yearly turns on
       real hour tracking (daysOut/weeklyHours/yearlyHours) for them, same as a pioneer's,
       just measured against their own goal instead of the fixed 600h/year. */

@@ -44,48 +44,62 @@ export function flyToMinuteBank(originEl: HTMLElement | null | undefined): Promi
 
   return new Promise((resolve) => {
     const start = performance.now()
+    // Target position is re-read only every few frames (and smoothly interpolated toward
+    // in between) instead of every frame: getBoundingClientRect forces a synchronous
+    // layout flush, and during this flight the Add Time card is usually mid-collapse —
+    // one forced layout per frame on top of that transition was the main source of
+    // stutter. The path still tracks scrolls/reflows, just at 15Hz instead of 60Hz,
+    // which is imperceptible for a sub-second flight.
+    let endX = 0
+    let endY = 0
+    let frameCount = 0
 
     function frame(now: number) {
       const t = Math.min(1, (now - start) / FLIGHT_MS)
-      const target = findBankTarget()
-      if (!target) { ball.remove(); resolve(); return }
-      const to = target.getBoundingClientRect()
-      const endX = to.left + to.width / 2
-      const endY = to.top + to.height / 2
+      if (frameCount % 4 === 0 || t >= 1) {
+        const target = findBankTarget()
+        if (!target) { ball.remove(); resolve(); return }
+        const to = target.getBoundingClientRect()
+        endX = to.left + to.width / 2
+        endY = to.top + to.height / 2
+      }
+      frameCount++
 
-      // Re-derived every frame from the target's current (live) position, so a scroll or
-      // layout shift mid-flight bends the path smoothly toward the new spot instead of
-      // the ball arriving somewhere stale. Eased out (quick start, gentle landing).
+      // Eased out (quick start, gentle landing), bending through a small, mostly-forward
+      // bulge — enough to read as a toss with some weight, never enough to look like it
+      // darts sideways before correcting back on course.
       const eased = 1 - (1 - t) * (1 - t)
       const dx = endX - startX
       const dy = endY - startY
       const dist = Math.hypot(dx, dy) || 1
       const perpX = -dy / dist
       const perpY = dx / dist
-      // Small, mostly-forward bend — enough to read as a toss with some weight, never
-      // enough to look like it darts sideways before correcting back on course.
       const bulge = Math.min(12, dist * 0.07) * Math.sin(eased * Math.PI)
       const oneMinusT = 1 - eased
       const px = oneMinusT * oneMinusT * startX + 2 * oneMinusT * eased * (startX + dx * 0.5 + perpX * bulge) + eased * eased * endX
       const py = oneMinusT * oneMinusT * startY + 2 * oneMinusT * eased * (startY + dy * 0.5 + perpY * bulge) + eased * eased * endY
 
       const scale = t < 0.88 ? 1 : 1 + ((t - 0.88) / 0.12) * 0.25
-      ball.style.transform = `translate(${px}px, ${py}px) translate(-50%, -50%) scale(${scale})`
+      // translate3d keeps the ball on its own compositor layer for the whole flight.
+      ball.style.transform = `translate3d(${px}px, ${py}px, 0) translate(-50%, -50%) scale(${scale})`
 
       if (t < 1) {
         requestAnimationFrame(frame)
         return
       }
 
-      target.classList.add('minute-bank-pulse')
-      window.setTimeout(() => target.classList.remove('minute-bank-pulse'), 350)
+      const target = findBankTarget()
+      if (target) {
+        target.classList.add('minute-bank-pulse')
+        window.setTimeout(() => target.classList.remove('minute-bank-pulse'), 350)
+      }
       resolve()
 
       // Fade/shrink the icon away in place — set up as a genuine CSS transition (not a
       // per-frame rAF write) since there's nothing left to track once it's landed.
       requestAnimationFrame(() => {
         ball.style.transition = 'transform 0.28s ease, opacity 0.28s ease'
-        ball.style.transform = `translate(${endX}px, ${endY}px) translate(-50%, -50%) scale(0.2)`
+        ball.style.transform = `translate3d(${endX}px, ${endY}px, 0) translate(-50%, -50%) scale(0.2)`
         ball.style.opacity = '0'
         window.setTimeout(() => ball.remove(), 300)
       })

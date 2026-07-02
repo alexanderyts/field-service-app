@@ -26,7 +26,13 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
   const [confirmClear, setConfirmClear] = useState(false)
   const [confirmSeed, setConfirmSeed] = useState(false)
   const [creditEnabled, setCreditEnabled] = useState(() => localStorage.getItem('fieldservice_credit_hours') === 'yes')
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('fieldservice_dark_mode') === 'yes')
+  const [theme, setThemeState] = useState<'light' | 'dark' | 'pastel'>(() => {
+    const t = localStorage.getItem('fieldservice_theme')
+    if (t === 'dark' || t === 'pastel') return t
+    // Fallback for devices that enabled dark mode before the theme picker existed.
+    if (localStorage.getItem('fieldservice_dark_mode') === 'yes') return 'dark'
+    return 'light'
+  })
   const [minuteAnimEnabled, setMinuteAnimEnabledState] = useState(() => minuteBankAnimationsEnabled())
   const [notifyEnabled, setNotifyEnabledState] = useState(() => notificationsEnabled())
   const [notifyLead, setNotifyLeadState] = useState<NotifyLeadMinutes>(() => getNotifyLeadMinutes())
@@ -48,10 +54,12 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
     localStorage.setItem('fieldservice_credit_hours', v ? 'yes' : 'no')
   }
 
-  function toggleDarkMode(v: boolean) {
-    setDarkMode(v)
-    localStorage.setItem('fieldservice_dark_mode', v ? 'yes' : 'no')
-    document.documentElement.dataset.theme = v ? 'dark' : ''
+  function changeTheme(t: 'light' | 'dark' | 'pastel') {
+    setThemeState(t)
+    localStorage.setItem('fieldservice_theme', t)
+    // Retire the old boolean key so it can't disagree with the new one.
+    localStorage.removeItem('fieldservice_dark_mode')
+    document.documentElement.dataset.theme = t === 'light' ? '' : t
   }
 
   function toggleMinuteAnim(v: boolean) {
@@ -112,17 +120,27 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
         )}
       </div>
 
-      {/* ── Dark mode ───────────────────────────────────────── */}
+      {/* ── Theme ───────────────────────────────────────────── */}
       <div className="card">
-        <label className="checkbox-row">
-          <input type="checkbox" checked={darkMode} onChange={(e) => toggleDarkMode(e.target.checked)} />
-          <div>
-            <strong>Dark Mode <span className="beta-pill">Beta</span></strong>
-            <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
-              Switches the app to a dark color scheme. Still being refined — if something looks off, let me know.
-            </p>
-          </div>
-        </label>
+        <strong>Theme</strong>
+        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
+          Pick the look that's easiest on your eyes — everything stays just as readable in all three.
+        </p>
+        <div className="cat-pills">
+          {([
+            ['light', '☀️ Light'],
+            ['dark', '🌙 Dark'],
+            ['pastel', '🌸 Pastel'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              className={`chip${theme === key ? ' active' : ''}`}
+              onClick={() => changeTheme(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Minute-bank animation ────────────────────────────── */}
