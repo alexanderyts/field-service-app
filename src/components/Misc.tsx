@@ -3,8 +3,9 @@ import { db } from '../db'
 import ConfirmDialog from './ConfirmDialog'
 import { exportBackup, importBackup, type ImportSummary } from '../backup'
 import { InstallCard } from './InstallPrompt'
+import { tipServices, type TipKind } from '../tips'
 import { APP_VERSION } from '../version'
-import { COPYRIGHT_SUMMARY, DEVELOPER_EMAIL, NOT_AFFILIATED } from '../legal'
+import { COPYRIGHT_SUMMARY, NOT_AFFILIATED } from '../legal'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
 import {
   NOTIFY_LEAD_OPTIONS,
@@ -45,6 +46,11 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
   const [notifyPermission, setNotifyPermission] = useState<NotificationPermission | 'unsupported'>(() =>
     notificationsSupported() ? Notification.permission : 'unsupported'
   )
+
+  // Tips
+  const [tipMenu, setTipMenu] = useState<TipKind | null>(null)
+  const oneTimeTips = tipServices('oneTime')
+  const monthlyTips = tipServices('monthly')
 
   // Backup & restore
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -159,35 +165,45 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
         <div className="misc-donate-header">
           <span className="misc-donate-emoji">☕</span>
           <div>
-            <h4 style={{ margin: 0 }}>Leave a tip</h4>
-            <p className="muted" style={{ margin: '2px 0 0' }}>...only if you'd like 😄</p>
+            <h4 style={{ margin: 0, lineHeight: 1.4 }}>Enjoying the app? Buy me a coffee at the next break :D</h4>
           </div>
         </div>
 
         <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
-          Field Service is free — every feature and every update, forever. No subscriptions, no ads,
-          no paywalls. If it's been helpful, a tip is a purely optional gift that helps cover hosting
-          and the time spent building it.
+          This app is 100% free — every feature, every update, forever. No ads, no paywalls, no
+          subscriptions required.
+        </p>
+        <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+          If it's saved you time or made your day a little easier, a tip is a nice way to say thanks —
+          but never expected. It just helps keep the lights on and the updates coming.
         </p>
 
-        <div className="misc-donate-box">
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>Send via PayPal to</p>
-          <p style={{ margin: '2px 0 0', fontSize: 15, fontWeight: 700, color: 'var(--text-h)' }}>{DEVELOPER_EMAIL}</p>
+        <div className="tip-actions">
+          {oneTimeTips.length === 1 ? (
+            <a className="link-button tip-btn" href={oneTimeTips[0].oneTime} target="_blank" rel="noreferrer">One-Time Tip</a>
+          ) : oneTimeTips.length > 1 ? (
+            <button className="tip-btn" onClick={() => setTipMenu((m) => (m === 'oneTime' ? null : 'oneTime'))}>One-Time Tip</button>
+          ) : null}
+
+          {monthlyTips.length === 1 ? (
+            <a className="link-button secondary tip-btn" href={monthlyTips[0].monthly} target="_blank" rel="noreferrer">Monthly Support</a>
+          ) : monthlyTips.length > 1 ? (
+            <button className="secondary tip-btn" onClick={() => setTipMenu((m) => (m === 'monthly' ? null : 'monthly'))}>Monthly Support</button>
+          ) : null}
         </div>
 
-        <a
-          className="link-button"
-          href={`https://www.paypal.com/send?recipient=${encodeURIComponent(DEVELOPER_EMAIL)}`}
-          target="_blank"
-          rel="noreferrer"
-          style={{ textAlign: 'center' }}
-        >
-          Leave a tip via PayPal
-        </a>
+        {tipMenu && (
+          <div className="tip-menu">
+            {tipServices(tipMenu).map((s) => (
+              <a key={s.id} className="link-button" href={s[tipMenu]} target="_blank" rel="noreferrer">
+                {s.emoji} {s.label}
+              </a>
+            ))}
+          </div>
+        )}
 
         <p className="muted" style={{ fontSize: 12, margin: 0, textAlign: 'center', lineHeight: 1.5 }}>
-          Tips are voluntary gifts — not a payment for the app, any feature, or any service, and they
-          unlock nothing extra. Thank you either way! 🙏
+          Totally optional. Only if you'd like.
         </p>
       </div>
 
