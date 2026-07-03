@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { db } from '../db'
 import ConfirmDialog from './ConfirmDialog'
+import { COPYRIGHT_SUMMARY, DEVELOPER_EMAIL, NOT_AFFILIATED } from '../legal'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
 import {
   NOTIFY_LEAD_OPTIONS,
@@ -15,6 +16,7 @@ import {
 
 const CREDIT_CAT_LABELS: Record<string, string> = {
   ldc: 'LDC (Construction)',
+  hlc: 'HLC',
   convention: 'Convention',
   assembly: 'Assembly',
   bethel: 'Bethel',
@@ -22,7 +24,8 @@ const CREDIT_CAT_LABELS: Record<string, string> = {
 }
 
 export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => void }) {
-  const [privacyOpen, setPrivacyOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [legalOpen, setLegalOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [confirmSeed, setConfirmSeed] = useState(false)
   const [creditEnabled, setCreditEnabled] = useState(() => localStorage.getItem('fieldservice_credit_hours') === 'yes')
@@ -100,31 +103,48 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
     <div className="view">
       <h2 className="applet-title">More</h2>
 
-      {/* ── Credit hours ────────────────────────────────────── */}
-      <div className="card">
-        <label className="checkbox-row">
-          <input type="checkbox" checked={creditEnabled} onChange={(e) => toggleCredit(e.target.checked)} />
+      {/* ── 1. Tips ─────────────────────────────────────────── */}
+      <div className="card misc-donate">
+        <div className="misc-donate-header">
+          <span className="misc-donate-emoji">☕</span>
           <div>
-            <strong>Count credit hours</strong>
-            <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
-              Adds LDC, Convention, Assembly, Bethel, and Other categories when logging time.
-            </p>
+            <h4 style={{ margin: 0 }}>Leave a tip</h4>
+            <p className="muted" style={{ margin: '2px 0 0' }}>...only if you'd like 😄</p>
           </div>
-        </label>
-        {creditEnabled && (
-          <div className="cat-pills" style={{ marginTop: 2 }}>
-            {Object.entries(CREDIT_CAT_LABELS).map(([k, v]) => (
-              <span key={k} className="chip" style={{ fontSize: 12, padding: '5px 12px' }}>{v}</span>
-            ))}
-          </div>
-        )}
+        </div>
+
+        <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+          Field Service is free — every feature and every update, forever. No subscriptions, no ads,
+          no paywalls. If it's been helpful, a tip is a purely optional gift that helps cover hosting
+          and the time spent building it.
+        </p>
+
+        <div className="misc-donate-box">
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>Send via PayPal to</p>
+          <p style={{ margin: '2px 0 0', fontSize: 15, fontWeight: 700, color: 'var(--text-h)' }}>{DEVELOPER_EMAIL}</p>
+        </div>
+
+        <a
+          className="link-button"
+          href={`https://www.paypal.com/send?recipient=${encodeURIComponent(DEVELOPER_EMAIL)}`}
+          target="_blank"
+          rel="noreferrer"
+          style={{ textAlign: 'center' }}
+        >
+          Leave a tip via PayPal
+        </a>
+
+        <p className="muted" style={{ fontSize: 12, margin: 0, textAlign: 'center', lineHeight: 1.5 }}>
+          Tips are voluntary gifts — not a payment for the app, any feature, or any service, and they
+          unlock nothing extra. Thank you either way! 🙏
+        </p>
       </div>
 
-      {/* ── Theme ───────────────────────────────────────────── */}
+      {/* ── 2. Theme ────────────────────────────────────────── */}
       <div className="card">
         <strong>Theme</strong>
         <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
-          Pick the look that's easiest on your eyes — everything stays just as readable in all three.
+          Pick the look that's easiest on your eyes.
         </p>
         <div className="cat-pills">
           {([
@@ -143,65 +163,95 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
         </div>
       </div>
 
-      {/* ── Minute-bank animation ────────────────────────────── */}
+      {/* ── 3. App Settings (credit hours, minute bank, reminders) ── */}
       <div className="card">
-        <label className="checkbox-row">
-          <input type="checkbox" checked={minuteAnimEnabled} onChange={(e) => toggleMinuteAnim(e.target.checked)} />
-          <div>
-            <strong>Minute-bank animation</strong>
-            <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
-              Shows a little flying animation when leftover minutes get banked. Turn off for a plain, instant save.
-            </p>
+        <button className="collapse-header" onClick={() => setSettingsOpen((v) => !v)}>
+          <span style={{ fontWeight: 600, fontSize: 15 }}>⚙️ App Settings</span>
+          <span className="chevron">{settingsOpen ? '▾' : '▸'}</span>
+        </button>
+
+        {settingsOpen && (
+          <div className="misc-settings">
+            {/* Credit hours */}
+            <label className="checkbox-row">
+              <input type="checkbox" checked={creditEnabled} onChange={(e) => toggleCredit(e.target.checked)} />
+              <div>
+                <strong>Count credit hours</strong>
+                <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+                  Adds LDC, HLC, Convention, Assembly, Bethel, and Other categories when logging time.
+                </p>
+              </div>
+            </label>
+            {creditEnabled && (
+              <div className="cat-pills" style={{ marginTop: 2 }}>
+                {Object.entries(CREDIT_CAT_LABELS).map(([k, v]) => (
+                  <span key={k} className="chip" style={{ fontSize: 12, padding: '5px 12px' }}>{v}</span>
+                ))}
+              </div>
+            )}
+
+            <div className="misc-settings-divider" />
+
+            {/* Minute-bank animation */}
+            <label className="checkbox-row">
+              <input type="checkbox" checked={minuteAnimEnabled} onChange={(e) => toggleMinuteAnim(e.target.checked)} />
+              <div>
+                <strong>Minute-bank animation</strong>
+                <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+                  Plays a short animation when leftover minutes get banked. Turn off for an instant save.
+                </p>
+              </div>
+            </label>
+
+            <div className="misc-settings-divider" />
+
+            {/* Return visit reminders */}
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={notifyEnabled}
+                disabled={notifyPermission === 'unsupported'}
+                onChange={(e) => toggleNotify(e.target.checked)}
+              />
+              <div>
+                <strong>Return visit reminders</strong>
+                <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+                  {notifyPermission === 'unsupported'
+                    ? "Notifications aren't supported in this browser."
+                    : "Reminds you as a return visit approaches. With no backend, this only works while the app is open."}
+                </p>
+              </div>
+            </label>
+            {notifyPermission === 'denied' && (
+              <p className="muted" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>
+                Notifications are blocked for this app in your browser/device settings — allow them there first.
+              </p>
+            )}
+            {notifyEnabled && notifyPermission === 'granted' && (
+              <div className="field" style={{ marginTop: 8 }}>
+                <span className="field-label">Remind me</span>
+                <div className="cat-pills">
+                  {NOTIFY_LEAD_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.minutes}
+                      className={`chip${notifyLead === opt.minutes ? ' active' : ''}`}
+                      onClick={() => changeNotifyLead(opt.minutes)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </label>
+        )}
       </div>
 
-      {/* ── Return visit notifications ───────────────────────── */}
-      <div className="card">
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={notifyEnabled}
-            disabled={notifyPermission === 'unsupported'}
-            onChange={(e) => toggleNotify(e.target.checked)}
-          />
-          <div>
-            <strong>Return visit reminders</strong>
-            <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
-              {notifyPermission === 'unsupported'
-                ? "Notifications aren't supported in this browser."
-                : "Sends a notification as a return visit's time approaches. Since this app has no backend server, this only works while the app is open — it won't wake your phone if it's fully closed."}
-            </p>
-          </div>
-        </label>
-        {notifyPermission === 'denied' && (
-          <p className="muted" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>
-            Notifications are blocked for this app in your browser/device settings — you'll need to allow them there first.
-          </p>
-        )}
-        {notifyEnabled && notifyPermission === 'granted' && (
-          <div className="field" style={{ marginTop: 8 }}>
-            <span className="field-label">Remind me</span>
-            <div className="cat-pills">
-              {NOTIFY_LEAD_OPTIONS.map((opt) => (
-                <button
-                  key={opt.minutes}
-                  className={`chip${notifyLead === opt.minutes ? ' active' : ''}`}
-                  onClick={() => changeNotifyLead(opt.minutes)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Guided tour ─────────────────────────────────────── */}
+      {/* ── 4. Guided tour ──────────────────────────────────── */}
       <div className="card">
         <strong>Guided Tour</strong>
         <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
-          A quick walkthrough of contacts, time tracking, and how minute banking works.
+          A quick walkthrough of each tab.
         </p>
         <button className="secondary" onClick={onReplayTutorial}>Take the Guided Tour</button>
       </div>
@@ -218,92 +268,56 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
         </div>
       )}
 
-      {/* ── Privacy ─────────────────────────────────────────── */}
+      {/* ── 5. Legal & Privacy ──────────────────────────────── */}
       <div className="card">
-        <button className="collapse-header" onClick={() => setPrivacyOpen((v) => !v)}>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>🔒 Your Privacy</span>
-          <span className="chevron">{privacyOpen ? '▾' : '▸'}</span>
+        <button className="collapse-header" onClick={() => setLegalOpen((v) => !v)}>
+          <span style={{ fontWeight: 600, fontSize: 15 }}>🔒 Legal & Privacy</span>
+          <span className="chevron">{legalOpen ? '▾' : '▸'}</span>
         </button>
 
-        {privacyOpen && (
+        {legalOpen && (
           <div className="misc-privacy">
-            <p className="misc-privacy-lead">
-              Field Service is built around one simple idea: <strong>your data belongs to you</strong> — and only you.
-            </p>
-
             <div className="misc-privacy-item">
-              <span className="misc-privacy-icon">📱</span>
+              <span className="misc-privacy-icon">ℹ️</span>
               <div>
-                <strong>Everything stays on your device.</strong>
-                <p>Contacts, call logs, time records, and schedule data are stored exclusively in your browser's local storage (IndexedDB). Nothing is ever sent to a server.</p>
+                <strong>Not affiliated.</strong>
+                <p>{NOT_AFFILIATED}</p>
               </div>
             </div>
 
             <div className="misc-privacy-item">
-              <span className="misc-privacy-icon">🚫</span>
+              <span className="misc-privacy-icon">📱</span>
               <div>
-                <strong>Zero data collection.</strong>
-                <p>There are no analytics, no tracking scripts, no advertising, and no backend infrastructure. The developer has no access to anything you enter.</p>
+                <strong>Your data stays on your device.</strong>
+                <p>Contacts, call logs, time records, and schedules live only in your browser's local storage (IndexedDB). Nothing is sent to a server — no analytics, tracking, ads, or backend. The developer can't see anything you enter.</p>
               </div>
             </div>
 
             <div className="misc-privacy-item">
               <span className="misc-privacy-icon">⚖️</span>
               <div>
-                <strong>US data protection law compliant.</strong>
-                <p>Because this app collects no personal data, processes nothing server-side, and sells nothing, it falls outside the applicability thresholds of the CCPA, Virginia CDPA, and all other current US state privacy frameworks. Your use of the app is covered by the Privacy Policy you agreed to at setup.</p>
+                <strong>Terms of use.</strong>
+                <p>The app is provided "as is," without warranty of any kind. You're responsible for the information you store and for using it lawfully. To the fullest extent permitted by law, the developer isn't liable for any damages or data loss arising from your use of the app. Use is at your own risk.</p>
               </div>
             </div>
 
             <div className="misc-privacy-item">
-              <span className="misc-privacy-icon">🗑️</span>
+              <span className="misc-privacy-icon">©️</span>
               <div>
-                <strong>You're in full control.</strong>
-                <p>You can delete any contact, log, or record at any time. Or use the button below to wipe everything and start fresh.</p>
+                <strong>Copyright.</strong>
+                <p>{COPYRIGHT_SUMMARY}</p>
               </div>
             </div>
+
+            <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, margin: '2px 0 0' }}>
+              Informational summary — see the full Privacy Policy &amp; Terms you accepted at first launch.
+            </p>
 
             <button className="danger" style={{ marginTop: 4 }} onClick={() => setConfirmClear(true)}>
               Clear All App Data
             </button>
           </div>
         )}
-      </div>
-
-      {/* ── Donate ──────────────────────────────────────────── */}
-      <div className="card misc-donate">
-        <div className="misc-donate-header">
-          <span className="misc-donate-emoji">☕</span>
-          <div>
-            <h4 style={{ margin: 0 }}>Buy me a coffee at the next break</h4>
-            <p className="muted" style={{ margin: '2px 0 0' }}>...if you feel so inclined 😄</p>
-          </div>
-        </div>
-
-        <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
-          Field Service is completely free — every feature, every update, forever. No subscriptions,
-          no paywalls, no ads. But if this app has been useful to you, a small donation goes a long
-          way toward keeping the lights on and building new features.
-        </p>
-
-        <div className="misc-donate-box">
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>Send via PayPal to</p>
-          <p style={{ margin: '2px 0 0', fontSize: 15, fontWeight: 700, color: 'var(--text-h)' }}>alexander.yts@gmail.com</p>
-        </div>
-
-        <a
-          className="link-button"
-          href="https://www.paypal.com/send?recipient=alexander.yts%40gmail.com"
-          target="_blank"
-          rel="noreferrer"
-          style={{ textAlign: 'center' }}
-        >
-          Donate via PayPal
-        </a>
-
-        <p className="muted" style={{ fontSize: 12, margin: 0, textAlign: 'center' }}>
-          Completely optional — thank you either way! 🙏
-        </p>
       </div>
 
       <ConfirmDialog

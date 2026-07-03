@@ -8,7 +8,7 @@ on-device in the browser (IndexedDB) — nothing is sent to a server.
 
 - **Contacts** — add/sort householders (name, street, city, zip, date met); log calls with
   scriptures, literature, topics, and follow-up dates; get directions.
-- **Calendar** — a one-time availability survey builds a suggested weekly schedule; log ministry
+- **Calendar** — a one-time availability survey builds a scheduled weekly schedule; log ministry
   and credit time; weekly + yearly goal progress.
 - **Map** — Leaflet/OpenStreetMap territory map with current location and contact pins.
 - **Literature** — catalog of offerings; auto-fills when logging what was shared.

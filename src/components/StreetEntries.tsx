@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, compareHouseNumbers, type StreetEntry, type StreetHouse, type HouseStatus } from '../db'
+import { expandState } from '../usStates'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 
@@ -107,7 +108,7 @@ function StreetEntryForm({
     const record = {
       name: name.trim(),
       city: city.trim() || undefined,
-      state: state.trim() || undefined,
+      state: expandState(state) || undefined,
       zip: zip.trim() || undefined,
     }
     if (existing) {
@@ -138,7 +139,7 @@ function StreetEntryForm({
             </label>
             <label className="field">
               <span className="field-label">State</span>
-              <input value={state} onChange={(e) => setState(e.target.value)} />
+              <input value={state} onChange={(e) => setState(e.target.value)} onBlur={() => setState((s) => expandState(s))} />
             </label>
             <label className="field">
               <span className="field-label">Zip</span>
@@ -167,15 +168,15 @@ function StreetDetail({ entryId, onClose }: { entryId: number; onClose: () => vo
   const address = [entry.city, entry.state, entry.zip].filter(Boolean).join(', ')
   const sortedHouses = [...entry.houses].sort((a, b) => compareHouseNumbers(a.number, b.number))
 
-  async function addHouses(numbers: string[]) {
+  async function addHouses(newHouses: PadHouse[]) {
     if (!entry) return
     const existingNums = new Set(entry.houses.map((h) => h.number.toLowerCase()))
     const additions: StreetHouse[] = []
-    for (const n of numbers) {
-      const trimmed = n.trim()
+    for (const h of newHouses) {
+      const trimmed = h.number.trim()
       if (!trimmed || existingNums.has(trimmed.toLowerCase())) continue
       existingNums.add(trimmed.toLowerCase())
-      additions.push({ id: houseId(), number: trimmed })
+      additions.push({ id: houseId(), number: trimmed, status: h.status, note: h.note })
     }
     if (additions.length) await db.streetEntries.update(entry.id, { houses: [...entry.houses, ...additions] })
   }
@@ -248,7 +249,7 @@ function StreetDetail({ entryId, onClose }: { entryId: number; onClose: () => vo
         </div>
 
         {showEdit && <StreetEntryForm existing={entry} onClose={() => setShowEdit(false)} />}
-        {showPad && <HouseNumberPad onSubmit={(nums) => addHouses(nums)} onClose={() => setShowPad(false)} />}
+        {showPad && <HouseNumberPad onSubmit={(houses) => addHouses(houses)} onClose={() => setShowPad(false)} />}
 
         <ConfirmDialog
           open={confirmDelete}
@@ -264,32 +265,52 @@ function StreetDetail({ entryId, onClose }: { entryId: number; onClose: () => vo
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
+/** A house being entered on the pad — its number plus an optional status flag and note. */
+export interface PadHouse {
+  number: string
+  status?: HouseStatus
+  note?: string
+}
+
 /**
  * A contextual keypad for entering house numbers. Digits by default; the "ABC" toggle
- * swaps the grid to letters so a unit suffix (12B) can be appended. "Multiple houses" mode
- * keeps the pad open after each ✓ so a whole run of doors can be entered without reopening —
- * every submitted number is collected and handed back together on close. Outside that mode,
- * ✓ submits the single number and closes.
+ * swaps the grid to letters so a unit suffix (12B) can be appended. Backspace (⌫) and enter
+ * (✓) live in the grid itself. A status flag (Not Home / No Trespassing / Other) and an
+ * optional note can be attached to each house right here at entry time.
+ *
+ * "Multiple houses" mode keeps the pad open after each ✓ so a whole run of doors can be
+ * entered without reopening — every house is banked locally and handed back together on
+ * close (single submit path, so no chance of double-adding). Outside that mode, ✓ submits
+ * the single house and closes.
  */
-function HouseNumberPad({ onSubmit, onClose }: { onSubmit: (numbers: string[]) => void; onClose: () => void }) {
+function HouseNumberPad({ onSubmit, onClose }: { onSubmit: (houses: PadHouse[]) => void; onClose: () => void }) {
   const [value, setValue] = useState('')
+  const [status, setStatus] = useState<'' | HouseStatus>('')
+  const [note, setNote] = useState('')
   const [alpha, setAlpha] = useState(false)
   const [multiple, setMultiple] = useState(false)
-  // In multiple mode each ✓ banks a number here; nothing hits the DB until the pad closes,
-  // so there's a single submit path and no chance of double-adding.
-  const [queued, setQueued] = useState<string[]>([])
+  const [queued, setQueued] = useState<PadHouse[]>([])
+
+  function currentHouse(): PadHouse {
+    return { number: value.trim(), status: status || undefined, note: note.trim() || undefined }
+  }
+
+  function resetFields() {
+    setValue('')
+    setStatus('')
+    setNote('')
+  }
 
   // Backdrop tap / X: keep whatever was already banked in multiple mode, drop the half-typed
-  // current value. In single mode nothing is ever queued, so this discards cleanly.
+  // current entry. In single mode nothing is ever queued, so this discards cleanly.
   function close() {
     if (queued.length) onSubmit(queued)
     onClose()
   }
 
-  // Multiple mode's explicit "Done": also include the number currently on the display.
+  // Multiple mode's explicit "Done": also include the house currently on the display.
   function done() {
-    const v = value.trim()
-    const all = v ? [...queued, v] : queued
+    const all = value.trim() ? [...queued, currentHouse()] : queued
     if (all.length) onSubmit(all)
     onClose()
   }
@@ -297,15 +318,16 @@ function HouseNumberPad({ onSubmit, onClose }: { onSubmit: (numbers: string[]) =
   function handleEnter() {
     if (!value.trim()) return
     if (multiple) {
-      setQueued((q) => [...q, value.trim()])
-      setValue('')
+      setQueued((q) => [...q, currentHouse()])
+      resetFields()
     } else {
-      onSubmit([value.trim()])
+      onSubmit([currentHouse()])
       onClose()
     }
   }
 
   const enteredCount = queued.length
+  const keys = alpha ? LETTERS : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 
   return (
     <ModalPortal>
@@ -318,7 +340,6 @@ function HouseNumberPad({ onSubmit, onClose }: { onSubmit: (numbers: string[]) =
 
           <div className="numpad-display">
             <span className="numpad-value">{value || <span className="numpad-placeholder">Enter number</span>}</span>
-            <button className="icon-btn numpad-back" title="Backspace" onClick={() => setValue((v) => v.slice(0, -1))}>⌫</button>
           </div>
 
           {multiple && enteredCount > 0 && (
@@ -326,13 +347,29 @@ function HouseNumberPad({ onSubmit, onClose }: { onSubmit: (numbers: string[]) =
           )}
 
           <div className={alpha ? 'numpad-grid numpad-grid-alpha' : 'numpad-grid'}>
-            {alpha
-              ? LETTERS.map((ch) => (
-                  <button key={ch} className="numpad-key" onClick={() => setValue((v) => v + ch)}>{ch}</button>
-                ))
-              : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((d) => (
-                  <button key={d} className="numpad-key" onClick={() => setValue((v) => v + d)}>{d}</button>
-                ))}
+            {keys.map((ch) => (
+              <button key={ch} className="numpad-key" onClick={() => setValue((v) => v + ch)}>{ch}</button>
+            ))}
+            <button className="numpad-key numpad-key-back" title="Backspace" onClick={() => setValue((v) => v.slice(0, -1))}>⌫</button>
+            <button className="numpad-key numpad-key-enter" title="Add house" onClick={handleEnter} disabled={!value.trim()}>✓</button>
+          </div>
+
+          <div className="numpad-house-meta">
+            <select
+              className="house-status"
+              value={status}
+              onChange={(e) => setStatus((e.target.value || '') as '' | HouseStatus)}
+            >
+              {HOUSE_STATUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label === '—' ? 'No flag' : o.label}</option>
+              ))}
+            </select>
+            <input
+              className="house-note"
+              placeholder="Note (optional)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
           </div>
 
           <div className="numpad-controls">
@@ -350,9 +387,6 @@ function HouseNumberPad({ onSubmit, onClose }: { onSubmit: (numbers: string[]) =
             </button>
           </div>
 
-          <button className="numpad-enter" onClick={handleEnter} disabled={!value.trim()}>
-            {multiple ? '✓ Add (keep open)' : '✓ Add House'}
-          </button>
           {multiple ? (
             <button className="secondary" onClick={done}>Done</button>
           ) : (

@@ -16,7 +16,7 @@ function findBankTarget(): HTMLElement | null {
     document.querySelector('.minute-bank-anchor')) as HTMLElement | null
 }
 
-const FLIGHT_MS = 950
+const FLIGHT_MS = 1150
 
 /** Fires a small flying stopwatch icon from the given element to the minute-bank pill (or
     its anchor, before the pill exists) — a quick, playful visual cue for where banked
@@ -91,17 +91,17 @@ export function flyToMinuteBank(originEl: HTMLElement | null | undefined): Promi
       const target = findBankTarget()
       if (target) {
         target.classList.add('minute-bank-pulse')
-        window.setTimeout(() => target.classList.remove('minute-bank-pulse'), 350)
+        window.setTimeout(() => target.classList.remove('minute-bank-pulse'), 380)
       }
       resolve()
 
       // Fade/shrink the icon away in place — set up as a genuine CSS transition (not a
       // per-frame rAF write) since there's nothing left to track once it's landed.
       requestAnimationFrame(() => {
-        ball.style.transition = 'transform 0.28s ease, opacity 0.28s ease'
+        ball.style.transition = 'transform 0.34s ease, opacity 0.34s ease'
         ball.style.transform = `translate3d(${endX}px, ${endY}px, 0) translate(-50%, -50%) scale(0.2)`
         ball.style.opacity = '0'
-        window.setTimeout(() => ball.remove(), 300)
+        window.setTimeout(() => ball.remove(), 360)
       })
     }
 
@@ -109,20 +109,25 @@ export function flyToMinuteBank(originEl: HTMLElement | null | undefined): Promi
   })
 }
 
-const COLLECT_MS = 260
+const COLLECT_MS = 420
 
-/** Plays a quick "gathering" highlight+shrink on the field the minutes were entered in
-    (see .minute-collecting in App.css), then launches the flying ball from that same spot
-    once the field has visually shrunk away — so the ball reads as originating from the
-    minutes just entered, not from wherever Save happened to be tapped. Resolves once the
-    ball arrives at the bank. No-ops (and skips the artificial delay entirely) when
-    minute-bank animations are turned off. */
+/** Plays a "gathering" glow+shrink on the field the minutes were entered in (see
+    .minute-collecting in App.css): it lights up orange, then shrinks down to a point. The
+    flying ball is launched from that same point once the field has shrunk, and — crucially —
+    the collect class is left on (holding the field shrunk & invisible) for the whole flight,
+    then removed only after the ball lands. That means there's no mid-flight "snap back" of
+    the field to full size; visually the field simply *becomes* the flying minute icon and
+    carries off to the bank. Resolves once the ball arrives. No-ops (and skips the delay
+    entirely) when minute-bank animations are turned off. */
 export async function collectAndFlyToMinuteBank(fieldEl: HTMLElement | null | undefined) {
   if (!fieldEl || !minuteBankAnimationsEnabled()) return
   fieldEl.classList.add('minute-collecting')
   await new Promise((resolve) => window.setTimeout(resolve, COLLECT_MS))
-  fieldEl.classList.remove('minute-collecting')
+  // Field is now shrunk to a point and transparent (the keyframe holds it via `forwards`).
+  // Launch the ball from that same centre before resetting the field, so the handoff reads
+  // as continuous rather than as two separate effects.
   await flyToMinuteBank(fieldEl)
+  fieldEl.classList.remove('minute-collecting')
 }
 
 /** Tweens a displayed integer from `from` to `to` over `durationMs`, calling `onUpdate` on

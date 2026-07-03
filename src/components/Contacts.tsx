@@ -4,6 +4,7 @@ import { db, type Person, type Call, type Appointment, type ContactStatus } from
 import { STATUS_LABELS, STATUS_ORDER } from '../contactStatus'
 import { useCurrentLocation } from '../useGeolocation'
 import { analyzeScripture, formatScripture } from '../scripture'
+import { expandState } from '../usStates'
 import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
 import StreetEntries from './StreetEntries'
@@ -375,7 +376,7 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
       name: name.trim(),
       street: street.trim() || undefined,
       city: city.trim() || undefined,
-      state: state.trim() || undefined,
+      state: expandState(state) || undefined,
       zip: zip.trim() || undefined,
       phone: phone.trim() || undefined,
       notes: notes.trim() || undefined,
@@ -479,7 +480,11 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
             </label>
             <label className="field">
               <span className="field-label">State</span>
-              <input value={state} onChange={(e) => { setState(e.target.value); setCoords(null) }} />
+              <input
+                value={state}
+                onChange={(e) => { setState(e.target.value); setCoords(null) }}
+                onBlur={() => setState((s) => expandState(s))}
+              />
             </label>
             <label className="field">
               <span className="field-label">Zip</span>

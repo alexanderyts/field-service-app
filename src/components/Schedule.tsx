@@ -296,7 +296,7 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
   return (
     <div className="view">
       <h2 className="applet-title">Plan Your Schedule</h2>
-      <p className="subtitle">Answer a few questions and we'll build a suggested weekly schedule for you.</p>
+      <p className="subtitle">Answer a few questions and we'll build your weekly schedule for you.</p>
 
       <div className="card">
         <h4>Are you regular pioneering?</h4>
@@ -314,7 +314,7 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
         <div className="card">
           <h4>Would you like to count credit hours?</h4>
           <p className="muted" style={{ marginTop: -6 }}>
-            LDC, Convention, Assembly, Bethel, and Other — in addition to ministry time.
+            LDC, HLC, Convention, Assembly, Bethel, and Other — in addition to ministry time.
           </p>
           <div className="row">
             <button className={creditYes === true ? '' : 'secondary'} onClick={() => setCreditYes(true)}>Yes</button>
@@ -766,7 +766,7 @@ function ScheduleMain({
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
     await collectAndFlyToMinuteBank(minutesFieldEl)
-    await animateBankValue(before, bank, 380, setDisplayedBank)
+    await animateBankValue(before, bank, 480, setDisplayedBank)
     if (autoHour) {
       const d = dayDateFor(day)
       d.setHours(12, 0, 0, 0)
@@ -946,7 +946,7 @@ function ScheduleMain({
       <div className="card">
         <h4 style={{ margin: 0 }}>Weekly Schedule</h4>
         <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
-          Your suggested ministry days and times, plus anything already logged this week.
+          Your scheduled ministry days and times, plus anything already logged this week.
         </p>
         {weeklyGoalMin > 0 && (
           <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
@@ -1098,7 +1098,7 @@ function ScheduleMain({
               })}
             </div>
             <div className="legend">
-              <span><i className="sw suggested" /> Suggested</span>
+              <span><i className="sw suggested" /> Scheduled</span>
               {weekCategoriesUsed.map((cat) => (
                 <span key={cat}><i className={`sw ${cat}`} /> {CATEGORY_LABELS[cat]}</span>
               ))}
@@ -1125,7 +1125,7 @@ function ScheduleMain({
           displayedBank={displayedBank}
           bankCollapsing={bankCollapsing}
           onTapBank={() => setConfirmBankRoundUp(true)}
-          onBankIncrease={(before, after) => animateBankValue(before, after, 380, setDisplayedBank)}
+          onBankIncrease={(before, after) => animateBankValue(before, after, 480, setDisplayedBank)}
         />
       ) : (
         <MonthlyParticipationBox
@@ -1145,7 +1145,7 @@ function ScheduleMain({
           <ul className="list">
             {logs.slice(0, visibleLogCount).map((l) => (
               <li key={l.id} className="list-item">
-                <div>
+                <div className="visit-info">
                   <span className={`cat-dot ${isCredit(l.category) ? 'credit' : 'ministry'}`} />
                   <strong>{fmtDuration(l.minutes)}</strong> · {CATEGORY_LABELS[l.category]}
                   {l.note ? ` — ${l.note}` : ''}
@@ -1153,7 +1153,7 @@ function ScheduleMain({
                     {new Date(l.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                   </div>
                 </div>
-                <div className="row" style={{ gap: 6 }}>
+                <div className="visit-actions">
                   <button className="secondary small" onClick={() => setEditingLog(l)}>
                     Edit
                   </button>
@@ -1437,7 +1437,7 @@ function DayActionModal({
 
   const creditEnabled = localStorage.getItem('fieldservice_credit_hours') === 'yes'
   const availableCats: TimeCategory[] = creditEnabled
-    ? ['ministry', 'ldc', 'convention', 'assembly', 'bethel', 'other']
+    ? ['ministry', 'ldc', 'hlc', 'convention', 'assembly', 'bethel', 'other']
     : ['ministry', 'other']
   const effectiveCategory = availableCats.includes(category) ? category : 'ministry'
 
@@ -1498,7 +1498,7 @@ function DayActionModal({
           {step === 'menu' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button onClick={() => setStep('window')}>
-                {isSuggestedDay ? 'Edit Suggested Schedule' : 'Add Suggested Service Time'}
+                {isSuggestedDay ? 'Edit Schedule' : 'Add Scheduled Service Time'}
               </button>
               <button className="secondary" onClick={() => setStep('logTime')}>
                 Add Service Time for This Day
@@ -1509,13 +1509,13 @@ function DayActionModal({
           {step === 'dayOptions' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                Redo this day's suggested schedule, or start the whole week over.
+                Redo this day's schedule, or start the whole week over.
               </p>
               <button className="danger" onClick={() => setConfirmRemoveDay(true)}>
                 Remove This Day's Schedule
               </button>
               <button className="danger" onClick={() => setConfirmClearAll(true)}>
-                Clear All Suggested Days
+                Clear All Scheduled Days
               </button>
               <button className="secondary" onClick={() => setStep('menu')}>Back</button>
             </div>
@@ -1660,7 +1660,7 @@ function DayActionModal({
       <ConfirmDialog
         open={confirmRemoveDay}
         title={`Remove ${dayLabel} from your schedule?`}
-        message="This day's suggested ministry window (and any suggested credit hours) will be cleared. This can't be undone."
+        message="This day's scheduled ministry window (and any scheduled credit hours) will be cleared. This can't be undone."
         confirmLabel="Yes, remove this day"
         cancelLabel="Cancel"
         tone="danger"
@@ -1670,9 +1670,9 @@ function DayActionModal({
 
       <ConfirmDialog
         open={confirmClearAll}
-        title="Clear all suggested days?"
-        message="This clears every suggested day and time from your Weekly Schedule, so you can build it again from scratch. Logged time and goals aren't affected. This can't be undone."
-        confirmLabel="Yes, clear all suggested days"
+        title="Clear all scheduled days?"
+        message="This clears every scheduled day and time from your Weekly Schedule, so you can build it again from scratch. Logged time and goals aren't affected. This can't be undone."
+        confirmLabel="Yes, clear all scheduled days"
         cancelLabel="Cancel"
         tone="danger"
         onConfirm={() => { setConfirmClearAll(false); onClearAllDays() }}
@@ -1866,7 +1866,7 @@ function ScheduleCalendarView({
               cellStyle.background = `color-mix(in srgb, var(--cat-${loggedCat}) 30%, var(--surface))`
             }
             const titleParts = [
-              ...suggestedCats.map((c) => `Suggested ${CATEGORY_LABELS[c]}`),
+              ...suggestedCats.map((c) => `Scheduled ${CATEGORY_LABELS[c]}`),
               loggedCat ? `${CATEGORY_LABELS[loggedCat]} time logged` : '',
               ...dayAppts.map((a) => a.title),
             ].filter(Boolean)
@@ -1893,7 +1893,7 @@ function ScheduleCalendarView({
           )}
           {suggestedCatsInMonth.map((cat) => (
             <span key={`sug-${cat}`}>
-              <i className="cal-sw" style={{ border: `1.5px dashed var(--cat-${cat})` }} /> Suggested {CATEGORY_LABELS[cat]}
+              <i className="cal-sw" style={{ border: `1.5px dashed var(--cat-${cat})` }} /> Scheduled {CATEGORY_LABELS[cat]}
             </span>
           ))}
           {loggedCatsInMonth.map((cat) => (
@@ -2002,7 +2002,7 @@ function AddTime({
 
   const creditEnabled = localStorage.getItem('fieldservice_credit_hours') === 'yes'
   const availableCats: TimeCategory[] = creditEnabled
-    ? ['ministry', 'ldc', 'convention', 'assembly', 'bethel', 'other']
+    ? ['ministry', 'ldc', 'hlc', 'convention', 'assembly', 'bethel', 'other']
     : ['ministry', 'other']
 
   // Reset to ministry if current category isn't visible

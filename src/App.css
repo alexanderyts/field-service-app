@@ -159,7 +159,7 @@
 }
 
 .privacy-sections h4 {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--accent);
   margin: 0;
@@ -294,7 +294,7 @@
   color: var(--muted);
   border-radius: 16px;
   padding: 8px 2px 7px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   display: flex;
   flex-direction: column;
@@ -1020,7 +1020,7 @@ button.small {
 }
 
 .field-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -1084,7 +1084,7 @@ button.small {
    via :first-child, since both live inside .hours-minutes-row. */
 .time-entry-closing > :not(.hours-minutes-row),
 .time-entry-closing .hours-minutes-row > .field:first-child {
-  transition: opacity 0.24s ease, transform 0.24s ease;
+  transition: opacity 0.4s ease, transform 0.4s ease;
   opacity: 0;
   transform: scale(0.92);
   pointer-events: none;
@@ -1357,7 +1357,7 @@ button.small {
   border-radius: 999px;
   background: var(--credit-soft);
   color: var(--credit);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1459,6 +1459,22 @@ button.small {
   flex-shrink: 0;
 }
 
+/* The title takes the middle and stays centered; the two arrows sit at its edges,
+   mirrored and on a shared baseline. */
+.report-nav .applet-title {
+  flex: 1;
+}
+
+/* Secondary report actions (Re-run / Back to this month) — a centered row under the nav
+   so they never push the month arrows out of symmetry. */
+.report-nav-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .report-encourage {
   background: linear-gradient(135deg, var(--accent-soft), var(--surface));
   border-color: var(--accent);
@@ -1557,6 +1573,20 @@ button.small {
   flex-direction: column;
   gap: 14px;
   margin-top: 12px;
+}
+
+/* App Settings collapsible — stacks the grouped setting rows with hairline dividers. */
+.misc-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.misc-settings-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
 }
 
 .misc-privacy-lead {
@@ -1818,77 +1848,6 @@ button.small {
 }
 
 /* ============================================================
-   Numpad modal
-   ============================================================ */
-.numpad-modal {
-  max-width: 300px;
-  padding: 20px;
-  gap: 16px;
-}
-
-.numpad-display {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 12px;
-  background: var(--surface-2);
-  border-radius: 12px;
-}
-
-.numpad-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.numpad-value {
-  font-size: 48px;
-  font-weight: 800;
-  color: var(--text-h);
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-
-.numpad-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.numpad-key {
-  background: var(--surface-2);
-  color: var(--text-h);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
-  font-size: 20px;
-  font-weight: 600;
-  text-align: center;
-}
-
-@media (hover: hover) {
-  .numpad-key:hover {
-    background: var(--border);
-  }
-}
-
-.numpad-key.done {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-  font-size: 22px;
-}
-
-@media (hover: hover) {
-  .numpad-key.done:hover {
-    background: var(--accent-hover);
-  }
-}
-
-/* ============================================================
    Minute bank pill (schedule header)
    ============================================================ */
 /* Lives right in the Add Time card's header now (next to the collapse toggle) so the
@@ -1974,17 +1933,21 @@ button.small {
   background: var(--credit-soft);
   border-color: var(--credit);
   color: var(--credit);
-  animation: minute-collecting 0.26s ease-in forwards;
+  animation: minute-collecting 0.42s ease-in-out forwards;
   transform-origin: center;
   position: relative;
   z-index: 1;
   will-change: transform, opacity;
 }
 
+/* Glow up and hold the orange highlight briefly, then shrink smoothly down to a point —
+   handing off to the flying icon that launches from that same centre. Longer and eased so
+   it reads as a deliberate "gather", not a snap. */
 @keyframes minute-collecting {
   0% { transform: scale(1); opacity: 1; }
-  40% { transform: scale(1.12); opacity: 1; }
-  100% { transform: scale(0); opacity: 0; }
+  30% { transform: scale(1.14); opacity: 1; }
+  55% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(0.12); opacity: 0; }
 }
 
 /* The little stopwatch icon that flies from wherever time was just banked up to this
@@ -2402,10 +2365,6 @@ button.small {
   letter-spacing: normal;
 }
 
-.numpad-back {
-  font-size: 20px;
-}
-
 .numpad-count {
   margin: 0 0 6px;
   font-size: 13px;
@@ -2432,6 +2391,45 @@ button.small {
   border-radius: 10px;
 }
 
+@media (hover: hover) {
+  .numpad-key:hover {
+    background: var(--surface-2);
+  }
+  .numpad-key-enter:hover {
+    background: var(--accent-hover);
+  }
+}
+
+.numpad-key-back {
+  color: var(--muted);
+}
+
+.numpad-key-enter {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.numpad-key-enter:disabled {
+  opacity: 0.45;
+}
+
+/* Status flag + note for the house being entered, right on the pad. */
+.numpad-house-meta {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.numpad-house-meta .house-status {
+  flex-shrink: 0;
+}
+
+.numpad-house-meta .house-note {
+  flex: 1;
+  min-width: 0;
+}
+
 .numpad-controls {
   display: flex;
   gap: 8px;
@@ -2440,9 +2438,4 @@ button.small {
 
 .numpad-controls .chip {
   flex: 1;
-}
-
-.numpad-enter {
-  width: 100%;
-  margin-bottom: 8px;
 }

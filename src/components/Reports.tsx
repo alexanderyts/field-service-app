@@ -192,21 +192,19 @@ export default function Reports() {
 
   return (
     <div className="view">
-      {/* Month navigation */}
+      {/* Month navigation — kept symmetric: arrow · centered title · arrow. The Re-run
+          and "Back to this month" actions live in their own centered row below so the two
+          arrows always share a baseline and mirror each other. */}
       <div className="report-nav">
         <button className="icon-btn" onClick={() => setMonthOffset((o) => o - 1)}>‹</button>
-        <div>
-          <h2 className="applet-title" style={{ margin: 0, textAlign: 'center' }}>{monthLabel}</h2>
-          {!isCurrentMonth && (
-            <button className="secondary small" style={{ marginTop: 4 }} onClick={() => setMonthOffset(0)}>
-              Back to this month
-            </button>
-          )}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-          <button className="secondary small" onClick={() => generateReport(false)} disabled={generating} title="Run again">↺ Re-run</button>
-          <button className="icon-btn" onClick={() => setMonthOffset((o) => o + 1)} disabled={monthOffset >= 0}>›</button>
-        </div>
+        <h2 className="applet-title" style={{ margin: 0, textAlign: 'center' }}>{monthLabel}</h2>
+        <button className="icon-btn" onClick={() => setMonthOffset((o) => o + 1)} disabled={monthOffset >= 0}>›</button>
+      </div>
+      <div className="report-nav-actions">
+        <button className="secondary small" onClick={() => generateReport(false)} disabled={generating} title="Run again">↺ Re-run</button>
+        {!isCurrentMonth && (
+          <button className="secondary small" onClick={() => setMonthOffset(0)}>Back to this month</button>
+        )}
       </div>
 
       {generating ? (

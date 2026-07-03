@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { COPYRIGHT_LINE, NOT_AFFILIATED } from '../legal'
 
 const POLICY_KEY = 'fieldservice_privacy_v1'
 
@@ -50,6 +51,11 @@ export function PrivacyGate({ onAccept }: { onAccept: () => void }) {
         <p className="privacy-effective">Effective June 30, 2026</p>
 
         <div className="privacy-sections">
+          <section>
+            <h4>Not Affiliated</h4>
+            <p>{NOT_AFFILIATED}</p>
+          </section>
+
           <section>
             <h4>1. About This App</h4>
             <p>
@@ -159,7 +165,17 @@ export function PrivacyGate({ onAccept }: { onAccept: () => void }) {
           </section>
 
           <section>
-            <h4>12. Contact</h4>
+            <h4>12. Copyright &amp; Ownership</h4>
+            <p>
+              {COPYRIGHT_LINE} The App, including its name, design, code, and content, is the
+              intellectual property of the developer and is protected by applicable copyright and
+              other laws. You may not copy, modify, distribute, sell, or create derivative works from
+              the App without the developer's prior written permission.
+            </p>
+          </section>
+
+          <section>
+            <h4>13. Contact</h4>
             <p>
               For questions or concerns about this policy, contact:{' '}
               <strong>alexander.yts@gmail.com</strong>
