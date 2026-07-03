@@ -923,6 +923,39 @@ button.small {
   background: rgba(47, 111, 94, 0.35);
 }
 
+/* A goal bar with a whole-hour denominator — each segment is one hour; completed hours
+   are fully colored, and the one currently in progress shows only its actual fractional
+   fill (dim otherwise), so partial progress into an hour reads as genuinely partial. */
+.hour-goal-bar {
+  display: flex;
+  gap: 3px;
+}
+
+.hour-seg {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  min-width: 4px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.hour-seg.full {
+  background: var(--accent);
+}
+
+.hour-seg-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.45;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
 .cat-breakdown {
   display: flex;
   flex-wrap: wrap;
@@ -1882,6 +1915,43 @@ button.small {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Small floating menu opened from a gear icon (auxiliary-pioneering settings). Anchored
+   to the icon's left edge, extending rightward — the icon typically sits near the left
+   of its row, so a right-anchored menu would overflow off the left edge of the screen. */
+.gear-menu {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.gear-menu button {
+  background: none;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.gear-menu button + button {
+  border-top: 1px solid var(--border);
+}
+
+.gear-menu button.danger {
+  color: var(--danger);
 }
 
 .tip-menu .link-button {

@@ -30,7 +30,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // 'pdf' precaches the S-205b-E auxiliary-pioneer form template so it's fillable
+        // offline, same as everything else in the app.
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,pdf}'],
       },
     }),
   ],

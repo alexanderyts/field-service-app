@@ -15,7 +15,19 @@ import {
 } from '../timeStats'
 import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
-import { type AuxConfig, type AuxMode, auxMonthKey, getAuxConfig, isAuxMonth, saveAuxConfig, suggestedWeeklyHours } from '../auxPioneering'
+import { buildAuxSlipPdf, shareAuxSlipPdf } from '../auxSlip'
+import { getProfileName } from '../profile'
+import {
+  type AuxConfig,
+  type AuxMode,
+  auxMonthKey,
+  auxTargetHoursFor,
+  getAuxConfig,
+  isAuxMonth,
+  saveAuxConfig,
+  suggestedWeeklyHours,
+  weeklyHoursNeeded,
+} from '../auxPioneering'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -82,16 +94,12 @@ const MONTH_NAMES_LONG = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-/** The 12 months starting with the current one, rolling into next year as needed — used for
-    month pickers so a month never becomes unselectable just because it's in the next
-    calendar year (e.g. planning January's auxiliary pioneering while browsing in November). */
-function rollingTwelveMonths(now: Date): { year: number; month: number; label: string }[] {
-  const out: { year: number; month: number; label: string }[] = []
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
-    out.push({ year: d.getFullYear(), month: d.getMonth(), label: MONTH_NAMES_LONG[d.getMonth()] })
-  }
-  return out
+/** January through December of the current calendar year — the auxiliary-pioneering
+    "multiple months" picker always shows this fixed list, not a rolling window, so it
+    reads the same regardless of which month someone happens to be browsing in. */
+function currentYearMonths(): { year: number; month: number; label: string }[] {
+  const year = new Date().getFullYear()
+  return MONTH_NAMES_LONG.map((label, month) => ({ year, month, label }))
 }
 
 /** Every distinct (year, month) touched by [startMs, endMs) — usually one, occasionally two
@@ -323,6 +331,26 @@ function InfoTip({ text }: { text: string }) {
       </button>
       {open && <span className="info-tip-bubble" role="tooltip">{text}</span>}
     </span>
+  )
+}
+
+/** A goal bar whose denominator is always whole hours (goals round up to the nearest
+    hour) — every completed hour is fully colored, and the one currently in progress
+    shows only its actual fractional fill, staying dim until it completes. */
+function HourGoalBar({ appliedMin, goalMin }: { appliedMin: number; goalMin: number }) {
+  const wholeHours = Math.max(1, Math.ceil(goalMin / 60))
+  const completedHours = Math.floor(appliedMin / 60)
+  const partialFrac = Math.min(1, (appliedMin % 60) / 60)
+  return (
+    <div className="hour-goal-bar">
+      {Array.from({ length: wholeHours }, (_, i) => (
+        <div key={i} className={`hour-seg${i < completedHours ? ' full' : ''}`}>
+          {i === completedHours && partialFrac > 0 && (
+            <div className="hour-seg-fill" style={{ width: `${partialFrac * 100}%` }} />
+          )}
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -609,6 +637,22 @@ function ScheduleMain({
   // auxiliary pioneering — decides whether Add Time or the simple monthly checkbox shows.
   const currentlyAux = !isPioneer && isAuxMonth(auxConfig, now.getFullYear(), now.getMonth())
   const nonPioneerTracksHours = !isPioneer && (prefs.goalPeriod === 'monthly' || prefs.goalPeriod === 'yearly' || currentlyAux)
+
+  // Hours still needed THIS week to hit the current month's auxiliary target by month
+  // end, given what's already logged — recomputed fresh on every render from real
+  // calendar math (not a flat average), so it's always representative of a mid-month
+  // start, a future month with nothing logged yet, etc. Covers all three aux modes
+  // (this-month/multiple-months/continuous) uniformly since it only depends on whatever
+  // auxTargetHoursFor already resolved for the current month.
+  const auxWeeklyGoalMin = currentlyAux
+    ? weeklyHoursNeeded(
+        auxTargetHoursFor(auxConfig, now.getFullYear(), now.getMonth())!,
+        monthTotals(monthLogsFor(logs, now.getFullYear(), now.getMonth())).applied,
+        now,
+        now.getFullYear(),
+        now.getMonth()
+      ) * 60
+    : 0
 
   // Top progress card tracks whichever week is navigated below — not always "today" — so
   // the month/year context at the top actually follows what the person is looking at.
@@ -984,6 +1028,17 @@ function ScheduleMain({
               No weekly schedule set yet — here's your progress for the month and year below.
             </p>
           )
+        ) : currentlyAux ? (
+          <div>
+            <div className="goal-row">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                This week
+                <InfoTip text="Hours still needed this week to hit your auxiliary pioneering target by month end, based on what's already logged and how many weeks remain." />
+              </span>
+              <strong>{fmtDuration(weekTotal)} / {fmtDuration(auxWeeklyGoalMin)}</strong>
+            </div>
+            <HourGoalBar appliedMin={weekTotal} goalMin={auxWeeklyGoalMin} />
+          </div>
         ) : (
           <div>
             <div className="goal-row">
@@ -2663,6 +2718,11 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
   const [weeklyHours, setWeeklyHours] = useState(String(config.weeklyHours || suggestedWeeklyHours(config.targetHours)))
   const [months, setMonths] = useState<string[]>(config.months)
   const [monthTargets, setMonthTargets] = useState<Record<string, 15 | 30>>(config.monthTargets ?? EMPTY_MONTH_TARGETS)
+  const [gearOpen, setGearOpen] = useState(false)
+  const [confirmDiscontinue, setConfirmDiscontinue] = useState(false)
+  const [confirmPrepareSlip, setConfirmPrepareSlip] = useState(false)
+  const [slipBusy, setSlipBusy] = useState(false)
+  const [slipMsg, setSlipMsg] = useState<string | null>(null)
 
   // The checkbox reads as checked while actively configuring even though nothing's been
   // saved yet (onChange only fires on Save/disable) — otherwise it'd visually snap back
@@ -2717,7 +2777,13 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
   function save() {
     if (!mode) return
     const now = new Date()
-    const finalMonths = mode === 'this-month' ? [auxMonthKey(now.getFullYear(), now.getMonth())] : mode === 'multiple-months' ? months : []
+    // 'continuous' ignores `months` for the target-hours decision (auxTargetHoursFor
+    // always returns 30 for it) — stored here purely as the "start month" the S-205b-E
+    // slip prints, since the form needs a month even for an open-ended enrollment.
+    const finalMonths =
+      mode === 'this-month' || mode === 'continuous'
+        ? [auxMonthKey(now.getFullYear(), now.getMonth())]
+        : months
     onChange({
       enabled: true,
       mode,
@@ -2727,6 +2793,26 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
       monthTargets: mode === 'multiple-months' ? monthTargets : {},
     })
     setConfiguring(false)
+  }
+
+  function discontinue() {
+    onChange({ enabled: false, mode: null, targetHours: 30, weeklyHours: 7, months: [], monthTargets: {} })
+    setConfirmDiscontinue(false)
+  }
+
+  async function prepareSlip() {
+    setConfirmPrepareSlip(false)
+    setSlipBusy(true)
+    setSlipMsg(null)
+    try {
+      const bytes = await buildAuxSlipPdf(config, getProfileName())
+      const how = await shareAuxSlipPdf(bytes, 'S-205b-E Auxiliary Pioneer Application.pdf')
+      setSlipMsg(how === 'shared' ? 'Slip ready to save or send.' : 'Slip downloaded.')
+    } catch {
+      setSlipMsg('Could not prepare the slip. Please try again.')
+    } finally {
+      setSlipBusy(false)
+    }
   }
 
   const summary = config.enabled
@@ -2745,10 +2831,35 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
       </label>
 
       {summary && !configuring && (
-        <p className="muted" style={{ fontSize: 12, margin: '2px 0 0 24px' }}>
-          {summary}
-          <button className="secondary small" style={{ marginLeft: 8 }} onClick={() => setConfiguring(true)}>Edit</button>
-        </p>
+        <div style={{ margin: '2px 0 0 24px' }}>
+          <p className="muted" style={{ fontSize: 12, margin: 0 }}>{summary}</p>
+
+          <div className="row" style={{ marginTop: 6, alignItems: 'center' }}>
+            <button className="secondary small" onClick={() => setConfirmPrepareSlip(true)} disabled={slipBusy}>
+              📄 Prepare Auxiliary Slip for Group Overseer
+            </button>
+            <div style={{ position: 'relative' }}>
+              <button
+                className="icon-btn"
+                title="Auxiliary pioneering settings"
+                onClick={() => setGearOpen((o) => !o)}
+                onBlur={() => setTimeout(() => setGearOpen(false), 150)}
+              >
+                ⚙️
+              </button>
+              {gearOpen && (
+                <div className="gear-menu">
+                  <button onClick={() => { setGearOpen(false); setConfiguring(true) }}>Adjust Settings</button>
+                  <button onClick={() => { setGearOpen(false); setConfirmPrepareSlip(true) }}>Resend S-205b-E Form</button>
+                  <button className="danger" onClick={() => { setGearOpen(false); setConfirmDiscontinue(true) }}>
+                    Discontinue Auxiliary Pioneering
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          {slipMsg && <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>{slipMsg}</p>}
+        </div>
       )}
 
       {configuring && (
@@ -2793,7 +2904,7 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
                   <div className="field" style={{ marginBottom: 10 }}>
                     <span className="field-label">15 hours/month</span>
                     <div className="day-toggle">
-                      {rollingTwelveMonths(new Date()).map(({ year, month, label }) => {
+                      {currentYearMonths().map(({ year, month, label }) => {
                         const key = auxMonthKey(year, month)
                         const active = months.includes(key) && monthTargets[key] === 15
                         return (
@@ -2811,7 +2922,7 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
                   <div className="field" style={{ marginBottom: 10 }}>
                     <span className="field-label">30 hours/month</span>
                     <div className="day-toggle">
-                      {rollingTwelveMonths(new Date()).map(({ year, month, label }) => {
+                      {currentYearMonths().map(({ year, month, label }) => {
                         const key = auxMonthKey(year, month)
                         const active = months.includes(key) && monthTargets[key] === 30
                         return (
@@ -2841,6 +2952,28 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmPrepareSlip}
+        title="Prepare the S-205b-E application?"
+        message="This slip must still be reviewed and approved by your congregation's service committee — it isn't sent anywhere automatically. It's only a filled copy for you to share with your group overseer."
+        confirmLabel="Continue"
+        cancelLabel="Cancel"
+        tone="primary"
+        onConfirm={prepareSlip}
+        onCancel={() => setConfirmPrepareSlip(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmDiscontinue}
+        title="Discontinue auxiliary pioneering?"
+        message="Your progress card reverts to standard (non-pioneer) tracking. You can enable auxiliary pioneering again anytime."
+        confirmLabel="Yes, discontinue"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={discontinue}
+        onCancel={() => setConfirmDiscontinue(false)}
+      />
     </div>
   )
 }
