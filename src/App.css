@@ -2290,3 +2290,159 @@ button.small {
 .tutorial-dot.active {
   background: var(--accent);
 }
+
+/* ---- Ministry tab: People/Streets segmented control ---- */
+.segmented {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.segmented button {
+  flex: 1;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  border-radius: 9px;
+  padding: 9px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.segmented button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ---- Street entries: house list ---- */
+.house-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.house-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.house-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.house-number {
+  flex: 1;
+  font-size: 15px;
+}
+
+.house-status {
+  flex: 0 0 auto;
+  max-width: 145px;
+  padding: 5px 8px;
+  font-size: 13px;
+}
+
+.house-note {
+  width: 100%;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+.appt-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ---- House number pad ---- */
+.numpad-modal {
+  max-width: 320px;
+}
+
+.numpad-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 6px;
+}
+
+.numpad-value {
+  flex: 1;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  min-height: 32px;
+  word-break: break-all;
+}
+
+.numpad-placeholder {
+  color: var(--muted, #999);
+  font-weight: 400;
+  font-size: 17px;
+  letter-spacing: normal;
+}
+
+.numpad-back {
+  font-size: 20px;
+}
+
+.numpad-count {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.numpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.numpad-grid-alpha {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.numpad-key {
+  padding: 14px 0;
+  font-size: 19px;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.numpad-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.numpad-controls .chip {
+  flex: 1;
+}
+
+.numpad-enter {
+  width: 100%;
+  margin-bottom: 8px;
+}

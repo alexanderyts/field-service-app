@@ -37,8 +37,8 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     icon: '◎',
-    title: 'Contacts',
-    body: "Keep track of everyone you talk to in the ministry. Add a contact (just a name is required — typing an address looks up the real one for you), tag their status, and log call history with scriptures shared and follow-up dates.",
+    title: 'Ministry',
+    body: "Your home base. Tap \"+ New Entry\" to add a Contact — someone you talk to (just a name is required; typing an address looks up the real one), with tags, call history, and return visits — or a Street, where you track every house number worked on a road. Streets get a quick number pad, per-house flags like \"not home,\" and are created automatically when you trace a temporary territory on the Map.",
     tab: 'contacts',
     highlight: '[data-tutorial="tab-contacts"]',
   },
@@ -66,7 +66,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   {
     icon: '◈',
     title: 'Map',
-    body: "Every contact with an address is pinned here automatically, color-coded by status. You can also trace out a temporary territory — a group of streets you're working — mark each street done, and it counts toward your reports when completed.",
+    body: "Every contact with an address is pinned here automatically, color-coded by status. You can also trace out a temporary territory — a group of streets you're working — mark each street done, and it counts toward your reports when completed. Each street you trace also appears back in the Ministry tab, ready for house numbers.",
     tab: 'map',
     highlight: '[data-tutorial="tab-map"]',
   },

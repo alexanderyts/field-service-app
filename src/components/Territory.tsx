@@ -12,18 +12,37 @@ function newStreetId() {
     service the app already uses for contact addresses (just the /reverse endpoint) —
     returns the nearest road name, or null on any failure/no-match. Just a suggestion:
     callers pre-fill the name field with it but always leave it editable. */
-async function reverseGeocodeStreet(lat: number, lng: number): Promise<string | null> {
+interface ReverseAddress {
+  road?: string
+  city?: string
+  state?: string
+  zip?: string
+}
+
+/** Full reverse geocode of a point — road plus city/state/zip — used both to suggest a
+    traced street's name and to seed the mirrored Ministry-tab street entry's address. */
+async function reverseGeocodeAddress(lat: number, lng: number): Promise<ReverseAddress | null> {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`,
       { headers: { 'User-Agent': 'FieldServiceApp/1.0' } }
     )
     const data = await res.json()
-    const road = data?.address?.road
-    return typeof road === 'string' && road.trim() ? road.trim() : null
+    const a = (data?.address ?? {}) as Record<string, string>
+    return {
+      road: a.road?.trim() || undefined,
+      city: (a.city || a.town || a.village || a.hamlet)?.trim() || undefined,
+      state: a.state?.trim() || undefined,
+      zip: a.postcode?.trim() || undefined,
+    }
   } catch {
     return null
   }
+}
+
+async function reverseGeocodeStreet(lat: number, lng: number): Promise<string | null> {
+  const addr = await reverseGeocodeAddress(lat, lng)
+  return addr?.road ?? null
 }
 
 /** Renders inside any <MapContainer>: just the saved street traces, colored by
@@ -168,9 +187,23 @@ export function TerritoryDrawModal({
 
   async function savePendingStreet(name: string) {
     if (!pendingStroke) return
-    const street: TerritoryStreet = { id: newStreetId(), name, points: pendingStroke, done: false }
+    const stroke = pendingStroke
+    const street: TerritoryStreet = { id: newStreetId(), name, points: stroke, done: false }
     await db.territories.update(territory.id, { streets: [...territory.streets, street] })
     setPendingStroke(null)
+    // Mirror the traced street into the Ministry tab's Streets list so house numbers can be
+    // loaded against it. Best-effort address lookup runs after the trace is already saved, so
+    // a slow/failed geocode never blocks or loses the street itself.
+    const mid = stroke[Math.floor(stroke.length / 2)]
+    const addr = await reverseGeocodeAddress(mid.lat, mid.lng)
+    await db.streetEntries.add({
+      name,
+      city: addr?.city,
+      state: addr?.state,
+      zip: addr?.zip,
+      houses: [],
+      createdAt: Date.now(),
+    })
   }
 
   return (

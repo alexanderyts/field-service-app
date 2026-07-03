@@ -6,8 +6,10 @@ import { useCurrentLocation } from '../useGeolocation'
 import { analyzeScripture, formatScripture } from '../scripture'
 import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
+import StreetEntries from './StreetEntries'
 
 type SortKey = 'street' | 'name' | 'date' | 'city' | 'zip'
+type MinistryView = 'people' | 'streets'
 
 /** Parses a `YYYY-MM-DD` (from a date input) as a local date, avoiding the UTC-midnight shift. */
 function parseLocalDate(dateStr: string): Date {
@@ -45,22 +47,22 @@ export default function Contacts({
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const appointments = useLiveQuery(() => db.appointments.toArray(), []) ?? []
   const [sortKey, setSortKey] = useState<SortKey>('name')
-  const [filterStatuses, setFilterStatuses] = useState<ContactStatus[]>([])
+  const [filterStatus, setFilterStatus] = useState<ContactStatus | 'all'>('all')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showNew, setShowNew] = useState(false)
+  const [view, setView] = useState<MinistryView>('people')
+  const [showChooser, setShowChooser] = useState(false)
+  const [streetFormOpen, setStreetFormOpen] = useState(false)
 
   useEffect(() => {
     if (openContactId != null) {
       setSelectedId(openContactId)
+      setView('people')
       onOpenedContact?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openContactId])
-
-  function toggleStatusFilter(s: ContactStatus) {
-    setFilterStatuses((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]))
-  }
 
   const now = Date.now()
   const nextAppointment = new Map<number, number>()
@@ -72,7 +74,7 @@ export default function Contacts({
   }
 
   const filtered = people.filter((p) => {
-    if (filterStatuses.length > 0 && !filterStatuses.includes(p.status)) return false
+    if (filterStatus !== 'all' && p.status !== filterStatus) return false
     const q = search.toLowerCase()
     if (!q) return true
     return (
@@ -103,64 +105,97 @@ export default function Contacts({
   return (
     <div className="view">
       <div className="view-header">
-        <h2 className="applet-title">Contacts</h2>
-        <button onClick={() => setShowNew(true)}>+ New Contact</button>
+        <h2 className="applet-title">Ministry</h2>
+        <button onClick={() => setShowChooser(true)}>+ New Entry</button>
       </div>
 
-      <input
-        className="full"
-        placeholder="Search name, street, city, zip..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      <label className="field">
-        <span className="field-label">Sort by</span>
-        <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
-          <option value="name">Name</option>
-          <option value="street">Street</option>
-          <option value="date">Date Met</option>
-          <option value="city">City</option>
-          <option value="zip">Zip</option>
-        </select>
-      </label>
-
-      {/* Multi-select tag filter — tap any number of tags to combine them */}
-      <div className="tag-filter">
-        <button className={filterStatuses.length === 0 ? 'chip uniform active' : 'chip uniform'} onClick={() => setFilterStatuses([])}>
-          All
-        </button>
-        {STATUS_ORDER.map((s) => (
-          <button
-            key={s}
-            className={`chip uniform status-${s}${filterStatuses.includes(s) ? ' active' : ''}`}
-            onClick={() => toggleStatusFilter(s)}
-          >
-            {STATUS_LABELS[s]}
-          </button>
-        ))}
+      {/* People vs. Streets — contacts are individual householders; streets track the
+          house numbers worked on a road (and are auto-created from temporary territories). */}
+      <div className="segmented">
+        <button className={view === 'people' ? 'active' : ''} onClick={() => setView('people')}>People</button>
+        <button className={view === 'streets' ? 'active' : ''} onClick={() => setView('streets')}>Streets</button>
       </div>
 
-      {showNew && <ContactForm onClose={() => setShowNew(false)} />}
+      {view === 'people' ? (
+        <>
+          <input
+            className="full"
+            placeholder="Search name, street, city, zip..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="field-row">
+            <label className="field">
+              <span className="field-label">Sort by</span>
+              <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
+                <option value="name">Name</option>
+                <option value="street">Street</option>
+                <option value="date">Date Met</option>
+                <option value="city">City</option>
+                <option value="zip">Zip</option>
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Filter by tag</span>
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as ContactStatus | 'all')}>
+                <option value="all">All tags</option>
+                {STATUS_ORDER.map((s) => (
+                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-      <ul className="list">
-        {sorted.map((p) => (
-          <li key={p.id} className="list-item clickable" onClick={() => setSelectedId(p.id)}>
-            <div>
-              <strong>{p.name}</strong>
-              <span className={`badge status-${p.status}`}>{STATUS_LABELS[p.status]}</span>
-              {nextAppointment.has(p.id) && (
-                <span className="badge appt-badge" title={new Date(nextAppointment.get(p.id)!).toLocaleString()}>
-                  📅 {new Date(nextAppointment.get(p.id)!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                </span>
-              )}
-              <div className="muted">{[p.street, p.city, p.state, p.zip].filter(Boolean).join(', ') || 'No address'}</div>
+          {showNew && <ContactForm onClose={() => setShowNew(false)} />}
+
+          <ul className="list">
+            {sorted.map((p) => (
+              <li key={p.id} className="list-item clickable" onClick={() => setSelectedId(p.id)}>
+                <div>
+                  <strong>{p.name}</strong>
+                  <span className={`badge status-${p.status}`}>{STATUS_LABELS[p.status]}</span>
+                  {nextAppointment.has(p.id) && (
+                    <span className="badge appt-badge" title={new Date(nextAppointment.get(p.id)!).toLocaleString()}>
+                      📅 {new Date(nextAppointment.get(p.id)!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  )}
+                  <div className="muted">{[p.street, p.city, p.state, p.zip].filter(Boolean).join(', ') || 'No address'}</div>
+                </div>
+              </li>
+            ))}
+            {sorted.length === 0 && <p className="muted">No contacts match.</p>}
+          </ul>
+
+          {selectedId != null && <ContactDetail personId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
+        </>
+      ) : (
+        <StreetEntries showNewForm={streetFormOpen} onCloseNewForm={() => setStreetFormOpen(false)} />
+      )}
+
+      {showChooser && (
+        <ModalPortal>
+          <div className="modal-backdrop" onClick={() => setShowChooser(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 340 }}>
+              <div className="modal-toolbar">
+                <button className="icon-btn close-x" onClick={() => setShowChooser(false)} title="Close">×</button>
+              </div>
+              <h3>Add a new entry</h3>
+              <p className="muted" style={{ marginTop: -6 }}>What would you like to add?</p>
+              <button
+                onClick={() => { setShowChooser(false); setView('people'); setShowNew(true) }}
+              >
+                👤 New Contact
+              </button>
+              <button
+                className="secondary"
+                onClick={() => { setShowChooser(false); setView('streets'); setStreetFormOpen(true) }}
+              >
+                🛣️ New Street
+              </button>
             </div>
-          </li>
-        ))}
-        {sorted.length === 0 && <p className="muted">No contacts match.</p>}
-      </ul>
-
-      {selectedId != null && <ContactDetail personId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
+          </div>
+        </ModalPortal>
+      )}
     </div>
   )
 }
@@ -451,20 +486,22 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
               <input value={zip} onChange={(e) => { setZip(e.target.value); setCoords(null) }} />
             </label>
           </div>
-          <label className="field">
-            <span className="field-label">Phone</span>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </label>
-          <label className="field">
-            <span className="field-label">Tag</span>
-            <select value={status} onChange={(e) => setStatus(e.target.value as ContactStatus)}>
-              {STATUS_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABELS[s]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="field-row">
+            <label className="field">
+              <span className="field-label">Phone</span>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">Tag</span>
+              <select value={status} onChange={(e) => setStatus(e.target.value as ContactStatus)}>
+                {STATUS_ORDER.map((s) => (
+                  <option key={s} value={s}>
+                    {STATUS_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <button className="secondary" onClick={handleUseLocation} disabled={loading}>
             {loading ? 'Getting location...' : coords ? 'Location captured ✓' : 'Use Current Location'}
           </button>
@@ -619,6 +656,7 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
   const [showEdit, setShowEdit] = useState(false)
   const [callSort, setCallSort] = useState<'newest' | 'oldest'>('newest')
   const [editingCallId, setEditingCallId] = useState<number | null>(null)
+  const [editingAppt, setEditingAppt] = useState<Appointment | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   async function deletePerson() {
@@ -701,16 +739,21 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
 
         {upcoming.length > 0 && (
           <div className="card appt-card">
-            <h4>Upcoming Return Visit</h4>
+            <h4>Upcoming Return Visit{upcoming.length === 1 ? '' : 's'}</h4>
             {upcoming.map((a) => (
-              <div key={a.id}>
-                <strong>{a.title}</strong>
-                <div className="muted">{new Date(a.date).toLocaleString()}</div>
-                {a.notes && <div>{a.notes}</div>}
+              <div key={a.id} className="appt-row">
+                <div>
+                  <strong>{a.title}</strong>
+                  <div className="muted">{new Date(a.date).toLocaleString()}</div>
+                  {a.notes && <div>{a.notes}</div>}
+                </div>
+                <button className="secondary small" onClick={() => setEditingAppt(a)}>Edit</button>
               </div>
             ))}
           </div>
         )}
+
+        {editingAppt && <ReturnVisitEditor appt={editingAppt} onClose={() => setEditingAppt(null)} />}
 
         {showLogger && <CallLogger personId={personId} onSaved={() => setShowLogger(false)} />}
 
@@ -783,6 +826,69 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
   )
 }
 
+/** Edit or cancel an already-scheduled return visit (a saved appointment) — change its
+    date/time, tweak the notes, or remove it entirely. */
+function ReturnVisitEditor({ appt, onClose }: { appt: Appointment; onClose: () => void }) {
+  const [date, setDate] = useState(() => toLocalDateStr(appt.date))
+  const [time, setTime] = useState(() => toLocalTimeStr(appt.date))
+  const [notes, setNotes] = useState(appt.notes ?? '')
+  const [confirmRemove, setConfirmRemove] = useState(false)
+
+  async function save() {
+    await db.appointments.update(appt.id, {
+      date: combineDateTime(date, time),
+      notes: notes.trim() || undefined,
+    })
+    onClose()
+  }
+
+  async function remove() {
+    await db.appointments.delete(appt.id)
+    onClose()
+  }
+
+  return (
+    <ModalPortal>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+          <div className="modal-toolbar">
+            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+          </div>
+          <h3>Edit Return Visit</h3>
+          <div className="field-row">
+            <label className="field">
+              <span className="field-label">Date</span>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">Time</span>
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+            </label>
+          </div>
+          <label className="field">
+            <span className="field-label">Notes (optional)</span>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </label>
+          <div className="row">
+            <button onClick={save}>Save Changes</button>
+            <button className="secondary" onClick={onClose}>Cancel</button>
+          </div>
+          <button className="danger" onClick={() => setConfirmRemove(true)}>Remove This Visit</button>
+
+          <ConfirmDialog
+            open={confirmRemove}
+            title="Remove this return visit?"
+            message="This cancels the scheduled visit. This can't be undone."
+            confirmLabel="Remove"
+            onConfirm={() => { setConfirmRemove(false); remove() }}
+            onCancel={() => setConfirmRemove(false)}
+          />
+        </div>
+      </div>
+    </ModalPortal>
+  )
+}
+
 function CallLogger({
   personId,
   existing,
@@ -841,6 +947,11 @@ function CallLogger({
 
   return (
     <div className="card">
+      {onCancel && (
+        <div className="modal-toolbar">
+          <button className="icon-btn close-x" onClick={onCancel} disabled={saving} title="Cancel edit">×</button>
+        </div>
+      )}
       <h4>{existing ? 'Edit Call' : 'Log a Call'}</h4>
       <p className="field-label">Date &amp; time</p>
       <div className="field-row">

@@ -113,6 +113,34 @@ export interface SchedulePrefs {
   goalPeriod?: 'none' | 'monthly' | 'yearly'
 }
 
+/** Why a house is worth flagging on a return pass — kept deliberately small. 'none' is the
+    default (nothing special) and is stored implicitly by leaving status undefined. */
+export type HouseStatus = 'not-home' | 'no-trespassing' | 'other'
+
+/** One house number on a street entry. `number` is a free string (not numeric) so unit
+    letters and suffixes like "123A" or "12-B" survive; entries are sorted numerically at
+    display time by parsing the leading digits (see compareHouseNumbers). */
+export interface StreetHouse {
+  id: string
+  number: string
+  status?: HouseStatus
+  note?: string
+}
+
+/** A street the publisher is tracking door-to-door — the list of house numbers worked on a
+    given road, with per-house flags/notes. Distinct from a Territory (a hand-traced map
+    shape): a StreetEntry is the address-book side, and one is auto-created in the Ministry
+    tab whenever a street is traced into a temporary territory (see Territory.tsx). */
+export interface StreetEntry {
+  id: number
+  name: string
+  city?: string
+  state?: string
+  zip?: string
+  houses: StreetHouse[]
+  createdAt: number
+}
+
 export interface TerritoryStreet {
   /** Local to the territory, not a Dexie primary key — just needs to be unique within streets[]. */
   id: string
@@ -152,6 +180,7 @@ export const db = new Dexie('FieldServiceDB') as Dexie & {
   schedulePrefs: EntityTable<SchedulePrefs, 'id'>
   territories: EntityTable<Territory, 'id'>
   territoryCompletions: EntityTable<TerritoryCompletion, 'id'>
+  streetEntries: EntityTable<StreetEntry, 'id'>
 }
 
 db.version(1).stores({
@@ -225,3 +254,20 @@ db.version(6).stores({
 db.version(7).stores({
   territoryCompletions: '++id, completedAt',
 })
+
+db.version(8).stores({
+  streetEntries: '++id, name, createdAt',
+})
+
+/** Sorts house numbers "1, 2, 10, 10A, 10B, 11" the way a person walks a street: by the
+    leading numeric part first, then any suffix (unit letter, "-B", etc.) as a tiebreak.
+    Purely-alphabetic entries fall after numbered ones. */
+export function compareHouseNumbers(a: string, b: string): number {
+  const na = parseInt(a, 10)
+  const nb = parseInt(b, 10)
+  const aNum = !Number.isNaN(na)
+  const bNum = !Number.isNaN(nb)
+  if (aNum && bNum && na !== nb) return na - nb
+  if (aNum !== bNum) return aNum ? -1 : 1
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+}

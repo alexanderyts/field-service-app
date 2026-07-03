@@ -449,6 +449,7 @@ function ScheduleMain({
   const [segmentOverride, setSegmentOverride] = useState<number | null>(null)
   const [highlightTs, setHighlightTs] = useState<number | null>(null)
   const [confirmDeleteLogId, setConfirmDeleteLogId] = useState<number | null>(null)
+  const [editingLog, setEditingLog] = useState<TimeLog | null>(null)
   const [visibleLogCount, setVisibleLogCount] = useState(4)
   const [showCalendarView, setShowCalendarView] = useState(false)
   const [dayModalFor, setDayModalFor] = useState<number | null>(null)
@@ -1152,9 +1153,14 @@ function ScheduleMain({
                     {new Date(l.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                   </div>
                 </div>
-                <button className="danger small" onClick={() => setConfirmDeleteLogId(l.id)}>
-                  Delete
-                </button>
+                <div className="row" style={{ gap: 6 }}>
+                  <button className="secondary small" onClick={() => setEditingLog(l)}>
+                    Edit
+                  </button>
+                  <button className="danger small" onClick={() => setConfirmDeleteLogId(l.id)}>
+                    Delete
+                  </button>
+                </div>
               </li>
             ))}
             {logs.length === 0 && <p className="muted">No time logged yet.</p>}
@@ -1174,6 +1180,7 @@ function ScheduleMain({
             }}
             onCancel={() => setConfirmDeleteLogId(null)}
           />
+          {editingLog && <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} />}
         </div>
       )}
 
@@ -1231,6 +1238,80 @@ function ScheduleMain({
         onCancel={() => setConfirmBankRoundUp(false)}
       />
     </div>
+  )
+}
+
+/** Edit an already-logged time entry — its date, duration, category, and note. Everything on
+    the Schedule tab (weekly totals, month/year progress, the day tracks) derives from these
+    same timeLogs via live queries, so a saved edit re-flows into all of them automatically —
+    move an hour to a different day and it moves on the weekly schedule too. */
+function EditLogModal({ log, onClose }: { log: TimeLog; onClose: () => void }) {
+  const [dateStr, setDateStr] = useState(() => fmtLocalDate(new Date(log.date)))
+  const [hours, setHours] = useState(String(Math.floor(log.minutes / 60)))
+  const [minutes, setMinutes] = useState(String(log.minutes % 60))
+  const [category, setCategory] = useState<TimeCategory>(log.category)
+  const [note, setNote] = useState(log.note ?? '')
+
+  const totalMin = (parseInt(hours, 10) || 0) * 60 + (parseInt(minutes, 10) || 0)
+
+  async function save() {
+    if (totalMin <= 0) return
+    // Keep the original time-of-day; only the calendar day is user-editable here.
+    const orig = new Date(log.date)
+    const nd = parseLocalDate(dateStr)
+    nd.setHours(orig.getHours(), orig.getMinutes(), 0, 0)
+    await db.timeLogs.update(log.id, {
+      date: nd.getTime(),
+      minutes: totalMin,
+      category,
+      note: note.trim() || undefined,
+    })
+    onClose()
+  }
+
+  return (
+    <ModalPortal>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+          <div className="modal-toolbar">
+            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+          </div>
+          <h3>Edit Time Entry</h3>
+          <label className="field">
+            <span className="field-label">Date</span>
+            <input type="date" value={dateStr} onChange={(e) => setDateStr(e.target.value)} />
+          </label>
+          <div className="field-row">
+            <label className="field">
+              <span className="field-label">Hours</span>
+              <input type="number" min={0} inputMode="numeric" value={hours} onChange={(e) => setHours(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">Minutes</span>
+              <input type="number" min={0} max={59} inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+            </label>
+          </div>
+          <label className="field">
+            <span className="field-label">Category</span>
+            <select value={category} onChange={(e) => setCategory(e.target.value as TimeCategory)}>
+              {CATEGORY_ORDER.map((c) => (
+                <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span className="field-label">Note (optional)</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          {totalMin <= 0 && <p className="muted" style={{ fontSize: 13 }}>⚠ Enter a duration greater than zero.</p>}
+          <p className="muted" style={{ fontSize: 13 }}>That's {fmtDuration(totalMin)} total.</p>
+          <div className="row">
+            <button onClick={save} disabled={totalMin <= 0}>Save Changes</button>
+            <button className="secondary" onClick={onClose}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
   )
 }
 

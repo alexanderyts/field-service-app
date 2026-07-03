@@ -17,7 +17,7 @@ type Tab = 'contacts' | 'schedule' | 'map' | 'reports' | 'misc'
 type Phase = 'splash' | 'splash-out' | 'policy' | 'app'
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
-  { key: 'contacts', label: 'Contacts', icon: '◎' },
+  { key: 'contacts', label: 'Ministry', icon: '◎' },
   { key: 'schedule', label: 'Schedule', icon: '◫' },
   { key: 'map', label: 'Map', icon: '◈' },
   { key: 'reports', label: 'Reports', icon: '▦' },
