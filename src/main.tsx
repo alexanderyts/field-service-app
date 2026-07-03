@@ -13,7 +13,7 @@ import ErrorBoundary from './ErrorBoundary.tsx'
 try {
   let theme = localStorage.getItem('fieldservice_theme')
   if (!theme && localStorage.getItem('fieldservice_dark_mode') === 'yes') theme = 'dark'
-  if (theme === 'dark' || theme === 'pastel') {
+  if (theme === 'dark' || theme === 'pastel' || theme === 'mark') {
     document.documentElement.dataset.theme = theme
   }
 } catch { /* localStorage unavailable — default (light) theme */ }

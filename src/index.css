@@ -182,6 +182,57 @@
   --tag-moved-bg: #f8efdd;
 }
 
+/* Mark — a deep navy world with a medium-green accent. A dark theme like Dark, but built on
+   blue instead of neutral charcoal. Text and muted tones are lifted well past WCAG AA against
+   the navy ground for readability; the green accent, amber credit, and violet visit hues stay
+   clearly distinct from each other and from the blue background. */
+:root[data-theme='mark'] {
+  color-scheme: dark;
+  --bg: #0f1d31;
+  --bg-translucent: rgba(15, 29, 49, 0.72);
+  --surface: #17293f;
+  --surface-2: #1e3350;
+  --border: #2d445f;
+  --text: #d3deea;
+  --text-h: #f2f7fc;
+  --muted: #94a8be;
+  --accent: #3caf7f;
+  --accent-soft: #123328;
+  --accent-hover: #48c08c;
+  --danger: #e2795f;
+  --danger-soft: #3d221d;
+  --credit: #e0a23c;
+  --credit-soft: #33280f;
+  --visit: #948ce8;
+  --visit-soft: #221f3a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --title-shadow: none;
+  /* Category hues tuned to sit distinctly on navy — the blue-family ones (hlc, bethel) are
+     pushed lighter/brighter so they don't sink into the background. */
+  --cat-ministry: #3caf7f;
+  --cat-ldc: #d9873f;
+  --cat-hlc: #57a5e6;
+  --cat-convention: #db6f9c;
+  --cat-assembly: #c1ad4a;
+  --cat-bethel: #8b90e6;
+  --cat-other: #9aabbf;
+  --tag-interested: #5bc399;
+  --tag-interested-bg: #123328;
+  --tag-return: #63a9e8;
+  --tag-return-bg: #14273c;
+  --tag-study: #a595e6;
+  --tag-study-bg: #221f3a;
+  --tag-informal: #4fbdbd;
+  --tag-informal-bg: #0f3232;
+  --tag-not: #9aabbf;
+  --tag-not-bg: #243343;
+  --tag-dnc: #e2795f;
+  --tag-dnc-bg: #3d221d;
+  --tag-moved: #dca44f;
+  --tag-moved-bg: #33280f;
+}
+
 * {
   box-sizing: border-box;
 }

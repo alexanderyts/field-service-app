@@ -33,9 +33,9 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
   const [confirmClear, setConfirmClear] = useState(false)
   const [confirmSeed, setConfirmSeed] = useState(false)
   const [creditEnabled, setCreditEnabled] = useState(() => localStorage.getItem('fieldservice_credit_hours') === 'yes')
-  const [theme, setThemeState] = useState<'light' | 'dark' | 'pastel'>(() => {
+  const [theme, setThemeState] = useState<'light' | 'dark' | 'pastel' | 'mark'>(() => {
     const t = localStorage.getItem('fieldservice_theme')
-    if (t === 'dark' || t === 'pastel') return t
+    if (t === 'dark' || t === 'pastel' || t === 'mark') return t
     // Fallback for devices that enabled dark mode before the theme picker existed.
     if (localStorage.getItem('fieldservice_dark_mode') === 'yes') return 'dark'
     return 'light'
@@ -114,7 +114,7 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
     localStorage.setItem('fieldservice_credit_hours', v ? 'yes' : 'no')
   }
 
-  function changeTheme(t: 'light' | 'dark' | 'pastel') {
+  function changeTheme(t: 'light' | 'dark' | 'pastel' | 'mark') {
     setThemeState(t)
     localStorage.setItem('fieldservice_theme', t)
     // Retire the old boolean key so it can't disagree with the new one.
@@ -221,6 +221,7 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
             ['light', '☀️ Light'],
             ['dark', '🌙 Dark'],
             ['pastel', '🌸 Pastel'],
+            ['mark', '🌊 Mark'],
           ] as const).map(([key, label]) => (
             <button
               key={key}
