@@ -213,6 +213,49 @@ function dayScheduleBlocks(prefs: SchedulePrefs, day: number): DayScheduleBlock[
   return []
 }
 
+// Suggested blocks for a specific calendar date: a one-off "just this day" override
+// shadows the weekly plan entirely; otherwise the day-of-week's recurring blocks apply.
+// Takes `prefs` explicitly (rather than closing over it) so both the weekly view
+// (ScheduleMain) and the calendar view (ScheduleCalendarView) can call it directly.
+function blocksForDate(prefs: SchedulePrefs, date: Date): DayScheduleBlock[] {
+  const override = prefs.dateOverrides?.[fmtLocalDate(date)]
+  if (override) return override
+  return prefs.daysOut.includes(date.getDay()) ? dayScheduleBlocks(prefs, date.getDay()) : []
+}
+
+/** Total scheduled minutes across the Sun–Sat week containing `date`, optionally skipping
+    one date (the day already being edited, so its live in-progress total can be added back
+    in separately without double-counting the saved version). Powers the "week total with
+    this day" context in DayActionModal for any week — the weekly view's currently
+    navigated one, or an arbitrary one tapped from the calendar view. */
+function weekSuggestedMinutesExcluding(prefs: SchedulePrefs, date: Date, excludeDate?: Date): number {
+  const weekStart = startOfWeek(date).getTime()
+  const excludeKey = excludeDate ? fmtLocalDate(excludeDate) : null
+  let total = 0
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart + i * 24 * 60 * 60 * 1000)
+    if (excludeKey && fmtLocalDate(d) === excludeKey) continue
+    total += blocksForDate(prefs, d).reduce((s, b) => s + (b.end - b.start), 0)
+  }
+  return total
+}
+
+/** Clears just one week's scheduled instances — a per-date empty-blocks override for each
+    of its 7 days that currently resolves to something — without touching the recurring
+    daysOut/daySchedule pattern or any other week. The weekly view's "remove this day"
+    taken to a whole week; reusable from either view since it takes `prefs` explicitly. */
+async function clearWeekSchedule(prefs: SchedulePrefs, weekStartDate: Date) {
+  const weekStart = startOfWeek(weekStartDate).getTime()
+  const nextOverrides = { ...(prefs.dateOverrides ?? {}) }
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart + i * 24 * 60 * 60 * 1000)
+    if (blocksForDate(prefs, d).length > 0) {
+      nextOverrides[fmtLocalDate(d)] = []
+    }
+  }
+  await db.schedulePrefs.update(prefs.id, { dateOverrides: nextOverrides })
+}
+
 function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => void }) {
   // Matches db.ts's documented default: a legacy record that predates this field is
   // treated as a pioneer everywhere else in the app, so redoing the survey on one
@@ -452,7 +495,7 @@ function ScheduleMain({
   const [editingLog, setEditingLog] = useState<TimeLog | null>(null)
   const [visibleLogCount, setVisibleLogCount] = useState(4)
   const [showCalendarView, setShowCalendarView] = useState(false)
-  const [dayModalFor, setDayModalFor] = useState<number | null>(null)
+  const [dayModalFor, setDayModalFor] = useState<Date | null>(null)
   const [dayModalOriginRect, setDayModalOriginRect] = useState<DOMRect | null>(null)
   // Set immediately (before the bank write/collect/fly chain even starts) so the modal's
   // other fields can start fading right away — see .time-entry-closing — while the
@@ -634,6 +677,11 @@ function ScheduleMain({
   // without a separate segment concept for service years.
   const weeklyGoalMin = prefs.weeklyHours * 60
   const yearlyGoalMin = prefs.yearlyHours * 60
+  // The weekly goal that actually applies right now — a pioneer's own weekly target, or
+  // (since non-pioneers don't have one) an aux-pioneering non-pioneer's configured weekly
+  // hours. Used to size the calendar view's per-day goal rings and judge week-completion;
+  // 0 when neither applies, since a goal-less week has nothing to measure against.
+  const effectiveWeeklyGoalMin = isPioneer ? weeklyGoalMin : auxConfig.enabled ? auxConfig.weeklyHours * 60 : 0
   const primaryServiceYear = serviceYearLabel(new Date(primaryMonth.year, primaryMonth.month, 1))
   const yearProgress = (() => {
     const label = primaryServiceYear
@@ -649,24 +697,17 @@ function ScheduleMain({
     }
   })()
 
-  // Suggested blocks for a specific calendar date: a one-off "just this day" override
-  // shadows the weekly plan entirely; otherwise the day-of-week's recurring blocks apply.
-  function blocksForDate(date: Date): DayScheduleBlock[] {
-    const override = prefs.dateOverrides?.[fmtLocalDate(date)]
-    if (override) return override
-    return prefs.daysOut.includes(date.getDay()) ? dayScheduleBlocks(prefs, date.getDay()) : []
-  }
-
   // Total suggested (planned) minutes across the navigated week, all block types and
   // any date overrides included — compared against the weekly goal so someone can see
   // how much of their target is already scheduled, both here and live while editing an
   // individual day's blocks.
   const suggestedWeeklyMin = Array.from({ length: 7 }, (_, d) =>
-    blocksForDate(dayDateFor(d)).reduce((s, b) => s + (b.end - b.start), 0)
+    blocksForDate(prefs, dayDateFor(d)).reduce((s, b) => s + (b.end - b.start), 0)
   ).reduce((a, b) => a + b, 0)
 
-  function saveDayBlocks(day: number, blocks: DayScheduleBlock[], repeatWeekly: boolean) {
-    const dateKey = fmtLocalDate(dayDateFor(day))
+  function saveDayBlocks(date: Date, blocks: DayScheduleBlock[], repeatWeekly: boolean) {
+    const day = date.getDay()
+    const dateKey = fmtLocalDate(date)
     if (repeatWeekly) {
       const nextDaysOut = prefs.daysOut.includes(day) ? prefs.daysOut : [...prefs.daysOut, day].sort()
       // Storing only { blocks } intentionally drops any legacy start/end/credit fields
@@ -686,12 +727,13 @@ function ScheduleMain({
 
   // "Edit" next to the day in DayActionModal offers these as a quick way to redo a day's
   // (or the whole week's) suggested schedule without going all the way back to Redo Survey.
-  function removeDaySchedule(day: number) {
+  function removeDaySchedule(date: Date) {
+    const day = date.getDay()
     const nextDaysOut = prefs.daysOut.filter((d) => d !== day)
     const nextSchedule = { ...(prefs.daySchedule ?? {}) }
     delete nextSchedule[day]
     const nextOverrides = { ...(prefs.dateOverrides ?? {}) }
-    delete nextOverrides[fmtLocalDate(dayDateFor(day))]
+    delete nextOverrides[fmtLocalDate(date)]
     db.schedulePrefs.update(prefs.id, { daysOut: nextDaysOut, daySchedule: nextSchedule, dateOverrides: nextOverrides })
     closeDayModalSmoothly()
   }
@@ -741,19 +783,19 @@ function ScheduleMain({
   // AddTime's own save/banking rules (1-29 leftover minutes bank automatically; 30-59
   // asks to round up) so time logged this way is never treated differently.
   const [quickLogConfirm, setQuickLogConfirm] = useState<
-    { day: number; hours: number; minutes: number; category: TimeCategory; otherNote: string; originEl?: HTMLElement } | null
+    { date: Date; hours: number; minutes: number; category: TimeCategory; otherNote: string; originEl?: HTMLElement } | null
   >(null)
 
-  async function saveQuickLog(day: number, totalMin: number, category: TimeCategory, otherNote: string) {
+  async function saveQuickLog(date: Date, totalMin: number, category: TimeCategory, otherNote: string) {
     if (totalMin <= 0) return
-    const d = dayDateFor(day)
+    const d = new Date(date)
     d.setHours(12, 0, 0, 0)
     const note = category === 'other' && otherNote.trim() ? otherNote.trim() : undefined
     await db.timeLogs.add({ date: d.getTime(), minutes: totalMin, category, note } as TimeLog)
   }
 
   async function bankQuickLogMinutes(
-    day: number,
+    date: Date,
     h: number,
     m: number,
     category: TimeCategory,
@@ -768,15 +810,15 @@ function ScheduleMain({
     await collectAndFlyToMinuteBank(minutesFieldEl)
     await animateBankValue(before, bank, 480, setDisplayedBank)
     if (autoHour) {
-      const d = dayDateFor(day)
+      const d = new Date(date)
       d.setHours(12, 0, 0, 0)
       await db.timeLogs.add({ date: d.getTime(), minutes: 60, category, note: 'Added from minute bank' } as TimeLog)
     }
-    if (h > 0) await saveQuickLog(day, h * 60, category, otherNote)
+    if (h > 0) await saveQuickLog(date, h * 60, category, otherNote)
   }
 
   function quickLogTime(
-    day: number,
+    date: Date,
     h: number,
     m: number,
     category: TimeCategory,
@@ -785,12 +827,12 @@ function ScheduleMain({
   ) {
     if (h === 0 && m === 0) return
     if (m === 0) {
-      saveQuickLog(day, h * 60, category, otherNote)
+      saveQuickLog(date, h * 60, category, otherNote)
       closeDayModalSmoothly()
       return
     }
     if (m >= 30) {
-      setQuickLogConfirm({ day, hours: h, minutes: m, category, otherNote, originEl })
+      setQuickLogConfirm({ date, hours: h, minutes: m, category, otherNote, originEl })
       return
     }
     // Close right away — the modal morphs shut at the same moment the minutes field
@@ -799,7 +841,7 @@ function ScheduleMain({
     // the modal is gone, since it's a separate fixed-position element.
     setDayModalClosing(true)
     closeDayModalSmoothly()
-    bankQuickLogMinutes(day, h, m, category, otherNote, originEl)
+    bankQuickLogMinutes(date, h, m, category, otherNote, originEl)
   }
 
   const weekMinistryPct = weeklyGoalMin ? Math.min(100, (weekMinistry / weeklyGoalMin) * 100) : 0
@@ -994,7 +1036,7 @@ function ScheduleMain({
         {!weekOpen ? (
           <div className="week-mini">
             {DAYS.map((d, i) => {
-              const isService = blocksForDate(dayDateFor(i)).length > 0
+              const isService = blocksForDate(prefs, dayDateFor(i)).length > 0
               const logged = Object.values(perDayCat[i]).reduce((a, b) => a + b, 0)
               const hasVisit = perDayAppointments[i].length > 0
               return (
@@ -1023,7 +1065,7 @@ function ScheduleMain({
             </button>
             <div className="week-grid">
               {DAYS.map((d, i) => {
-                const suggestedBlocks = blocksForDate(dayDateFor(i))
+                const suggestedBlocks = blocksForDate(prefs, dayDateFor(i))
                 const dayEntries = CATEGORY_ORDER.map((cat) => [cat, perDayCat[i][cat] ?? 0] as const).filter(
                   ([, min]) => min > 0
                 )
@@ -1042,7 +1084,7 @@ function ScheduleMain({
                   <div
                     key={i}
                     className={`day-row${isToday ? ' today' : ''}${isHighlighted ? ' jump-highlight' : ''}${inShownMonth ? '' : ' faded'}`}
-                    onClick={(e) => { setDayModalOriginRect(e.currentTarget.getBoundingClientRect()); setDayModalClosing(false); setDayModalFor(i) }}
+                    onClick={(e) => { setDayModalOriginRect(e.currentTarget.getBoundingClientRect()); setDayModalClosing(false); setDayModalFor(dayDate) }}
                     style={{ cursor: 'pointer' }}
                     title={inShownMonth ? undefined : `Part of ${MONTH_NAMES_LONG[dayDate.getMonth()]} — not the month shown above`}
                   >
@@ -1112,7 +1154,21 @@ function ScheduleMain({
       </div>
 
       {showCalendarView && (
-        <ScheduleCalendarView prefs={prefs} appointments={appointments} logs={logs} onClose={() => setShowCalendarView(false)} />
+        <ScheduleCalendarView
+          prefs={prefs}
+          appointments={appointments}
+          logs={logs}
+          people={people}
+          onGoToContact={onGoToContact}
+          weeklyGoalMin={effectiveWeeklyGoalMin}
+          onSaveBlocks={saveDayBlocks}
+          onRemoveDay={removeDaySchedule}
+          onClearAllDays={clearAllSuggestedDays}
+          onLogTime={quickLogTime}
+          onClearWeek={(weekStart) => clearWeekSchedule(prefs, weekStart)}
+          onClose={() => setShowCalendarView(false)}
+          onSeeWeeklyView={() => { setShowCalendarView(false); goToWeekOffset(0) }}
+        />
       )}
 
       {/* Collapsible add time — pioneers and hours-tracking non-pioneers log hours;
@@ -1186,14 +1242,14 @@ function ScheduleMain({
 
       {dayModalFor != null && (
         <DayActionModal
-          dayLabel={DAY_NAMES_FULL[dayModalFor]}
-          dateLabel={fmtDayMonth(dayDateFor(dayModalFor).getTime())}
-          isSuggestedDay={blocksForDate(dayDateFor(dayModalFor)).length > 0}
-          currentBlocks={blocksForDate(dayDateFor(dayModalFor))}
-          weeklyGoalMin={weeklyGoalMin}
-          otherDaysSuggestedMin={
-            suggestedWeeklyMin - blocksForDate(dayDateFor(dayModalFor)).reduce((s, b) => s + (b.end - b.start), 0)
-          }
+          date={dayModalFor}
+          isSuggestedDay={blocksForDate(prefs, dayModalFor).length > 0}
+          currentBlocks={blocksForDate(prefs, dayModalFor)}
+          weeklyGoalMin={effectiveWeeklyGoalMin}
+          otherDaysSuggestedMin={weekSuggestedMinutesExcluding(prefs, dayModalFor, dayModalFor)}
+          appointments={appointments}
+          people={people}
+          onGoToContact={onGoToContact}
           onSaveBlocks={(blocks, repeatWeekly) => saveDayBlocks(dayModalFor, blocks, repeatWeekly)}
           onRemoveDay={() => removeDaySchedule(dayModalFor)}
           onClearAllDays={clearAllSuggestedDays}
@@ -1212,17 +1268,17 @@ function ScheduleMain({
           cancelLabel="No, bank the minutes"
           tone="primary"
           onConfirm={() => {
-            const { day, hours, category, otherNote } = quickLogConfirm
+            const { date, hours, category, otherNote } = quickLogConfirm
             setQuickLogConfirm(null)
-            saveQuickLog(day, (hours + 1) * 60, category, otherNote)
+            saveQuickLog(date, (hours + 1) * 60, category, otherNote)
             closeDayModalSmoothly()
           }}
           onCancel={() => {
-            const { day, hours, minutes, category, otherNote, originEl } = quickLogConfirm
+            const { date, hours, minutes, category, otherNote, originEl } = quickLogConfirm
             setQuickLogConfirm(null)
             setDayModalClosing(true)
             closeDayModalSmoothly()
-            bankQuickLogMinutes(day, hours, minutes, category, otherNote, originEl)
+            bankQuickLogMinutes(date, hours, minutes, category, otherNote, originEl)
           }}
         />
       )}
@@ -1315,6 +1371,77 @@ function EditLogModal({ log, onClose }: { log: TimeLog; onClose: () => void }) {
   )
 }
 
+/** Edit a return visit's contact, date/time, and notes — opened from the day-detail
+    modal's Return Visit section (both the weekly and calendar views). Mirrors
+    ReturnVisits' own inline add form (Schedule.tsx ~2523+), just against an existing row. */
+function EditAppointmentModal({
+  appointment,
+  people,
+  onClose,
+}: {
+  appointment: Appointment
+  people: { id: number; name: string; street?: string }[]
+  onClose: () => void
+}) {
+  const [personId, setPersonId] = useState<number | null>(appointment.personId ?? null)
+  const [dateStr, setDateStr] = useState(() => fmtLocalDate(new Date(appointment.date)))
+  const [time, setTime] = useState(() => {
+    const d = new Date(appointment.date)
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  })
+  const [notes, setNotes] = useState(appointment.notes ?? '')
+
+  async function save() {
+    if (!personId || !dateStr) return
+    const person = people.find((p) => p.id === personId)
+    const [h, m] = time.split(':').map(Number)
+    const d = parseLocalDate(dateStr)
+    d.setHours(h, m, 0, 0)
+    await db.appointments.update(appointment.id, {
+      title: `Return Visit${person ? ` — ${person.name}` : ''}`,
+      date: d.getTime(),
+      personId,
+      notes: notes || undefined,
+    })
+    onClose()
+  }
+
+  return (
+    <ModalPortal>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+          <div className="modal-toolbar">
+            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+          </div>
+          <h3>Edit Return Visit</h3>
+          <label className="field">
+            <span className="field-label">Contact</span>
+            <ContactPicker people={people} personId={personId} onChange={setPersonId} />
+          </label>
+          <div className="field-row">
+            <label className="field">
+              <span className="field-label">Date</span>
+              <input type="date" value={dateStr} onChange={(e) => setDateStr(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">Time</span>
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+            </label>
+          </div>
+          <label className="field">
+            <span className="field-label">Notes</span>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </label>
+          <div className="row">
+            <button onClick={save} disabled={!personId || !dateStr}>Save Changes</button>
+            <button className="secondary" onClick={onClose}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
+  )
+}
+
 /** A small modal for picking a start time (Survey) or a start/end window (Schedule tab's
     "edit suggested schedule"), with an optional "remove this day" action. */
 function TimeInputModal({
@@ -1393,12 +1520,14 @@ interface EditableBlock {
 }
 
 function DayActionModal({
-  dayLabel,
-  dateLabel,
+  date,
   isSuggestedDay,
   currentBlocks,
   weeklyGoalMin,
   otherDaysSuggestedMin,
+  appointments,
+  people,
+  onGoToContact,
   onSaveBlocks,
   onRemoveDay,
   onClearAllDays,
@@ -1406,12 +1535,14 @@ function DayActionModal({
   onClose,
   closing,
 }: {
-  dayLabel: string
-  dateLabel: string
+  date: Date
   isSuggestedDay: boolean
   currentBlocks: DayScheduleBlock[]
   weeklyGoalMin: number
   otherDaysSuggestedMin: number
+  appointments: Appointment[]
+  people: { id: number; name: string; street?: string }[]
+  onGoToContact: (personId: number) => void
   onSaveBlocks: (blocks: DayScheduleBlock[], repeatWeekly: boolean) => void
   onRemoveDay: () => void
   onClearAllDays: () => void
@@ -1419,6 +1550,14 @@ function DayActionModal({
   onClose: () => void
   closing: boolean
 }) {
+  const dayLabel = DAY_NAMES_FULL[date.getDay()]
+  const dateLabel = date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+  const weekStart = startOfWeek(date).getTime()
+  const weekEnd = weekStart + 6 * 24 * 60 * 60 * 1000
+  const weekRangeLabel = `Week of ${fmtDayMonth(weekStart)} – ${fmtDayMonth(weekEnd)}, ${new Date(weekEnd).getFullYear()}`
+  const dayAppt = appointments.find((a) => fmtLocalDate(new Date(a.date)) === fmtLocalDate(date)) ?? null
+  const [editingAppt, setEditingAppt] = useState(false)
+  const [confirmDeleteAppt, setConfirmDeleteAppt] = useState(false)
   const [step, setStep] = useState<'menu' | 'window' | 'logTime' | 'dayOptions'>('menu')
   const [blocks, setBlocks] = useState<EditableBlock[]>(() =>
     (currentBlocks.length ? currentBlocks : [{ start: 9 * 60, end: 15 * 60, category: 'ministry' as TimeCategory }]).map(
@@ -1489,6 +1628,7 @@ function DayActionModal({
             <div>
               <h3 style={{ margin: 0 }}>{dayLabel}</h3>
               <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>{dateLabel}</p>
+              <p className="muted" style={{ margin: '1px 0 0', fontSize: 12 }}>{weekRangeLabel}</p>
             </div>
             {isSuggestedDay && step !== 'dayOptions' && (
               <button className="secondary small" onClick={() => setStep('dayOptions')}>Edit</button>
@@ -1497,6 +1637,26 @@ function DayActionModal({
 
           {step === 'menu' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {dayAppt && (
+                <div className="highlight-box return-visit-box">
+                  <strong>📅 Return Visit</strong>
+                  <p className="muted" style={{ margin: '4px 0', fontSize: 13 }}>
+                    {(people.find((p) => p.id === dayAppt.personId)?.name) ?? dayAppt.title}
+                    {' · '}
+                    {new Date(dayAppt.date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                  </p>
+                  {dayAppt.notes && <p className="muted" style={{ margin: '0 0 6px', fontSize: 13 }}>{dayAppt.notes}</p>}
+                  <div className="row">
+                    {dayAppt.personId != null && (
+                      <button className="secondary small" onClick={() => onGoToContact(dayAppt.personId!)}>
+                        Jump to Contact
+                      </button>
+                    )}
+                    <button className="secondary small" onClick={() => setEditingAppt(true)}>Edit</button>
+                    <button className="danger small" onClick={() => setConfirmDeleteAppt(true)}>Delete</button>
+                  </div>
+                </div>
+              )}
               <button onClick={() => setStep('window')}>
                 {isSuggestedDay ? 'Edit Schedule' : 'Add Scheduled Service Time'}
               </button>
@@ -1678,6 +1838,21 @@ function DayActionModal({
         onConfirm={() => { setConfirmClearAll(false); onClearAllDays() }}
         onCancel={() => setConfirmClearAll(false)}
       />
+
+      <ConfirmDialog
+        open={confirmDeleteAppt}
+        title="Delete this return visit?"
+        message="This can't be undone."
+        onConfirm={() => {
+          if (dayAppt) db.appointments.delete(dayAppt.id)
+          setConfirmDeleteAppt(false)
+        }}
+        onCancel={() => setConfirmDeleteAppt(false)}
+      />
+
+      {editingAppt && dayAppt && (
+        <EditAppointmentModal appointment={dayAppt} people={people} onClose={() => setEditingAppt(false)} />
+      )}
     </ModalPortal>
   )
 }
@@ -1749,20 +1924,55 @@ function CalendarPicker({ value, onChange, onClose }: { value: string; onChange:
 }
 
 // ── Read-only schedule calendar view (suggested days + return visits) ────────
+const RING_SIZE = 32
+const RING_STROKE = 2.5
+const RING_R = (RING_SIZE - RING_STROKE) / 2
+const RING_C = 2 * Math.PI * RING_R
+
 function ScheduleCalendarView({
   prefs,
   appointments,
   logs,
+  people,
+  onGoToContact,
+  weeklyGoalMin,
+  onSaveBlocks,
+  onRemoveDay,
+  onClearAllDays,
+  onLogTime,
+  onClearWeek,
   onClose,
+  onSeeWeeklyView,
 }: {
   prefs: SchedulePrefs
   appointments: Appointment[]
   logs: TimeLog[]
+  people: { id: number; name: string; street?: string }[]
+  onGoToContact: (personId: number) => void
+  weeklyGoalMin: number
+  onSaveBlocks: (date: Date, blocks: DayScheduleBlock[], repeatWeekly: boolean) => void
+  onRemoveDay: (date: Date) => void
+  onClearAllDays: () => void
+  onLogTime: (date: Date, hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
+  onClearWeek: (weekStart: Date) => void
   onClose: () => void
+  onSeeWeeklyView: () => void
 }) {
   const today = new Date()
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
+  const [tapDate, setTapDate] = useState<Date | null>(null)
+  const [tapLeaving, setTapLeaving] = useState(false)
+  const [confirmClearWeek, setConfirmClearWeek] = useState<Date | null>(null)
+
+  // No origin-rect morph here (calendar cells are too small to shrink a modal back into,
+  // unlike the weekly grid's full-width day rows) — just a plain delayed unmount so
+  // collectAndFlyToMinuteBank still has a real, attached DOM node to animate from before
+  // the modal goes away, matching the weekly view's timing without the transform math.
+  function closeTapModal() {
+    setTapLeaving(true)
+    window.setTimeout(() => { setTapDate(null); setTapLeaving(false) }, 300)
+  }
 
   function prevMonth() {
     if (viewMonth === 0) { setViewYear((y) => y - 1); setViewMonth(11) }
@@ -1776,6 +1986,9 @@ function ScheduleCalendarView({
   const startDow = new Date(viewYear, viewMonth, 1).getDay()
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
   const cells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
+  // Pad to a whole number of weeks so every row (including a trailing partial one) has a
+  // well-defined first/last visible cell for the checkmark/clear-week controls below.
+  while (cells.length % 7 !== 0) cells.push(null)
 
   const apptsByDay = new Map<number, Appointment[]>()
   for (const a of appointments) {
@@ -1810,18 +2023,18 @@ function ScheduleCalendarView({
     return best
   }
 
-  // Unique suggested categories per calendar date — a one-off "just this day" override
-  // shadows that date's weekly plan entirely, matching the Weekly Schedule's own logic.
-  // Drives each cell's dashed outline color (two-tone when a day mixes types, e.g.
-  // ministry + LDC) and which "Suggested …" legend entries appear below. Category order
-  // kept stable via CATEGORY_ORDER.
+  // Scheduled minutes for a visible day, broken down by category (CATEGORY_ORDER) — powers
+  // both the proportional goal ring and the "which categories are scheduled" legend, using
+  // the exact same one-off-override-shadows-the-weekly-plan rule as the weekly view.
+  function scheduledBlocksFor(day: number): { category: TimeCategory; minutes: number }[] {
+    const byCat = new Map<TimeCategory, number>()
+    for (const b of blocksForDate(prefs, new Date(viewYear, viewMonth, day))) {
+      byCat.set(b.category, (byCat.get(b.category) ?? 0) + (b.end - b.start))
+    }
+    return CATEGORY_ORDER.filter((c) => byCat.has(c)).map((c) => ({ category: c, minutes: byCat.get(c)! }))
+  }
   function suggestedCatsFor(day: number): TimeCategory[] {
-    const key = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    const override = prefs.dateOverrides?.[key]
-    const dow = new Date(viewYear, viewMonth, day).getDay()
-    const blocks = override ?? (prefs.daysOut.includes(dow) ? dayScheduleBlocks(prefs, dow) : [])
-    const present = new Set(blocks.map((b) => b.category))
-    return CATEGORY_ORDER.filter((c) => present.has(c))
+    return scheduledBlocksFor(day).map((b) => b.category)
   }
 
   // Everything actually visible this month, so the legend only explains what's on screen.
@@ -1832,6 +2045,38 @@ function ScheduleCalendarView({
     Array.from(loggedByDay.keys()).some((day) => predominantCategory(day) === c)
   )
   const monthHasToday = viewYear === today.getFullYear() && viewMonth === today.getMonth()
+
+  // Week-row summaries, one per 7-cell chunk — computed from the REAL calendar week each
+  // row represents (which can dip into the adjacent month for a leading/trailing partial
+  // row) rather than just the visible in-month cells, since a person's schedule is
+  // date-based, not month-based. Powers the week-complete shading/checkmark and anchors
+  // the checkmark/clear-week controls to whichever cells are actually visible in this row.
+  const weekRows = Array.from({ length: cells.length / 7 }, (_, row) => {
+    const rowCells = cells.slice(row * 7, row * 7 + 7)
+    const firstIdx = rowCells.findIndex((c) => c !== null)
+    const lastIdx = rowCells.length - 1 - [...rowCells].reverse().findIndex((c) => c !== null)
+    const anchorDay = firstIdx >= 0 ? rowCells[firstIdx]! : 1
+    const weekStart = startOfWeek(new Date(viewYear, viewMonth, anchorDay))
+    const totalMin = firstIdx >= 0 ? weekSuggestedMinutesExcluding(prefs, weekStart) : 0
+    return { firstIdx, lastIdx, weekStart, isComplete: weeklyGoalMin > 0 && totalMin >= weeklyGoalMin }
+  })
+
+  function handleSaveBlocks(blocks: DayScheduleBlock[], repeatWeekly: boolean) {
+    if (tapDate) onSaveBlocks(tapDate, blocks, repeatWeekly)
+    closeTapModal()
+  }
+  function handleRemoveDay() {
+    if (tapDate) onRemoveDay(tapDate)
+    closeTapModal()
+  }
+  function handleClearAllDays() {
+    onClearAllDays()
+    closeTapModal()
+  }
+  function handleLogTime(hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) {
+    if (tapDate) onLogTime(tapDate, hours, minutes, category, otherNote, originEl)
+    closeTapModal()
+  }
 
   return (
     <ModalPortal>
@@ -1846,39 +2091,71 @@ function ScheduleCalendarView({
           {DOW_SHORT.map((h, i) => <span key={i} className="cal-dow">{h}</span>)}
           {cells.map((day, i) => {
             if (day === null) return <span key={`e${i}`} />
-            const suggestedCats = suggestedCatsFor(day)
-            const isService = suggestedCats.length > 0
+            const row = Math.floor(i / 7)
+            const { firstIdx, lastIdx, weekStart, isComplete } = weekRows[row]
+            const scheduledBlocks = scheduledBlocksFor(day)
+            const isService = scheduledBlocks.length > 0
             const isToday = monthHasToday && day === today.getDate()
             const loggedCat = predominantCategory(day)
             const dayAppts = apptsByDay.get(day) ?? []
-            // One suggested type → a solid-color dashed ring; two or more → the ring is
-            // split two-tone (top/right vs bottom/left) so both types show at a glance.
             const cellStyle: CSSProperties = {}
-            if (suggestedCats.length === 1) {
-              cellStyle.borderColor = `var(--cat-${suggestedCats[0]})`
-            } else if (suggestedCats.length >= 2) {
-              cellStyle.borderTopColor = `var(--cat-${suggestedCats[0]})`
-              cellStyle.borderRightColor = `var(--cat-${suggestedCats[0]})`
-              cellStyle.borderBottomColor = `var(--cat-${suggestedCats[1]})`
-              cellStyle.borderLeftColor = `var(--cat-${suggestedCats[1]})`
-            }
             if (loggedCat) {
               cellStyle.background = `color-mix(in srgb, var(--cat-${loggedCat}) 30%, var(--surface))`
             }
             const titleParts = [
-              ...suggestedCats.map((c) => `Scheduled ${CATEGORY_LABELS[c]}`),
+              ...scheduledBlocks.map((b) => `Scheduled ${CATEGORY_LABELS[b.category]}`),
               loggedCat ? `${CATEGORY_LABELS[loggedCat]} time logged` : '',
               ...dayAppts.map((a) => a.title),
+              isComplete && i === row * 7 + firstIdx ? 'Weekly goal met' : '',
             ].filter(Boolean)
+            let ringOffset = 0
             return (
               <div
                 key={day}
-                className={['cal-day-view', isService ? 'service' : '', loggedCat ? 'logged' : '', isToday ? 'today' : ''].filter(Boolean).join(' ')}
+                className={[
+                  'cal-day-view', isService ? 'service' : '', loggedCat ? 'logged' : '', isToday ? 'today' : '', isComplete ? 'week-complete' : '',
+                ].filter(Boolean).join(' ')}
                 style={cellStyle}
                 title={titleParts.join(', ')}
+                onClick={() => setTapDate(new Date(viewYear, viewMonth, day))}
               >
-                {day}
+                {weeklyGoalMin > 0 && isService && (
+                  <svg className="cal-ring" width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
+                    <circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R} fill="none" stroke="var(--border)" strokeWidth={RING_STROKE} opacity={0.5} />
+                    {scheduledBlocks.map((b) => {
+                      const pct = Math.min(1, b.minutes / weeklyGoalMin)
+                      const segLen = pct * RING_C
+                      const dashoffset = -ringOffset
+                      ringOffset += segLen
+                      return (
+                        <circle
+                          key={b.category}
+                          cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R}
+                          fill="none" stroke={`var(--cat-${b.category})`} strokeWidth={RING_STROKE}
+                          strokeDasharray={`${segLen} ${RING_C - segLen}`}
+                          strokeDashoffset={dashoffset}
+                          strokeLinecap="round"
+                          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+                        />
+                      )
+                    })}
+                  </svg>
+                )}
+                {weeklyGoalMin <= 0 && isService && (
+                  <span className="cal-day-plain-dot" style={{ background: `var(--cat-${scheduledBlocks[0].category})` }} />
+                )}
+                <span className="cal-day-num">{day}</span>
                 {dayAppts.length > 0 && <span className="cal-day-appt-dot" />}
+                {isComplete && i === row * 7 + firstIdx && <span className="cal-week-check" title="Weekly goal met">✓</span>}
+                {i === row * 7 + lastIdx && (
+                  <button
+                    className="cal-week-clear"
+                    title="Clear this week's schedule"
+                    onClick={(e) => { e.stopPropagation(); setConfirmClearWeek(weekStart) }}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             )
           })}
@@ -1891,9 +2168,12 @@ function ScheduleCalendarView({
           {monthHasToday && (
             <span><i className="cal-sw" style={{ outline: '2px solid var(--accent)', outlineOffset: -2 }} /> Today</span>
           )}
-          {suggestedCatsInMonth.map((cat) => (
+          {weeklyGoalMin > 0 && suggestedCatsInMonth.length > 0 && (
+            <span><i className="cal-sw cal-sw-ring" /> Share of weekly goal scheduled</span>
+          )}
+          {weeklyGoalMin <= 0 && suggestedCatsInMonth.map((cat) => (
             <span key={`sug-${cat}`}>
-              <i className="cal-sw" style={{ border: `1.5px dashed var(--cat-${cat})` }} /> Scheduled {CATEGORY_LABELS[cat]}
+              <i className="cal-sw" style={{ background: `var(--cat-${cat})`, borderRadius: '50%' }} /> Scheduled {CATEGORY_LABELS[cat]}
             </span>
           ))}
           {loggedCatsInMonth.map((cat) => (
@@ -1901,6 +2181,7 @@ function ScheduleCalendarView({
               <i className="cal-sw" style={{ background: `color-mix(in srgb, var(--cat-${cat}) 30%, var(--surface))` }} /> {CATEGORY_LABELS[cat]} logged
             </span>
           ))}
+          {weeklyGoalMin > 0 && <span><i className="cal-sw" style={{ background: 'color-mix(in srgb, var(--accent) 16%, var(--surface))' }} /> ✓ Weekly goal met</span>}
           {monthAppts.length > 0 && <span><i className="sw appt" /> Return visit</span>}
         </div>
 
@@ -1918,9 +2199,45 @@ function ScheduleCalendarView({
           </div>
         )}
 
-        <button className="secondary" onClick={onClose}>Close</button>
+        <div className="row">
+          <button className="secondary" onClick={onSeeWeeklyView}>See weekly view</button>
+          <button className="secondary" onClick={onClose}>Close</button>
+        </div>
       </div>
     </div>
+
+    {tapDate && (
+      <DayActionModal
+        date={tapDate}
+        isSuggestedDay={blocksForDate(prefs, tapDate).length > 0}
+        currentBlocks={blocksForDate(prefs, tapDate)}
+        weeklyGoalMin={weeklyGoalMin}
+        otherDaysSuggestedMin={weekSuggestedMinutesExcluding(prefs, tapDate, tapDate)}
+        appointments={appointments}
+        people={people}
+        onGoToContact={onGoToContact}
+        onSaveBlocks={handleSaveBlocks}
+        onRemoveDay={handleRemoveDay}
+        onClearAllDays={handleClearAllDays}
+        onLogTime={handleLogTime}
+        onClose={closeTapModal}
+        closing={tapLeaving}
+      />
+    )}
+
+    <ConfirmDialog
+      open={confirmClearWeek != null}
+      title="Clear this week's schedule?"
+      message="Clears every scheduled day and time for this specific week only — other weeks and your recurring weekly pattern aren't affected. This can't be undone."
+      confirmLabel="Yes, clear this week"
+      cancelLabel="Cancel"
+      tone="danger"
+      onConfirm={() => {
+        if (confirmClearWeek) onClearWeek(confirmClearWeek)
+        setConfirmClearWeek(null)
+      }}
+      onCancel={() => setConfirmClearWeek(null)}
+    />
     </ModalPortal>
   )
 }

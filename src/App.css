@@ -1984,10 +1984,10 @@ button.small {
   max-height: 80vh;
 }
 
-/* Suggested days get a dashed outline and logged days a shaded fill — both colored
-   inline per-cell from the category involved (two-tone border when a day mixes types),
-   so a dotted ring means "planned" and a filled tint means "done", each colored by
-   ministry type. The class rules here are just geometry + fallbacks. */
+/* A day cell shows either a proportional goal ring (when a weekly goal exists) or a
+   plain colored dot (when it doesn't — nothing to size a ring against) for what's
+   scheduled, plus a shaded fill for what's actually logged. Tapping a cell opens the
+   same day-detail modal the weekly view uses. */
 .cal-day-view {
   position: relative;
   border-radius: 8px;
@@ -1996,11 +1996,11 @@ button.small {
   font-weight: 500;
   text-align: center;
   color: var(--text-h);
-  border: 1.5px dashed transparent;
+  cursor: pointer;
+  min-height: 40px;
 }
 
 .cal-day-view.service {
-  border-color: var(--cat-ministry);
   font-weight: 600;
 }
 
@@ -2013,6 +2013,78 @@ button.small {
   outline-offset: -2px;
 }
 
+/* A full week's scheduled time already meets the weekly goal — a soft wash over every
+   cell in that row (each cell gets the class individually, since the grid has no real
+   DOM row to style as a unit) plus a ✓ badge at the week's first visible cell. */
+.cal-day-view.week-complete::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  pointer-events: none;
+}
+
+.cal-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Sits directly on top of the ring's center (like a typical "number inside a progress
+   ring" widget) rather than in normal flow, so the ring and the day number share the
+   same visual center instead of the ring floating free relative to the digits. */
+.cal-day-num {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+}
+
+.cal-day-plain-dot {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.cal-week-check {
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.cal-week-clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+  border-radius: 50%;
+}
+
+@media (hover: hover) {
+  .cal-week-clear:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+}
+
 /* Legend swatch for the calendar view — sized like a mini day cell; its border/fill/
    outline is applied inline to exactly mirror the cell style it explains. */
 .cal-sw {
@@ -2021,6 +2093,12 @@ button.small {
   border-radius: 4px;
   display: inline-block;
   flex-shrink: 0;
+}
+
+.cal-sw-ring {
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: transparent;
 }
 
 .cal-day-appt-dot {
@@ -2045,6 +2123,11 @@ button.small {
 .cal-appt-row {
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* Return Visit section inside the day-detail modal (both weekly and calendar views). */
+.return-visit-box {
+  margin-bottom: 4px;
 }
 
 /* ============================================================
