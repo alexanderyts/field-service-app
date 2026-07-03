@@ -164,20 +164,69 @@ function setParticipatedMonth(year: number, month: number, participated: boolean
 
 export default function Schedule({ onGoToContact }: { onGoToContact: (personId: number) => void }) {
   const prefs = useLiveQuery(() => db.schedulePrefs.toArray(), [])
+  // Set true the moment the wizard is explicitly opened (from the intro gate below, or
+  // from "Redo survey") so a brand-new user sees the intro gate exactly once, while
+  // redoing an already-completed survey skips straight to the wizard like it always has.
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   if (prefs === undefined) return <div className="view" />
 
   const current = prefs[0]
+
+  if (!current?.completedSurvey && !wizardOpen) {
+    return (
+      <SurveyIntro
+        onTakeSurvey={() => setWizardOpen(true)}
+        onSkip={async () => {
+          const blank: Omit<SchedulePrefs, 'id'> = {
+            completedSurvey: true,
+            isPioneer: false,
+            daysOut: [],
+            daySchedule: {},
+            weeklyHours: 0,
+            yearlyHours: 0,
+            goalPeriod: 'none',
+          }
+          await db.schedulePrefs.add(blank as SchedulePrefs)
+        }}
+      />
+    )
+  }
+
   if (!current || !current.completedSurvey) {
-    return <Survey existing={current} onDone={() => {}} />
+    return <Survey existing={current} onDone={() => setWizardOpen(false)} />
   }
 
   return (
     <ScheduleMain
       prefs={current}
-      onRedo={async () => { await db.schedulePrefs.update(current.id, { completedSurvey: false }) }}
+      onRedo={async () => {
+        await db.schedulePrefs.update(current.id, { completedSurvey: false })
+        setWizardOpen(true)
+      }}
       onGoToContact={onGoToContact}
     />
+  )
+}
+
+/** Shown once, only for a device with no schedulePrefs record at all yet — lets someone
+    skip the multi-step wizard entirely and land on a blank, goal-less schedule instead of
+    being forced through survey questions before they've decided they want one. */
+function SurveyIntro({ onTakeSurvey, onSkip }: { onTakeSurvey: () => void; onSkip: () => void }) {
+  return (
+    <div className="view">
+      <h2 className="applet-title">Plan Your Schedule</h2>
+      <div className="card">
+        <p>
+          Would you like to take a short survey to build a custom ministry schedule? It's
+          optional — you can always retake it later from the Schedule tab.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+          <button onClick={onTakeSurvey}>Take the Survey</button>
+          <button className="secondary" onClick={onSkip}>Skip for now</button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -254,6 +303,27 @@ async function clearWeekSchedule(prefs: SchedulePrefs, weekStartDate: Date) {
     }
   }
   await db.schedulePrefs.update(prefs.id, { dateOverrides: nextOverrides })
+}
+
+/** A tappable (i) icon that reveals a short explanation on demand instead of it sitting
+    permanently on screen — the blur-then-timeout dismiss mirrors ContactPicker's own
+    tap-away dismissal below, rather than adding a new document-click-listener pattern. */
+function InfoTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="info-tip">
+      <button
+        type="button"
+        className="info-tip-btn"
+        onClick={() => setOpen((o) => !o)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        aria-label="More info"
+      >
+        ⓘ
+      </button>
+      {open && <span className="info-tip-bubble" role="tooltip">{text}</span>}
+    </span>
+  )
 }
 
 function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => void }) {
@@ -480,6 +550,7 @@ function ScheduleMain({
   const now = new Date()
   const thisWeekStartMs = startOfWeek(now).getTime()
 
+  const [progressExpanded, setProgressExpanded] = useState(false)
   const [weekOpen, setWeekOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
@@ -532,6 +603,7 @@ function ScheduleMain({
 
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const calls = useLiveQuery(() => db.calls.toArray(), []) ?? []
+  const territoryCompletions = useLiveQuery(() => db.territoryCompletions.toArray(), []) ?? []
 
   // Whether TODAY (not whatever week is navigated below) is a month this non-pioneer is
   // auxiliary pioneering — decides whether Add Time or the simple monthly checkbox shows.
@@ -634,6 +706,10 @@ function ScheduleMain({
   const scripturesThisMonth = calls.filter((c) => {
     if (!c.scriptures?.trim()) return false
     const d = new Date(c.date)
+    return d.getFullYear() === primaryMonth.year && d.getMonth() === primaryMonth.month
+  }).length
+  const territoriesThisMonth = territoryCompletions.filter((t) => {
+    const d = new Date(t.completedAt)
     return d.getFullYear() === primaryMonth.year && d.getMonth() === primaryMonth.month
   }).length
 
@@ -881,18 +957,23 @@ function ScheduleMain({
       <div className="card highlight">
         <div className="goal-row" style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
           <span>{monthYearLabel}</span>
+          <button className="secondary small" onClick={() => setProgressExpanded((v) => !v)}>
+            {progressExpanded ? 'Collapse' : 'Expand'}
+          </button>
         </div>
 
         {isPioneer ? (
           hasSchedule ? (
             <>
               <div className="goal-row">
-                <span>{weekOffset === 0 ? 'This week' : `Week of ${fmtDayMonth(weekStartMs)}`}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {weekOffset === 0 ? 'This week' : `Week of ${fmtDayMonth(weekStartMs)}`}
+                  <InfoTip text="Ministry + credit hours logged this week, toward your weekly goal." />
+                </span>
                 <strong>
                   {fmtDuration(weekTotal)} / {fmtDuration(weeklyGoalMin)}
                 </strong>
               </div>
-              <p className="muted" style={{ fontSize: 12, margin: '2px 0 4px' }}>Ministry + credit hours logged this week, toward your weekly goal.</p>
               <div className="progress-bar split">
                 <div className="progress-fill ministry" style={{ width: `${weekMinistryPct}%` }} />
                 <div className="progress-fill credit" style={{ width: `${weekCreditPct}%` }} />
@@ -904,83 +985,102 @@ function ScheduleMain({
             </p>
           )
         ) : (
-          <>
-            <AuxPioneeringBox config={auxConfig} onChange={updateAuxConfig} />
-
-            <div style={{ marginTop: 10 }}>
-              <div className="goal-row">
-                <span>Days left in {MONTH_NAMES_LONG[primaryMonth.month]}</span>
-                <strong>{monthDaysLeft} day{monthDaysLeft === 1 ? '' : 's'} left</strong>
-              </div>
-              <p className="muted" style={{ fontSize: 12, margin: '2px 0 4px' }}>How far through this month is — not tied to any goal.</p>
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${monthElapsedPctVal}%` }} />
-              </div>
+          <div>
+            <div className="goal-row">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                Days left in {MONTH_NAMES_LONG[primaryMonth.month]}
+                <InfoTip text="How far through this month is — not tied to any goal." />
+              </span>
+              <strong>{monthDaysLeft} day{monthDaysLeft === 1 ? '' : 's'} left</strong>
             </div>
-          </>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: `${monthElapsedPctVal}%` }} />
+            </div>
+          </div>
         )}
 
-        {(isPioneer || nonPioneerTracksHours) && (
+        {progressExpanded && (
           <>
-            <div style={{ marginTop: 10 }}>
-              <div className="goal-row">
-                <span>{MONTH_NAMES_LONG[monthProgress.month]}</span>
-                <strong>{fmtDuration(monthProgress.applied)} / {fmtDuration(monthProgress.goalMin)}</strong>
-              </div>
-              <p className="muted" style={{ fontSize: 12, margin: '2px 0 4px' }}>
-                {!isPioneer && currentlyAux && monthProgress.year === now.getFullYear() && monthProgress.month === now.getMonth()
-                  ? 'Hours logged this month toward your auxiliary pioneering target.'
-                  : 'Hours logged this month toward your monthly goal.'}
-              </p>
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${monthProgress.pct}%` }} />
-              </div>
-            </div>
+            {!isPioneer && <AuxPioneeringBox config={auxConfig} onChange={updateAuxConfig} />}
 
-            {(isPioneer || prefs.goalPeriod === 'yearly') && (
-              <div style={{ marginTop: 10 }}>
-                <div className="goal-row">
-                  <span>Service year <span className="muted" style={{ fontSize: 11 }}>({serviceYearRangeLabel(yearProgress.label)})</span></span>
-                  <strong>
-                    {fmtDuration(yearProgress.applied)} / {fmtDuration(yearlyGoalMin)}
-                  </strong>
+            {(isPioneer || nonPioneerTracksHours) && (
+              <>
+                <div style={{ marginTop: 10 }}>
+                  <div className="goal-row">
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {MONTH_NAMES_LONG[monthProgress.month]}
+                      <InfoTip
+                        text={
+                          !isPioneer && currentlyAux && monthProgress.year === now.getFullYear() && monthProgress.month === now.getMonth()
+                            ? 'Hours logged this month toward your auxiliary pioneering target.'
+                            : 'Hours logged this month toward your monthly goal.'
+                        }
+                      />
+                    </span>
+                    <strong>{fmtDuration(monthProgress.applied)} / {fmtDuration(monthProgress.goalMin)}</strong>
+                  </div>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${monthProgress.pct}%` }} />
+                  </div>
                 </div>
-                <p className="muted" style={{ fontSize: 12, margin: '2px 0 4px' }}>
-                  Hours applied toward your yearly goal{isPioneer ? ' (credit hours capped at 55h/month)' : ''} — the lighter fill shows everything logged, uncapped.
-                </p>
-                <div className="progress-bar">
-                  <div className="progress-fill raw" style={{ width: `${yearProgress.rawPct}%` }} />
-                  <div className="progress-fill" style={{ width: `${yearProgress.pct}%` }} />
-                </div>
-                {isPioneer && (
-                  <div className="legend tight">
-                    <span><i className="sw ministry" /> Ministry {fmtDuration(yearProgress.stats.ministry)}</span>
-                    <span><i className="sw credit" /> Credit {fmtDuration(yearProgress.stats.credit)}</span>
+
+                {(isPioneer || prefs.goalPeriod === 'yearly') && (
+                  <div style={{ marginTop: 10 }}>
+                    <div className="goal-row">
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        Service year <span className="muted" style={{ fontSize: 11 }}>({serviceYearRangeLabel(yearProgress.label)})</span>
+                        <InfoTip text={`Hours applied toward your yearly goal${isPioneer ? ' (credit hours capped at 55h/month)' : ''} — the lighter fill shows everything logged, uncapped.`} />
+                      </span>
+                      <strong>
+                        {fmtDuration(yearProgress.applied)} / {fmtDuration(yearlyGoalMin)}
+                      </strong>
+                    </div>
+                    <div className="progress-bar">
+                      <div className="progress-fill raw" style={{ width: `${yearProgress.rawPct}%` }} />
+                      <div className="progress-fill" style={{ width: `${yearProgress.pct}%` }} />
+                    </div>
+                    {isPioneer && (
+                      <div className="legend tight">
+                        <span><i className="sw ministry" /> Ministry {fmtDuration(yearProgress.stats.ministry)}</span>
+                        <span><i className="sw credit" /> Credit {fmtDuration(yearProgress.stats.credit)}</span>
+                      </div>
+                    )}
+                    {yearProgress.stats.total > yearProgress.applied && (
+                      <p className="muted">
+                        {fmtDuration(yearProgress.stats.total)} logged in total this service year — 55h/mo credit cap applies.
+                      </p>
+                    )}
+                    <p className="goal-remaining">
+                      {yearProgress.remainingMin > 0
+                        ? `${fmtDuration(yearProgress.remainingMin)} left to reach your yearly goal`
+                        : yearlyGoalMin > 0 ? '🎉 Yearly goal reached!' : ''}
+                    </p>
                   </div>
                 )}
-                {yearProgress.stats.total > yearProgress.applied && (
-                  <p className="muted">
-                    {fmtDuration(yearProgress.stats.total)} logged in total this service year — 55h/mo credit cap applies.
-                  </p>
+              </>
+            )}
+
+            {!isPioneer && !nonPioneerTracksHours && (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {!participatedThisMonth && contactsThisMonth === 0 && scripturesThisMonth === 0 && territoriesThisMonth === 0 ? (
+                  <p className="muted">Nothing recorded yet this month.</p>
+                ) : (
+                  <>
+                    {participatedThisMonth && <p className="muted">✓ Participated in the ministry this month</p>}
+                    {contactsThisMonth > 0 && (
+                      <p className="muted">👋 {contactsThisMonth} contact{contactsThisMonth === 1 ? '' : 's'} recorded this month</p>
+                    )}
+                    {scripturesThisMonth > 0 && (
+                      <p className="muted">📖 {scripturesThisMonth} scripture{scripturesThisMonth === 1 ? '' : 's'} shared this month</p>
+                    )}
+                    {territoriesThisMonth > 0 && (
+                      <p className="muted">🗺️ {territoriesThisMonth} temp territor{territoriesThisMonth === 1 ? 'y' : 'ies'} completed this month</p>
+                    )}
+                  </>
                 )}
-                <p className="goal-remaining">
-                  {yearProgress.remainingMin > 0
-                    ? `${fmtDuration(yearProgress.remainingMin)} left to reach your yearly goal`
-                    : yearlyGoalMin > 0 ? '🎉 Yearly goal reached!' : ''}
-                </p>
               </div>
             )}
           </>
-        )}
-
-        {!isPioneer && !nonPioneerTracksHours && (
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <p className="muted">
-              {participatedThisMonth ? '✓ Participated in the ministry this month' : 'Not yet recorded for this month'}
-            </p>
-            <p className="muted">👋 {contactsThisMonth} contact{contactsThisMonth === 1 ? '' : 's'} recorded this month</p>
-            <p className="muted">📖 {scripturesThisMonth} scripture{scripturesThisMonth === 1 ? '' : 's'} shared this month</p>
-          </div>
         )}
       </div>
 

@@ -985,6 +985,45 @@ button.small {
   color: var(--text-h);
 }
 
+/* Tap-to-reveal info icon — replaces text that used to sit permanently under a bar. */
+.info-tip {
+  position: relative;
+  display: inline-flex;
+}
+
+.info-tip-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  line-height: 1;
+  font-size: 13px;
+  color: var(--muted);
+  border-radius: 50%;
+}
+
+.info-tip-bubble {
+  position: absolute;
+  top: 20px;
+  left: 0;
+  z-index: 20;
+  width: 220px;
+  max-width: 60vw;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 /* Calendar: week grid */
 .week-grid {
   display: flex;
