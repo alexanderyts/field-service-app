@@ -109,13 +109,15 @@ export function monthlyGoalFromWeekly(weeklyHours: number): number {
  * A given month's effective hour goal, in minutes — a pioneer's (or an hours-tracking
  * non-pioneer's) is derived from their weekly target, UNLESS the month is one the person
  * is auxiliary pioneering, in which case the auxiliary target (15h or 30h) takes over
- * instead. Shared by Schedule and Reports so the two screens never disagree about the
- * goal for the same month.
+ * instead. A non-pioneer who set a `monthly` goal entered a monthly figure directly, so
+ * that exact figure is used rather than a weekly-derived one. Shared by Schedule and
+ * Reports so the two screens never disagree about the goal for the same month.
  */
-export function effectiveMonthlyGoalMin(prefs: Pick<SchedulePrefs, 'isPioneer' | 'weeklyHours'>, auxConfig: AuxConfig, year: number, month: number): number {
+export function effectiveMonthlyGoalMin(prefs: Pick<SchedulePrefs, 'isPioneer' | 'weeklyHours' | 'goalPeriod' | 'monthlyHours'>, auxConfig: AuxConfig, year: number, month: number): number {
   if (!(prefs.isPioneer ?? true)) {
     const auxTarget = auxTargetHoursFor(auxConfig, year, month)
     if (auxTarget != null) return auxTarget * 60
+    if (prefs.goalPeriod === 'monthly' && prefs.monthlyHours != null) return prefs.monthlyHours * 60
   }
   return monthlyGoalFromWeekly(prefs.weeklyHours)
 }

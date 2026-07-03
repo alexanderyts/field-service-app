@@ -1071,6 +1071,20 @@ button.small {
   line-height: 1.4;
   text-transform: none;
   letter-spacing: normal;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+/* Applied while fading in (before the first paint) and while dismissing — a tap/scroll
+   anywhere outside the tip removes it smoothly rather than leaving it stuck open. */
+.info-tip-bubble.closing {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .info-tip-bubble { transition: none; }
 }
 
 /* Calendar: week grid */
@@ -1113,6 +1127,58 @@ button.small {
 
 .week-nav-label {
   flex: 1;
+  text-align: center;
+  font-size: 13px;
+}
+
+/* Service Schedule card header: title on the left, minute-bank pill + quick-add + the
+   red close X on the right. */
+.service-sched-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.service-sched-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The red X that replaces the old green expand toggle — only shown while the window is
+   expanded (calendar or week view), signalling how to collapse back to the mini week. */
+.icon-btn.sched-close-x {
+  color: var(--danger);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+@media (hover: hover) {
+  .icon-btn.sched-close-x:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+}
+
+/* Full-width contextual bar under the mini week / week grid / calendar — the only way to
+   move between the Service Schedule views now (no expand button). */
+.schedule-view-bar {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* The calendar rendered inline inside the Service Schedule card rather than as a modal:
+   no width cap or scroll cap, no modal padding — it just flows in the card. */
+.cal-inline {
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .slot-appt {
@@ -1933,43 +1999,6 @@ button.small {
   gap: 8px;
 }
 
-/* Small floating menu opened from a gear icon (auxiliary-pioneering settings). Anchored
-   to the icon's left edge, extending rightward — the icon typically sits near the left
-   of its row, so a right-anchored menu would overflow off the left edge of the screen. */
-.gear-menu {
-  position: absolute;
-  top: 36px;
-  left: 0;
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  min-width: 200px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: var(--shadow-md);
-  overflow: hidden;
-}
-
-.gear-menu button {
-  background: none;
-  border: none;
-  border-radius: 0;
-  text-align: left;
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-.gear-menu button + button {
-  border-top: 1px solid var(--border);
-}
-
-.gear-menu button.danger {
-  color: var(--danger);
-}
-
 .tip-menu .link-button {
   text-align: center;
 }
@@ -2258,23 +2287,13 @@ button.small {
 /* ============================================================
    Minute bank pill (schedule header)
    ============================================================ */
-/* Lives right in the Add Time card's header now (next to the collapse toggle) so the
-   fly-to-bank animation travels a short, sensible distance from the Save button. */
-.add-time-header-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+/* Lives in the Service Schedule card header now (see .service-sched-header). The fly-to-
+   bank animation re-reads the pill's live position each frame, so a quick-log from any
+   day tap travels to it wherever it sits. */
 
-.add-time-header-row .collapse-header {
-  width: auto;
-  flex: 1;
-  min-width: 0;
-}
-
-/* A zero-size marker sitting exactly where the pill will render (see the JSX — it's the
-   first child of .add-time-header-row, same as the pill) so the very first coin ever
-   banked has a precise, stable flight target even before the pill exists. */
+/* A zero-size marker sitting exactly where the pill will render (first child of the header
+   right group, same as the pill) so the very first coin ever banked has a precise, stable
+   flight target even before the pill exists. */
 .minute-bank-anchor {
   width: 1px;
   height: 1px;

@@ -120,10 +120,17 @@ export interface SchedulePrefs {
       someone answers "just this day" instead of "repeat weekly". A date present here
       completely shadows that date's weekly daySchedule entry. */
   dateOverrides?: Record<string, DayScheduleBlock[]>
-  /** Non-pioneers only — an optional self-set goal. Choosing monthly or yearly turns on
-      real hour tracking (daysOut/weeklyHours/yearlyHours) for them, same as a pioneer's,
-      just measured against their own goal instead of the fixed 600h/year. */
-  goalPeriod?: 'none' | 'monthly' | 'yearly'
+  /** Non-pioneers only — an optional self-set goal. Choosing weekly, monthly, or yearly
+      turns on real hour tracking (daysOut/weeklyHours/yearlyHours) for them, same as a
+      pioneer's, just measured against their own goal instead of the fixed 600h/year. The
+      period decides which progress bar leads and which figure the goal-amount prompt
+      collects. */
+  goalPeriod?: 'none' | 'weekly' | 'monthly' | 'yearly'
+  /** Non-pioneers with a `monthly` goal — the monthly hour figure they entered directly
+      (rather than one derived from a weekly target). Absent for every other goalPeriod;
+      `weeklyHours` is still kept in sync (monthly ÷ 4.3) so week-schedule planning and the
+      calendar goal rings have a weekly number to size against. */
+  monthlyHours?: number
 }
 
 /** Why a house is worth flagging on a return pass — kept deliberately small. 'none' is the

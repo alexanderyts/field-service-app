@@ -313,23 +313,58 @@ async function clearWeekSchedule(prefs: SchedulePrefs, weekStartDate: Date) {
   await db.schedulePrefs.update(prefs.id, { dateOverrides: nextOverrides })
 }
 
-/** A tappable (i) icon that reveals a short explanation on demand instead of it sitting
-    permanently on screen — the blur-then-timeout dismiss mirrors ContactPicker's own
-    tap-away dismissal below, rather than adding a new document-click-listener pattern. */
+/** A tappable (i) icon that reveals a short explanation on demand. On touch, `onBlur`
+    never fires reliably, so the bubble used to stay stuck open through scrolls and taps
+    elsewhere. Instead it now smoothly fades out the moment the user interacts anywhere
+    outside it — a tap/press, a scroll, or a resize — while still toggling shut if the (i)
+    itself is tapped again. `open` keeps it mounted; `visible` drives the CSS fade so the
+    bubble animates away rather than vanishing. */
 function InfoTip({ text }: { text: string }) {
   const [open, setOpen] = useState(false)
+  const [visible, setVisible] = useState(false)
+  const wrapRef = useRef<HTMLSpanElement>(null)
+  const closeTimer = useRef<number | null>(null)
+
+  function beginClose() {
+    setVisible(false)
+    if (closeTimer.current) window.clearTimeout(closeTimer.current)
+    closeTimer.current = window.setTimeout(() => setOpen(false), 200)
+  }
+
+  function toggle() {
+    if (closeTimer.current) window.clearTimeout(closeTimer.current)
+    if (open) { beginClose(); return }
+    setOpen(true)
+    // Mount first, then flip visible on the next frame so the fade-in transition runs.
+    requestAnimationFrame(() => setVisible(true))
+  }
+
+  useEffect(() => {
+    if (!open) return
+    function onOutside(e: Event) {
+      // A tap/press inside the tip (the icon or the bubble) shouldn't dismiss it; scroll
+      // and resize always do, since the anchored bubble would otherwise drift off-target.
+      if (e.type === 'pointerdown' && wrapRef.current?.contains(e.target as Node)) return
+      beginClose()
+    }
+    document.addEventListener('pointerdown', onOutside, true)
+    window.addEventListener('scroll', onOutside, true)
+    window.addEventListener('resize', onOutside)
+    return () => {
+      document.removeEventListener('pointerdown', onOutside, true)
+      window.removeEventListener('scroll', onOutside, true)
+      window.removeEventListener('resize', onOutside)
+    }
+  }, [open])
+
+  useEffect(() => () => { if (closeTimer.current) window.clearTimeout(closeTimer.current) }, [])
+
   return (
-    <span className="info-tip">
-      <button
-        type="button"
-        className="info-tip-btn"
-        onClick={() => setOpen((o) => !o)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        aria-label="More info"
-      >
+    <span className="info-tip" ref={wrapRef}>
+      <button type="button" className="info-tip-btn" onClick={toggle} aria-label="More info">
         ⓘ
       </button>
-      {open && <span className="info-tip-bubble" role="tooltip">{text}</span>}
+      {open && <span className={`info-tip-bubble${visible ? '' : ' closing'}`} role="tooltip">{text}</span>}
     </span>
   )
 }
@@ -376,7 +411,12 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
   // Once the person types into "hours per week" directly, stop overwriting it whenever
   // the yearly goal changes — otherwise their manual edit would keep getting clobbered.
   const [weeklyTouched, setWeeklyTouched] = useState(!!existing)
-  const [goalPeriod, setGoalPeriod] = useState<'none' | 'monthly' | 'yearly'>(existing?.goalPeriod ?? 'none')
+  const [goalPeriod, setGoalPeriod] = useState<'none' | 'weekly' | 'monthly' | 'yearly'>(existing?.goalPeriod ?? 'none')
+  // A directly-entered monthly figure, only used when goalPeriod === 'monthly'. Seeded from
+  // an existing monthly goal, else from whatever the weekly target implies (×4.3).
+  const [monthlyHours, setMonthlyHours] = useState(() =>
+    String(existing?.monthlyHours ?? (Math.round((existing?.weeklyHours ?? 0) * 4.3) || 40))
+  )
 
   function handleYearlyChange(v: string) {
     setYearlyHours(v)
@@ -413,14 +453,22 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
 
   async function save() {
     if (isPioneer == null) return
+    // A weekly figure is always stored (it sizes the calendar goal rings and the
+    // week-schedule planning line). For a monthly goal it's derived from the entered
+    // monthly figure (÷4.3); otherwise it's the weekly field directly.
+    const effectiveWeekly =
+      !collectsSchedule ? 0
+      : isPioneer === false && goalPeriod === 'monthly' ? Math.round(((Number(monthlyHours) || 0) / 4.3) * 10) / 10
+      : Number(weeklyHours) || 0
     const record: Omit<SchedulePrefs, 'id'> = {
       completedSurvey: true,
       isPioneer,
       daysOut: collectsSchedule ? daysOut : [],
       daySchedule: collectsSchedule ? daySchedule : {},
-      weeklyHours: collectsSchedule ? Number(weeklyHours) || 0 : 0,
+      weeklyHours: effectiveWeekly,
       yearlyHours: isPioneer || goalPeriod === 'yearly' ? Number(yearlyHours) || 0 : 0,
       goalPeriod: isPioneer ? 'none' : goalPeriod,
+      monthlyHours: !isPioneer && goalPeriod === 'monthly' ? Number(monthlyHours) || 0 : undefined,
     }
     // Non-pioneers never count credit hours; pioneers answered the question above.
     localStorage.setItem('fieldservice_credit_hours', isPioneer && creditYes ? 'yes' : 'no')
@@ -471,6 +519,7 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
           </h4>
           <div className="row">
             <button className={goalPeriod === 'none' ? '' : 'secondary'} onClick={() => setGoalPeriod('none')}>No goal</button>
+            <button className={goalPeriod === 'weekly' ? '' : 'secondary'} onClick={() => setGoalPeriod('weekly')}>Weekly</button>
             <button className={goalPeriod === 'monthly' ? '' : 'secondary'} onClick={() => setGoalPeriod('monthly')}>Monthly</button>
             <button className={goalPeriod === 'yearly' ? '' : 'secondary'} onClick={() => setGoalPeriod('yearly')}>Yearly</button>
           </div>
@@ -521,19 +570,44 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
 
       {readyToShowRest && isPioneer === false && goalPeriod !== 'none' && (
         <div className="card">
-          <h4>How much time do you want each week?</h4>
+          <h4>
+            {goalPeriod === 'weekly'
+              ? 'How much time do you want each week?'
+              : goalPeriod === 'monthly'
+                ? 'How much time do you want each month?'
+                : 'How much time do you want for the year?'}
+          </h4>
           <div className="field-row">
-            {goalPeriod === 'yearly' && (
+            {goalPeriod === 'weekly' && (
               <label className="field">
-                <span className="field-label">Yearly goal (hrs)</span>
-                <input type="number" min="0" value={yearlyHours} onChange={(e) => handleYearlyChange(e.target.value)} />
+                <span className="field-label">Hours per week</span>
+                <input type="number" min="0" value={weeklyHours} onChange={(e) => handleWeeklyChange(e.target.value)} />
               </label>
             )}
-            <label className="field">
-              <span className="field-label">Hours per week</span>
-              <input type="number" min="0" value={weeklyHours} onChange={(e) => handleWeeklyChange(e.target.value)} />
-            </label>
+            {goalPeriod === 'monthly' && (
+              <label className="field">
+                <span className="field-label">Hours per month</span>
+                <input type="number" min="0" value={monthlyHours} onChange={(e) => setMonthlyHours(e.target.value)} />
+              </label>
+            )}
+            {goalPeriod === 'yearly' && (
+              <>
+                <label className="field">
+                  <span className="field-label">Yearly goal (hrs)</span>
+                  <input type="number" min="0" value={yearlyHours} onChange={(e) => handleYearlyChange(e.target.value)} />
+                </label>
+                <label className="field">
+                  <span className="field-label">Hours per week</span>
+                  <input type="number" min="0" value={weeklyHours} onChange={(e) => handleWeeklyChange(e.target.value)} />
+                </label>
+              </>
+            )}
           </div>
+          {goalPeriod === 'yearly' && (
+            <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
+              Weekly hours are suggested from your yearly goal — feel free to adjust.
+            </p>
+          )}
         </div>
       )}
 
@@ -579,7 +653,11 @@ function ScheduleMain({
   const thisWeekStartMs = startOfWeek(now).getTime()
 
   const [progressExpanded, setProgressExpanded] = useState(false)
-  const [weekOpen, setWeekOpen] = useState(false)
+  // The Service Schedule window's one view state: the mini-week (collapsed), the inline
+  // month calendar, or the inline week grid. The contextual bars and the header's red X
+  // move between these — replacing the old separate weekOpen flag + full-screen calendar
+  // modal.
+  const [scheduleView, setScheduleView] = useState<'collapsed' | 'calendar' | 'week'>('collapsed')
   const [addOpen, setAddOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
   // When the navigated week straddles a month boundary, this picks which of the two
@@ -593,9 +671,11 @@ function ScheduleMain({
   const [confirmDeleteLogId, setConfirmDeleteLogId] = useState<number | null>(null)
   const [editingLog, setEditingLog] = useState<TimeLog | null>(null)
   const [visibleLogCount, setVisibleLogCount] = useState(4)
-  const [showCalendarView, setShowCalendarView] = useState(false)
   const [dayModalFor, setDayModalFor] = useState<Date | null>(null)
   const [dayModalOriginRect, setDayModalOriginRect] = useState<DOMRect | null>(null)
+  // Which step the day modal opens on — 'menu' for a normal day tap, 'logTime' for the
+  // header's quick "+ Add time" shortcut (which defaults to today).
+  const [dayModalStep, setDayModalStep] = useState<'menu' | 'logTime'>('menu')
   // Set immediately (before the bank write/collect/fly chain even starts) so the modal's
   // other fields can start fading right away — see .time-entry-closing — while the
   // minutes field is left alone to finish its own collect animation. The modal's actual
@@ -618,7 +698,7 @@ function ScheduleMain({
     const targetWeekStart = startOfWeek(new Date(next.date)).getTime()
     setSegmentOverride(null)
     setWeekOffset(Math.round((targetWeekStart - thisWeekStartMs) / (7 * 24 * 60 * 60 * 1000)))
-    setWeekOpen(true)
+    setScheduleView('week')
     setHighlightTs(next.date)
   }
 
@@ -636,7 +716,7 @@ function ScheduleMain({
   // Whether TODAY (not whatever week is navigated below) is a month this non-pioneer is
   // auxiliary pioneering — decides whether Add Time or the simple monthly checkbox shows.
   const currentlyAux = !isPioneer && isAuxMonth(auxConfig, now.getFullYear(), now.getMonth())
-  const nonPioneerTracksHours = !isPioneer && (prefs.goalPeriod === 'monthly' || prefs.goalPeriod === 'yearly' || currentlyAux)
+  const nonPioneerTracksHours = !isPioneer && (prefs.goalPeriod === 'weekly' || prefs.goalPeriod === 'monthly' || prefs.goalPeriod === 'yearly' || currentlyAux)
 
   // Hours still needed THIS week to hit the current month's auxiliary target by month
   // end, given what's already logged — recomputed fresh on every render from real
@@ -801,7 +881,13 @@ function ScheduleMain({
   // (since non-pioneers don't have one) an aux-pioneering non-pioneer's configured weekly
   // hours. Used to size the calendar view's per-day goal rings and judge week-completion;
   // 0 when neither applies, since a goal-less week has nothing to measure against.
-  const effectiveWeeklyGoalMin = isPioneer ? weeklyGoalMin : auxConfig.enabled ? auxConfig.weeklyHours * 60 : 0
+  const effectiveWeeklyGoalMin = isPioneer
+    ? weeklyGoalMin
+    : auxConfig.enabled
+      ? auxConfig.weeklyHours * 60
+      : prefs.goalPeriod === 'weekly'
+        ? weeklyGoalMin
+        : 0
   const primaryServiceYear = serviceYearLabel(new Date(primaryMonth.year, primaryMonth.month, 1))
   const yearProgress = (() => {
     const label = primaryServiceYear
@@ -888,6 +974,16 @@ function ScheduleMain({
 
   function dayDateFor(day: number): Date {
     return new Date(weekStartMs + day * 24 * 60 * 60 * 1000)
+  }
+
+  // Opens the shared day-action modal, capturing the tapped element's rect so it can morph
+  // back down toward it on close. `step` is 'menu' for a normal day tap, 'logTime' for the
+  // header's quick-add shortcut.
+  function openDayModal(date: Date, rect: DOMRect, step: 'menu' | 'logTime' = 'menu') {
+    setDayModalOriginRect(rect)
+    setDayModalClosing(false)
+    setDayModalStep(step)
+    setDayModalFor(date)
   }
 
   // Whether a day in the navigated week falls in the month the progress card is
@@ -1039,6 +1135,45 @@ function ScheduleMain({
             </div>
             <HourGoalBar appliedMin={weekTotal} goalMin={auxWeeklyGoalMin} />
           </div>
+        ) : prefs.goalPeriod === 'weekly' ? (
+          <div>
+            <div className="goal-row">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {weekOffset === 0 ? 'This week' : `Week of ${fmtDayMonth(weekStartMs)}`}
+                <InfoTip text="Hours logged this week toward your weekly goal." />
+              </span>
+              <strong>{fmtDuration(weekTotal)} / {fmtDuration(weeklyGoalMin)}</strong>
+            </div>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: `${weeklyGoalMin ? Math.min(100, (weekTotal / weeklyGoalMin) * 100) : 0}%` }} />
+            </div>
+          </div>
+        ) : prefs.goalPeriod === 'monthly' ? (
+          <div>
+            <div className="goal-row">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {MONTH_NAMES_LONG[monthProgress.month]}
+                <InfoTip text="Hours logged this month toward your monthly goal." />
+              </span>
+              <strong>{fmtDuration(monthProgress.applied)} / {fmtDuration(monthProgress.goalMin)}</strong>
+            </div>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: `${monthProgress.pct}%` }} />
+            </div>
+          </div>
+        ) : prefs.goalPeriod === 'yearly' ? (
+          <div>
+            <div className="goal-row">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                Service year <span className="muted" style={{ fontSize: 11 }}>({serviceYearRangeLabel(yearProgress.label)})</span>
+                <InfoTip text="Hours logged this service year toward your yearly goal." />
+              </span>
+              <strong>{fmtDuration(yearProgress.applied)} / {fmtDuration(yearlyGoalMin)}</strong>
+            </div>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: `${yearProgress.pct}%` }} />
+            </div>
+          </div>
         ) : (
           <div>
             <div className="goal-row">
@@ -1139,76 +1274,101 @@ function ScheduleMain({
         )}
       </div>
 
-      {/* Collapsible week view, with navigation between weeks */}
+      {/* Service Schedule — mini week (collapsed), inline month calendar, or inline week grid */}
       <div className="card">
-        <h4 style={{ margin: 0 }}>Weekly Schedule</h4>
+        <div className="service-sched-header">
+          <h4 style={{ margin: 0 }}>Service Schedule</h4>
+          <div className="service-sched-header-right">
+            {/* The minute bank now lives here (moved off the old Add Time card). The fly
+                animation re-reads this pill/anchor's live position each frame, so quick-logs
+                land here automatically. */}
+            <span className="minute-bank-anchor" aria-hidden="true" />
+            {(displayedBank > 0 || bankCollapsing) && (
+              <div
+                className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
+                onClick={() => setConfirmBankRoundUp(true)}
+                title="Tap to round up and add now"
+              >
+                <span>⏱ {displayedBank}m</span>
+                <div className="minute-bank-track">
+                  <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
+                </div>
+              </div>
+            )}
+            {(isPioneer || nonPioneerTracksHours) && (
+              <button
+                className="secondary small"
+                title="Log service time for today"
+                onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
+              >
+                + Add time
+              </button>
+            )}
+            {scheduleView !== 'collapsed' && (
+              <button className="icon-btn sched-close-x" title="Close" onClick={() => setScheduleView('collapsed')}>×</button>
+            )}
+          </div>
+        </div>
         <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
           Your scheduled ministry days and times, plus anything already logged this week.
         </p>
-        {weeklyGoalMin > 0 && (
-          <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
-            Planned this week: {fmtDuration(suggestedWeeklyMin)} / {fmtDuration(weeklyGoalMin)} goal
-            {suggestedWeeklyMin >= weeklyGoalMin
-              ? ' — 🎉 goal covered!'
-              : ` — ${fmtDuration(weeklyGoalMin - suggestedWeeklyMin)} more to schedule`}
-          </p>
-        )}
-        <div className="week-nav">
-          <button
-            className="icon-btn"
-            onClick={(e) => {
-              e.stopPropagation()
-              goPrevWeek()
-            }}
-            title="Previous"
-          >
-            ‹
-          </button>
-          <button className="collapse-header week-nav-label" onClick={() => setWeekOpen((o) => !o)}>
-            <span>
-              <strong>
-                {segmentEndMs - segmentStartMs <= 24 * 60 * 60 * 1000
-                  ? fmtDayMonthFull(segmentStartMs)
-                  : `${fmtDayMonth(segmentStartMs)} – ${fmtDayMonth(segmentEndMs - 86400000)}`}
-              </strong>
-              <span className="muted"> · Week {calendarWeekNumber(weekStartMs)}</span>
-              {weekOffset === 0 && segment === defaultSegment && <span className="muted"> · This week</span>}
-            </span>
-            <span className="chevron">{weekOpen ? '▾' : '▸'}</span>
-          </button>
-          <button
-            className="icon-btn"
-            onClick={(e) => {
-              e.stopPropagation()
-              goNextWeek()
-            }}
-            title="Next"
-          >
-            ›
-          </button>
-        </div>
 
-        {!weekOpen ? (
-          <div className="week-mini">
-            {DAYS.map((d, i) => {
-              const isService = blocksForDate(prefs, dayDateFor(i)).length > 0
-              const logged = Object.values(perDayCat[i]).reduce((a, b) => a + b, 0)
-              const hasVisit = perDayAppointments[i].length > 0
-              return (
-                <div
-                  key={i}
-                  className={`mini-day${isService ? ' service' : ''}${logged > 0 ? ' done' : ''}${isDayInShownMonth(i) ? '' : ' faded'}`}
-                  onClick={() => setWeekOpen(true)}
-                  style={{ cursor: 'pointer' }}
-                  title={isDayInShownMonth(i) ? undefined : `Part of ${MONTH_NAMES_LONG[dayDateFor(i).getMonth()]} — not the month shown above`}
-                >
-                  {d[0]}
-                  {hasVisit && <span className="mini-day-dot" title="Return visit scheduled" />}
-                </div>
-              )
-            })}
-          </div>
-        ) : (
+        {scheduleView !== 'calendar' && (
+          <>
+            {weeklyGoalMin > 0 && (
+              <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
+                Planned this week: {fmtDuration(suggestedWeeklyMin)} / {fmtDuration(weeklyGoalMin)} goal
+                {suggestedWeeklyMin >= weeklyGoalMin
+                  ? ' — 🎉 goal covered!'
+                  : ` — ${fmtDuration(weeklyGoalMin - suggestedWeeklyMin)} more to schedule`}
+              </p>
+            )}
+            <div className="week-nav">
+              <button className="icon-btn" onClick={goPrevWeek} title="Previous">‹</button>
+              <div className="week-nav-label">
+                <span>
+                  <strong>
+                    {segmentEndMs - segmentStartMs <= 24 * 60 * 60 * 1000
+                      ? fmtDayMonthFull(segmentStartMs)
+                      : `${fmtDayMonth(segmentStartMs)} – ${fmtDayMonth(segmentEndMs - 86400000)}`}
+                  </strong>
+                  <span className="muted"> · Week {calendarWeekNumber(weekStartMs)}</span>
+                  {weekOffset === 0 && segment === defaultSegment && <span className="muted"> · This week</span>}
+                </span>
+              </div>
+              <button className="icon-btn" onClick={goNextWeek} title="Next">›</button>
+            </div>
+          </>
+        )}
+
+        {scheduleView === 'collapsed' && (
+          <>
+            <div className="week-mini">
+              {DAYS.map((d, i) => {
+                const isService = blocksForDate(prefs, dayDateFor(i)).length > 0
+                const logged = Object.values(perDayCat[i]).reduce((a, b) => a + b, 0)
+                const hasVisit = perDayAppointments[i].length > 0
+                return (
+                  <div
+                    key={i}
+                    className={`mini-day${isService ? ' service' : ''}${logged > 0 ? ' done' : ''}${isDayInShownMonth(i) ? '' : ' faded'}`}
+                    onClick={(e) => openDayModal(dayDateFor(i), e.currentTarget.getBoundingClientRect())}
+                    style={{ cursor: 'pointer' }}
+                    title={isDayInShownMonth(i) ? undefined : `Part of ${MONTH_NAMES_LONG[dayDateFor(i).getMonth()]} — not the month shown above`}
+                  >
+                    {d[0]}
+                    {hasVisit && <span className="mini-day-dot" title="Return visit scheduled" />}
+                  </div>
+                )
+              })}
+            </div>
+            <button className="secondary schedule-view-bar" data-tutorial="calendar-view-btn" onClick={() => setScheduleView('calendar')}>
+              📅 See calendar view
+            </button>
+          </>
+        )}
+
+        {scheduleView === 'week' && (
           <>
             {(weekOffset !== 0 || segment !== defaultSegment) && (
               <button className="secondary small" onClick={() => { goToWeekOffset(0); setHighlightTs(null) }}>
@@ -1239,7 +1399,7 @@ function ScheduleMain({
                   <div
                     key={i}
                     className={`day-row${isToday ? ' today' : ''}${isHighlighted ? ' jump-highlight' : ''}${inShownMonth ? '' : ' faded'}`}
-                    onClick={(e) => { setDayModalOriginRect(e.currentTarget.getBoundingClientRect()); setDayModalClosing(false); setDayModalFor(dayDate) }}
+                    onClick={(e) => openDayModal(dayDate, e.currentTarget.getBoundingClientRect())}
                     style={{ cursor: 'pointer' }}
                     title={inShownMonth ? undefined : `Part of ${MONTH_NAMES_LONG[dayDate.getMonth()]} — not the month shown above`}
                   >
@@ -1301,44 +1461,33 @@ function ScheduleMain({
               ))}
               <span><i className="sw appt" /> Return Visit</span>
             </div>
-            <button className="secondary small" data-tutorial="calendar-view-btn" onClick={() => setShowCalendarView(true)}>
+            <button className="secondary schedule-view-bar" onClick={() => setScheduleView('calendar')}>
               📅 See calendar view
             </button>
           </>
         )}
+
+        {scheduleView === 'calendar' && (
+          <ScheduleCalendarView
+            prefs={prefs}
+            appointments={appointments}
+            logs={logs}
+            people={people}
+            onGoToContact={onGoToContact}
+            weeklyGoalMin={effectiveWeeklyGoalMin}
+            onSaveBlocks={saveDayBlocks}
+            onRemoveDay={removeDaySchedule}
+            onClearAllDays={clearAllSuggestedDays}
+            onLogTime={quickLogTime}
+            onClearWeek={(weekStart) => clearWeekSchedule(prefs, weekStart)}
+            onSeeWeeklyView={() => setScheduleView('week')}
+          />
+        )}
       </div>
 
-      {showCalendarView && (
-        <ScheduleCalendarView
-          prefs={prefs}
-          appointments={appointments}
-          logs={logs}
-          people={people}
-          onGoToContact={onGoToContact}
-          weeklyGoalMin={effectiveWeeklyGoalMin}
-          onSaveBlocks={saveDayBlocks}
-          onRemoveDay={removeDaySchedule}
-          onClearAllDays={clearAllSuggestedDays}
-          onLogTime={quickLogTime}
-          onClearWeek={(weekStart) => clearWeekSchedule(prefs, weekStart)}
-          onClose={() => setShowCalendarView(false)}
-          onSeeWeeklyView={() => { setShowCalendarView(false); goToWeekOffset(0) }}
-        />
-      )}
-
-      {/* Collapsible add time — pioneers and hours-tracking non-pioneers log hours;
-          everyone else just checks a single box off once a month */}
-      {isPioneer || nonPioneerTracksHours ? (
-        <AddTime
-          open={addOpen}
-          onToggle={() => setAddOpen((o) => !o)}
-          onAdded={() => setAddOpen(false)}
-          displayedBank={displayedBank}
-          bankCollapsing={bankCollapsing}
-          onTapBank={() => setConfirmBankRoundUp(true)}
-          onBankIncrease={(before, after) => animateBankValue(before, after, 480, setDisplayedBank)}
-        />
-      ) : (
+      {/* Non-pioneers not tracking hours just check a single box off once a month; everyone
+          who tracks hours logs via day taps (or the header's "+ Add time" shortcut). */}
+      {!isPioneer && !nonPioneerTracksHours && (
         <MonthlyParticipationBox
           open={addOpen}
           onToggle={() => setAddOpen((o) => !o)}
@@ -1411,6 +1560,7 @@ function ScheduleMain({
           onLogTime={(h, m, category, otherNote, originEl) => quickLogTime(dayModalFor, h, m, category, otherNote, originEl)}
           onClose={closeDayModalSmoothly}
           closing={dayModalClosing}
+          initialStep={dayModalStep}
         />
       )}
 
@@ -1689,6 +1839,7 @@ function DayActionModal({
   onLogTime,
   onClose,
   closing,
+  initialStep = 'menu',
 }: {
   date: Date
   isSuggestedDay: boolean
@@ -1704,6 +1855,7 @@ function DayActionModal({
   onLogTime: (hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
   onClose: () => void
   closing: boolean
+  initialStep?: 'menu' | 'logTime'
 }) {
   const dayLabel = DAY_NAMES_FULL[date.getDay()]
   const dateLabel = date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -1713,7 +1865,7 @@ function DayActionModal({
   const dayAppt = appointments.find((a) => fmtLocalDate(new Date(a.date)) === fmtLocalDate(date)) ?? null
   const [editingAppt, setEditingAppt] = useState(false)
   const [confirmDeleteAppt, setConfirmDeleteAppt] = useState(false)
-  const [step, setStep] = useState<'menu' | 'window' | 'logTime' | 'dayOptions'>('menu')
+  const [step, setStep] = useState<'menu' | 'window' | 'logTime' | 'dayOptions'>(initialStep)
   const [blocks, setBlocks] = useState<EditableBlock[]>(() =>
     (currentBlocks.length ? currentBlocks : [{ start: 9 * 60, end: 15 * 60, category: 'ministry' as TimeCategory }]).map(
       (b) => ({ start: minutesToTimeInput(b.start), end: minutesToTimeInput(b.end), category: b.category })
@@ -2020,64 +2172,6 @@ function saveMinuteBank(v: number) { localStorage.setItem('fieldservice_minute_b
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DOW_SHORT = ['S','M','T','W','T','F','S']
 
-function CalendarPicker({ value, onChange, onClose }: { value: string; onChange: (v: string) => void; onClose: () => void }) {
-  const today = new Date()
-  const [vy, vm, vd] = value.split('-').map(Number) // selected Y, M(1-based), D
-  const [viewYear, setViewYear] = useState(vy)
-  const [viewMonth, setViewMonth] = useState(vm - 1) // 0-indexed
-
-  function prevMonth() {
-    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11) }
-    else setViewMonth(m => m - 1)
-  }
-  function nextMonth() {
-    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0) }
-    else setViewMonth(m => m + 1)
-  }
-
-  function selectDay(day: number) {
-    const str = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    onChange(str)
-    onClose()
-  }
-
-  const startDow = new Date(viewYear, viewMonth, 1).getDay()
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
-  const cells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
-
-  return (
-    <ModalPortal>
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal cal-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="cal-header">
-          <button className="icon-btn" onClick={prevMonth}>‹</button>
-          <strong>{MONTH_NAMES[viewMonth]} {viewYear}</strong>
-          <button className="icon-btn" onClick={nextMonth}>›</button>
-        </div>
-        <div className="cal-grid">
-          {DOW_SHORT.map((h, i) => <span key={i} className="cal-dow">{h}</span>)}
-          {cells.map((day, i) =>
-            day === null ? <span key={`e${i}`} /> : (
-              <button
-                key={day}
-                className={[
-                  'cal-day',
-                  day === vd && viewMonth === vm - 1 && viewYear === vy ? 'selected' : '',
-                  day === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear() ? 'today' : '',
-                ].filter(Boolean).join(' ')}
-                onClick={() => selectDay(day)}
-              >
-                {day}
-              </button>
-            )
-          )}
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
-  )
-}
-
 // ── Read-only schedule calendar view (suggested days + return visits) ────────
 const RING_SIZE = 32
 const RING_STROKE = 2.5
@@ -2096,7 +2190,6 @@ function ScheduleCalendarView({
   onClearAllDays,
   onLogTime,
   onClearWeek,
-  onClose,
   onSeeWeeklyView,
 }: {
   prefs: SchedulePrefs
@@ -2110,7 +2203,6 @@ function ScheduleCalendarView({
   onClearAllDays: () => void
   onLogTime: (date: Date, hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
   onClearWeek: (weekStart: Date) => void
-  onClose: () => void
   onSeeWeeklyView: () => void
 }) {
   const today = new Date()
@@ -2234,9 +2326,8 @@ function ScheduleCalendarView({
   }
 
   return (
-    <ModalPortal>
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal cal-modal cal-modal-view" onClick={(e) => e.stopPropagation()}>
+    <>
+      <div className="cal-inline cal-modal cal-modal-view">
         <div className="cal-header">
           <button className="icon-btn" onClick={prevMonth}>‹</button>
           <strong>{MONTH_NAMES[viewMonth]} {viewYear}</strong>
@@ -2354,12 +2445,8 @@ function ScheduleCalendarView({
           </div>
         )}
 
-        <div className="row">
-          <button className="secondary" onClick={onSeeWeeklyView}>See weekly view</button>
-          <button className="secondary" onClick={onClose}>Close</button>
-        </div>
+        <button className="secondary schedule-view-bar" onClick={onSeeWeeklyView}>See week view</button>
       </div>
-    </div>
 
     {tapDate && (
       <DayActionModal
@@ -2393,7 +2480,7 @@ function ScheduleCalendarView({
       }}
       onCancel={() => setConfirmClearWeek(null)}
     />
-    </ModalPortal>
+    </>
   )
 }
 
@@ -2430,237 +2517,6 @@ function NumPad({ initialValue, label, max, onConfirm, onClose }: {
       </div>
     </div>
     </ModalPortal>
-  )
-}
-
-function AddTime({
-  open,
-  onToggle,
-  onAdded,
-  displayedBank,
-  bankCollapsing,
-  onTapBank,
-  onBankIncrease,
-}: {
-  open: boolean
-  onToggle: () => void
-  onAdded: () => void
-  displayedBank: number
-  bankCollapsing: boolean
-  onTapBank: () => void
-  onBankIncrease: (before: number, after: number) => Promise<void>
-}) {
-  const [date, setDate] = useState(() => fmtLocalDate(new Date()))
-  const [hours, setHours] = useState('0')
-  const [minutes, setMinutes] = useState('0')
-  const [category, setCategory] = useState<TimeCategory>('ministry')
-  const [otherNote, setOtherNote] = useState('')
-  const [note, setNote] = useState('')
-  const [showCal, setShowCal] = useState(false)
-  const [numPad, setNumPad] = useState<'hours' | 'minutes' | null>(null)
-  const [showRoundUp, setShowRoundUp] = useState(false)
-  // Set the instant a save starts, independent of (and ahead of) the `open` prop actually
-  // flipping false — lets the card start minimizing immediately, concurrent with the
-  // minutes field's own collect animation, instead of waiting for everything (bank writes,
-  // the fly animation, db saves) to finish first.
-  const [closing, setClosing] = useState(false)
-  const minutesBtnRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    // Re-sync whenever the panel opens — AddTime never unmounts, so without this a stale
-    // manual edit from a prior open would still be showing the next time it's reopened.
-    if (open) { setDate(fmtLocalDate(new Date())); setClosing(false) }
-  }, [open])
-
-  const creditEnabled = localStorage.getItem('fieldservice_credit_hours') === 'yes'
-  const availableCats: TimeCategory[] = creditEnabled
-    ? ['ministry', 'ldc', 'hlc', 'convention', 'assembly', 'bethel', 'other']
-    : ['ministry', 'other']
-
-  // Reset to ministry if current category isn't visible
-  const effectiveCategory = availableCats.includes(category) ? category : 'ministry'
-
-  const parsedDate = parseLocalDate(date)
-  const displayDate = parsedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
-
-  async function commitSave(totalMin: number) {
-    if (totalMin <= 0) return
-    setClosing(true)
-    const d = parseLocalDate(date)
-    d.setHours(12, 0, 0, 0)
-    const finalNote = (effectiveCategory === 'other' && otherNote.trim()) ? otherNote.trim() : (note || undefined)
-    await db.timeLogs.add({ date: d.getTime(), minutes: totalMin, category: effectiveCategory, note: finalNote } as TimeLog)
-    setHours('0'); setMinutes('0'); setNote(''); setOtherNote('')
-    onAdded()
-  }
-
-  async function handleRoundUpYes() {
-    setShowRoundUp(false)
-    await commitSave((Number(hours) + 1) * 60)
-  }
-
-  // Banks the leftover minutes (localStorage) and saves the whole-hours part, if any. The
-  // card closes right away — collapsing at the same moment the minutes field starts
-  // gathering into the ball, instead of waiting for the whole flight (and the db writes
-  // after it) to finish first. The ball itself is a separate fixed-position element
-  // appended once the field finishes gathering, so it's entirely unaffected by the card
-  // closing around it and keeps flying on its own toward the bank after the card is
-  // already gone — everything closes fast, the flight and the bank update just keep going
-  // in the background.
-  async function bankMinutesAndSave(h: number, m: number) {
-    // Compute new bank and save BEFORE any await that might trigger re-render
-    const before = getMinuteBank()
-    let bank = before + m
-    const autoHour = bank >= 60
-    if (autoHour) bank -= 60
-    saveMinuteBank(bank)
-
-    setClosing(true)
-    onAdded()
-
-    await collectAndFlyToMinuteBank(minutesBtnRef.current)
-    await onBankIncrease(before, bank)
-
-    if (autoHour) {
-      const d = parseLocalDate(date)
-      d.setHours(12, 0, 0, 0)
-      await db.timeLogs.add({ date: d.getTime(), minutes: 60, category: effectiveCategory, note: 'Added from minute bank' } as TimeLog)
-    }
-    if (h > 0) {
-      const d = parseLocalDate(date)
-      d.setHours(12, 0, 0, 0)
-      const finalNote = (effectiveCategory === 'other' && otherNote.trim()) ? otherNote.trim() : (note || undefined)
-      await db.timeLogs.add({ date: d.getTime(), minutes: h * 60, category: effectiveCategory, note: finalNote } as TimeLog)
-    }
-    setHours('0'); setMinutes('0'); setNote(''); setOtherNote('')
-  }
-
-  async function handleRoundUpNo() {
-    setShowRoundUp(false)
-    await bankMinutesAndSave(Number(hours), Number(minutes))
-  }
-
-  function handleSave() {
-    const h = Number(hours)
-    const m = Number(minutes)
-    if (h === 0 && m === 0) return
-    if (m === 0) { commitSave(h * 60); return }
-    if (m >= 30) { setShowRoundUp(true); return }
-    // 1–29 leftover minutes are banked automatically, no need to ask.
-    bankMinutesAndSave(h, m)
-  }
-
-  return (
-    <>
-      <div className="card">
-        <div className="add-time-header-row">
-          {/* Pill sits on the opposite side from the collapse toggle (+/×), which lives
-              at the far right of the button below — keeping distance between them avoids
-              accidentally tapping the pill while reaching for the toggle. The anchor marks
-              exactly where the pill will render, so the very first fly-to-bank animation
-              (before any pill exists) still has a precise, stable target. */}
-          <span className="minute-bank-anchor" aria-hidden="true" />
-          {(displayedBank > 0 || bankCollapsing) && (
-            <div
-              className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
-              onClick={onTapBank}
-              title="Tap to round up and add now"
-            >
-              <span>⏱ {displayedBank}m</span>
-              <div className="minute-bank-track">
-                <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
-              </div>
-            </div>
-          )}
-          <button className="collapse-header" onClick={onToggle}>
-            <strong>Add Time</strong>
-            <span className="add-plus">{open ? '×' : '+'}</span>
-          </button>
-        </div>
-
-        <div className={`collapsible${open ? ' collapsible-open' : ''}`}>
-          <div className="collapsible-inner">
-          <div className={`add-time-body${closing ? ' time-entry-closing' : ''}`}>
-            {/* Date */}
-            <div className="field">
-              <span className="field-label">Date</span>
-              <button className="date-display-btn" onClick={() => setShowCal(true)}>
-                <span>{displayDate}</span>
-                <span>📅</span>
-              </button>
-            </div>
-
-            {/* Hours & Minutes numpad buttons — always side-by-side; these are custom
-                buttons (not native inputs) so they don't need the phone-width stacking
-                that .field-row applies for native date/time overflow. */}
-            <div className="hours-minutes-row">
-              <div className="field">
-                <span className="field-label">Hours</span>
-                <button className="numpad-display-btn" onClick={() => setNumPad('hours')}>{hours}</button>
-              </div>
-              <div className="field">
-                <span className="field-label">Minutes</span>
-                <button ref={minutesBtnRef} className="numpad-display-btn" onClick={() => setNumPad('minutes')}>{minutes}</button>
-              </div>
-            </div>
-
-            {/* Category pills */}
-            <div className="field">
-              <span className="field-label">Category</span>
-              <div className="cat-pills">
-                {availableCats.map(cat => (
-                  <button
-                    key={cat}
-                    className={`chip${effectiveCategory === cat ? ' active' : ''}`}
-                    onClick={() => setCategory(cat)}
-                  >
-                    {CATEGORY_LABELS[cat]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Other: type of ministry */}
-            {effectiveCategory === 'other' && (
-              <label className="field">
-                <span className="field-label">Type of ministry</span>
-                <input value={otherNote} onChange={(e) => setOtherNote(e.target.value)} placeholder="e.g. Letter writing, Cart witnessing…" />
-              </label>
-            )}
-
-            <label className="field">
-              <span className="field-label">Note (optional)</span>
-              <input value={note} onChange={(e) => setNote(e.target.value)} />
-            </label>
-
-            <button onClick={handleSave} disabled={Number(hours) === 0 && Number(minutes) === 0}>
-              Save Entry
-            </button>
-          </div>
-          </div>
-        </div>
-      </div>
-
-      {showCal && <CalendarPicker value={date} onChange={setDate} onClose={() => setShowCal(false)} />}
-
-      {numPad === 'hours' && (
-        <NumPad initialValue={hours} label="Hours" onConfirm={setHours} onClose={() => setNumPad(null)} />
-      )}
-      {numPad === 'minutes' && (
-        <NumPad initialValue={minutes} label="Minutes" max={59} onConfirm={setMinutes} onClose={() => setNumPad(null)} />
-      )}
-
-      <ConfirmDialog
-        open={showRoundUp}
-        title="Round up to the next hour?"
-        message={`You entered ${hours}h ${minutes}m. Round up to ${Number(hours) + 1}h?`}
-        confirmLabel="Yes, round up"
-        cancelLabel="No, bank the minutes"
-        tone="primary"
-        onConfirm={handleRoundUpYes}
-        onCancel={handleRoundUpNo}
-      />
-    </>
   )
 }
 
@@ -2838,25 +2694,13 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
             <button className="secondary small" onClick={() => setConfirmPrepareSlip(true)} disabled={slipBusy}>
               📄 Prepare Auxiliary Slip for Group Overseer
             </button>
-            <div style={{ position: 'relative' }}>
-              <button
-                className="icon-btn"
-                title="Auxiliary pioneering settings"
-                onClick={() => setGearOpen((o) => !o)}
-                onBlur={() => setTimeout(() => setGearOpen(false), 150)}
-              >
-                ⚙️
-              </button>
-              {gearOpen && (
-                <div className="gear-menu">
-                  <button onClick={() => { setGearOpen(false); setConfiguring(true) }}>Adjust Settings</button>
-                  <button onClick={() => { setGearOpen(false); setConfirmPrepareSlip(true) }}>Resend S-205b-E Form</button>
-                  <button className="danger" onClick={() => { setGearOpen(false); setConfirmDiscontinue(true) }}>
-                    Discontinue Auxiliary Pioneering
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              className="icon-btn"
+              title="Auxiliary pioneering settings"
+              onClick={() => setGearOpen(true)}
+            >
+              ⚙️
+            </button>
           </div>
           {slipMsg && <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>{slipMsg}</p>}
         </div>
@@ -2951,6 +2795,26 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
             </>
           )}
         </div>
+      )}
+
+      {gearOpen && (
+        <ModalPortal>
+          <div className="modal-backdrop" onClick={() => setGearOpen(false)}>
+            <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-toolbar">
+                <button className="icon-btn close-x" onClick={() => setGearOpen(false)} title="Close">×</button>
+              </div>
+              <h3 style={{ marginTop: 0 }}>Auxiliary pioneering settings</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button className="secondary" onClick={() => { setGearOpen(false); setConfiguring(true) }}>Adjust Settings</button>
+                <button className="secondary" onClick={() => { setGearOpen(false); setConfirmPrepareSlip(true) }}>Resend S-205b-E Form</button>
+                <button className="danger" onClick={() => { setGearOpen(false); setConfirmDiscontinue(true) }}>
+                  Discontinue Auxiliary Pioneering
+                </button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
       )}
 
       <ConfirmDialog
