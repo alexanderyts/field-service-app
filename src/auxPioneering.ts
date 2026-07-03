@@ -80,11 +80,14 @@ export function remainingWeeksInMonth(today: Date, year: number, month: number):
   if (today > monthEnd) return 0
   const start = today > new Date(year, month, 1) ? today : new Date(year, month, 1)
   let weeks = 0
-  let cursor = startOfWeek(start).getTime()
+  // Step by calendar days (setDate), not a fixed 7×24h in ms — the latter drifts an hour
+  // across a DST transition, which can flip the local-midnight `<=` comparison below and
+  // miscount the weeks left (skewing the weekly-hours target every March/November).
+  const cursor = startOfWeek(start)
   const lastWeekStart = startOfWeek(monthEnd).getTime()
-  while (cursor <= lastWeekStart) {
+  while (cursor.getTime() <= lastWeekStart) {
     weeks++
-    cursor += 7 * 24 * 60 * 60 * 1000
+    cursor.setDate(cursor.getDate() + 7)
   }
   return weeks
 }
