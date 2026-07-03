@@ -5,6 +5,9 @@ import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import { renderStreetsImage } from '../territoryImage'
 import { StreetDetail } from './StreetEntries'
+import ShareModal from './ShareModal'
+import { SharedBadge, SharedWarning } from './SharedBits'
+import { buildTerritoryPayload } from '../share'
 
 /**
  * The Ministry tab's "Territories" view — every street grouping finalized from the Map
@@ -25,6 +28,7 @@ export default function Territories({ onGoToMap }: { onGoToMap?: (lat: number, l
             <div>
               <strong>{t.name}</strong>
               <span className="badge">{t.streets.length} street{t.streets.length === 1 ? '' : 's'}</span>
+              <SharedBadge sharedWith={t.sharedWith} receivedFrom={t.receivedFrom} />
               {t.assignedTo && <div className="muted">👤 Assigned to {t.assignedTo}</div>}
             </div>
           </li>
@@ -57,6 +61,7 @@ function TerritoryDetail({
   const [showImage, setShowImage] = useState(false)
   const [openStreetEntryId, setOpenStreetEntryId] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [showShare, setShowShare] = useState(false)
 
   const image = useMemo(
     () => (territory ? renderStreetsImage(territory.streets, { width: 360, height: 260 }) : null),
@@ -89,7 +94,10 @@ function TerritoryDetail({
           </div>
           <p className="muted contact-line">
             {territory.streets.length} street{territory.streets.length === 1 ? '' : 's'}
+            {' '}<SharedBadge sharedWith={territory.sharedWith} receivedFrom={territory.receivedFrom} />
           </p>
+
+          <SharedWarning sharedWith={territory.sharedWith} />
 
           <label className="field">
             <span className="field-label">Assigned to</span>
@@ -132,10 +140,21 @@ function TerritoryDetail({
           </ul>
 
           <div className="row">
+            <button onClick={() => setShowShare(true)}>↗ Share</button>
             <button className="danger" onClick={() => setConfirmDelete(true)}>Delete Territory</button>
             <button className="secondary" onClick={onClose}>Close</button>
           </div>
         </div>
+
+        {showShare && (
+          <ShareModal
+            kind="territory"
+            recordId={territory.id}
+            itemName={territory.name}
+            buildPayload={(from) => buildTerritoryPayload(territory, from)}
+            onClose={() => setShowShare(false)}
+          />
+        )}
 
         {showImage && (
           <ModalPortal>

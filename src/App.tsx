@@ -7,9 +7,26 @@ import { SplashScreen, PrivacyGate, ProfileGate, hasAcceptedPolicy } from './com
 import { hasSeenProfilePrompt } from './profile'
 import Tutorial, { TutorialPrompt, hasSeenTutorialPrompt, markTutorialPromptSeen } from './components/Tutorial'
 import InstallBanner from './components/InstallPrompt'
+import ImportConfirm from './components/ImportConfirm'
+import { parseImportHash } from './share'
 import { requestPersistentStorage } from './pwaInstall'
 import { checkReturnVisitNotifications } from './notifications'
 import './App.css'
+
+// Read a scanned deep-link (`#i=…`) once, at module load, before React mounts — then strip
+// the hash immediately so a later reload can't re-import the same item. Whatever's captured
+// here is offered as an import (see ImportConfirm) after the app reaches its main phase.
+const initialImport: string | null = (() => {
+  try {
+    const encoded = parseImportHash(window.location.hash)
+    if (encoded) {
+      history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
+    return encoded
+  } catch {
+    return null
+  }
+})()
 
 // Map is the one tab worth deferring — Leaflet alone is ~150KB. The other four are
 // small enough that lazy-loading them just adds a Suspense flash on every switch
@@ -40,6 +57,9 @@ function App() {
   const [phase, setPhase] = useState<Phase>('splash')
   const [showTutorialPrompt, setShowTutorialPrompt] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
+  // A share opened via a scanned deep-link or a picked .meleo file — shown as an import
+  // prompt once the app is fully reached (a brand-new device still gates on policy/name).
+  const [pendingImport, setPendingImport] = useState<string | null>(initialImport)
 
   // The word-transformation animation (see .splash-* in App.css) runs to about 2.05s on its
   // own; hold long enough to let it finish and settle (~450ms rest) before fading out, over
@@ -127,6 +147,7 @@ function App() {
                 openContactId={openContactId}
                 onOpenedContact={() => setOpenContactId(null)}
                 onGoToMap={(lat, lng, personId) => { setMapFocus({ lat, lng, personId }); setTab('map') }}
+                onImportEncoded={setPendingImport}
               />
             )}
             {tab === 'schedule' && (
@@ -144,7 +165,7 @@ function App() {
               />
             )}
             {tab === 'reports' && <Reports />}
-            {tab === 'misc' && <Misc onReplayTutorial={() => setShowTutorial(true)} />}
+            {tab === 'misc' && <Misc onReplayTutorial={() => setShowTutorial(true)} onImportEncoded={setPendingImport} />}
           </div>
         </Suspense>
       </main>
@@ -178,6 +199,8 @@ function App() {
       )}
 
       {showTutorial && <Tutorial currentTab={tab} onNavigate={setTab} onClose={() => setShowTutorial(false)} />}
+
+      {pendingImport && <ImportConfirm encoded={pendingImport} onClose={() => setPendingImport(null)} />}
     </div>
   )
 }

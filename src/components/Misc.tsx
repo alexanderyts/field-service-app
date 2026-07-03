@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { db } from '../db'
 import ConfirmDialog from './ConfirmDialog'
 import { exportBackup, importBackup, type ImportSummary } from '../backup'
+import { readMeleoFile } from '../share'
 import { InstallCard } from './InstallPrompt'
 import { tipServices, type TipKind } from '../tips'
 import { APP_VERSION } from '../version'
@@ -28,7 +29,7 @@ const CREDIT_CAT_LABELS: Record<string, string> = {
   other: 'Other',
 }
 
-export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => void }) {
+export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTutorial: () => void; onImportEncoded?: (encoded: string) => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [legalOpen, setLegalOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
@@ -57,6 +58,7 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
 
   // Backup & restore
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const shareImportInputRef = useRef<HTMLInputElement>(null)
   const [backupBusy, setBackupBusy] = useState(false)
   const [exportMsg, setExportMsg] = useState<string | null>(null)
   const [pendingImport, setPendingImport] = useState<File | null>(null)
@@ -377,6 +379,27 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
         {importError && (
           <p style={{ fontSize: 12, margin: '8px 0 0', color: 'var(--danger)' }}>{importError}</p>
         )}
+
+        <div className="section-divider" />
+        <strong>📥 Import a Shared Item</strong>
+        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
+          Someone shared a contact, street, or territory with you as a <strong>.meleo</strong> file? Open it here.
+          (Most shares are QR codes — just scan those with your camera.)
+        </p>
+        <button className="secondary" onClick={() => shareImportInputRef.current?.click()}>Open a .meleo File</button>
+        <input
+          ref={shareImportInputRef}
+          type="file"
+          accept=".meleo,application/octet-stream,text/plain"
+          style={{ display: 'none' }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0]
+            e.target.value = ''
+            if (file) {
+              try { onImportEncoded?.(await readMeleoFile(file)) } catch { /* ImportConfirm surfaces bad files */ }
+            }
+          }}
+        />
       </div>
 
       {/* ── 4. Guided tour ──────────────────────────────────── */}

@@ -9,6 +9,15 @@ export type ContactStatus =
   | 'do-not-call'
   | 'moved'
 
+/** One end of a share transfer — a person's name plus when it happened. `sharedWith` (on
+    the owner's copy) is a list, appended each time they hand the item to someone; a
+    receiver's copy carries a single `receivedFrom`. Optional/non-indexed, so no Dexie
+    version bump is needed to add these to existing records. */
+export interface ShareRef {
+  name: string
+  at: number
+}
+
 export interface Person {
   id: number
   name: string
@@ -30,6 +39,10 @@ export interface Person {
   /** Freeform notes about the person — anything else worth remembering. */
   notes?: string
   createdAt: number
+  /** Who this contact has been shared with (owner's copy) / who shared it here (receiver's
+      copy) — see ShareRef. */
+  sharedWith?: ShareRef[]
+  receivedFrom?: ShareRef
 }
 
 export interface Call {
@@ -142,6 +155,8 @@ export interface StreetEntry {
   /** Free-text name of whoever this individual street was handed to — not a Person FK,
       just a lightweight note (matches how territory assignment works too). */
   assignedTo?: string
+  sharedWith?: ShareRef[]
+  receivedFrom?: ShareRef
 }
 
 export interface TerritoryStreet {
@@ -168,6 +183,8 @@ export interface Territory {
   grouped?: boolean
   /** Free-text name of whoever this whole territory was handed to. */
   assignedTo?: string
+  sharedWith?: ShareRef[]
+  receivedFrom?: ShareRef
   streets: TerritoryStreet[]
 }
 

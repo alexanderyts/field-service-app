@@ -4,6 +4,9 @@ import { db, compareHouseNumbers, type StreetEntry, type StreetHouse, type House
 import { expandState } from '../usStates'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
+import ShareModal from './ShareModal'
+import { SharedBadge, SharedWarning } from './SharedBits'
+import { buildStreetPayload } from '../share'
 
 /** Best-effort lookup of a traced street matching this Ministry-tab entry by name, across
     every territory (not just the active draft) — used to power a "Jump to Map" action
@@ -86,6 +89,7 @@ export default function StreetEntries({
               <div>
                 <strong>{e.name}</strong>
                 <span className="badge">{e.houses.length} house{e.houses.length === 1 ? '' : 's'}</span>
+                <SharedBadge sharedWith={e.sharedWith} receivedFrom={e.receivedFrom} />
                 <div className="muted">{address || 'No city/zip'}</div>
               </div>
             </li>
@@ -147,6 +151,7 @@ function StreetEntryForm({
             <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
           </div>
           <h3>{existing ? 'Edit Street' : 'New Street'}</h3>
+          {existing && <SharedWarning sharedWith={existing.sharedWith} />}
           <label className={`field${error ? ' field-invalid' : ''}`}>
             <span className="field-label">Street name</span>
             <input value={name} onChange={(e) => { setName(e.target.value); setError(false) }} placeholder="e.g. Maple Avenue" autoFocus />
@@ -193,6 +198,7 @@ export function StreetDetail({
   const [showEdit, setShowEdit] = useState(false)
   const [showPad, setShowPad] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [showShare, setShowShare] = useState(false)
   const [traceMidpoint, setTraceMidpoint] = useState<{ lat: number; lng: number } | null>(null)
 
   useEffect(() => {
@@ -252,11 +258,17 @@ export function StreetDetail({
             <h3>{entry.name}</h3>
             <button className="icon-btn" title="Edit street" onClick={() => setShowEdit(true)}>✎</button>
           </div>
-          <p className="muted contact-line">{address || 'No city/zip on file'}</p>
+          <p className="muted contact-line">
+            {address || 'No city/zip on file'}
+            {' '}<SharedBadge sharedWith={entry.sharedWith} receivedFrom={entry.receivedFrom} />
+          </p>
           {entry.assignedTo && <p className="muted contact-line">👤 Assigned to {entry.assignedTo}</p>}
+
+          <SharedWarning sharedWith={entry.sharedWith} />
 
           <div className="row">
             <button onClick={() => setShowPad(true)}>＋ Add House</button>
+            <button className="secondary" onClick={() => setShowShare(true)}>↗ Share</button>
             {traceMidpoint && onGoToMap && (
               <button className="secondary" onClick={() => { onGoToMap(traceMidpoint.lat, traceMidpoint.lng); onClose() }}>
                 Jump to Map
@@ -301,6 +313,15 @@ export function StreetDetail({
 
         {showEdit && <StreetEntryForm existing={entry} onClose={() => setShowEdit(false)} />}
         {showPad && <HouseNumberPad onSubmit={(houses) => addHouses(houses)} onClose={() => setShowPad(false)} />}
+        {showShare && (
+          <ShareModal
+            kind="street"
+            recordId={entry.id}
+            itemName={entry.name}
+            buildPayload={(from) => buildStreetPayload(entry, from)}
+            onClose={() => setShowShare(false)}
+          />
+        )}
 
         <ConfirmDialog
           open={confirmDelete}

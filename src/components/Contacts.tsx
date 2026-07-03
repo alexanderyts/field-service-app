@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Person, type Call, type Appointment, type ContactStatus } from '../db'
 import { STATUS_LABELS, STATUS_ORDER } from '../contactStatus'
@@ -9,6 +9,9 @@ import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
 import StreetEntries from './StreetEntries'
 import Territories from './Territories'
+import ShareModal from './ShareModal'
+import { SharedBadge, SharedWarning } from './SharedBits'
+import { buildContactPayload, readMeleoFile } from '../share'
 
 type SortKey = 'street' | 'name' | 'date' | 'city' | 'zip'
 type MinistryView = 'people' | 'streets' | 'territories'
@@ -41,10 +44,12 @@ export default function Contacts({
   openContactId,
   onOpenedContact,
   onGoToMap,
+  onImportEncoded,
 }: {
   openContactId?: number | null
   onOpenedContact?: () => void
   onGoToMap?: (lat: number, lng: number, personId?: number) => void
+  onImportEncoded?: (encoded: string) => void
 }) {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const appointments = useLiveQuery(() => db.appointments.toArray(), []) ?? []
@@ -56,6 +61,18 @@ export default function Contacts({
   const [view, setView] = useState<MinistryView>('people')
   const [showChooser, setShowChooser] = useState(false)
   const [streetFormOpen, setStreetFormOpen] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleImportFile(file: File | undefined) {
+    if (!file) return
+    try {
+      const encoded = await readMeleoFile(file)
+      onImportEncoded?.(encoded)
+    } catch {
+      // A malformed/empty file — ImportConfirm surfaces decode errors; an unreadable file
+      // just no-ops rather than throwing.
+    }
+  }
 
   useEffect(() => {
     if (openContactId != null) {
@@ -157,6 +174,7 @@ export default function Contacts({
                 <div>
                   <strong>{p.name}</strong>
                   <span className={`badge status-${p.status}`}>{STATUS_LABELS[p.status]}</span>
+                  <SharedBadge sharedWith={p.sharedWith} receivedFrom={p.receivedFrom} />
                   {nextAppointment.has(p.id) && (
                     <span className="badge appt-badge" title={new Date(nextAppointment.get(p.id)!).toLocaleString()}>
                       📅 {new Date(nextAppointment.get(p.id)!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -197,10 +215,29 @@ export default function Contacts({
               >
                 🛣️ New Street
               </button>
+              <div className="section-divider" />
+              <button
+                className="secondary"
+                onClick={() => { setShowChooser(false); importInputRef.current?.click() }}
+              >
+                📥 Import a Shared Item (file)
+              </button>
+              <p className="muted" style={{ fontSize: 12, margin: '2px 0 0' }}>
+                For items shared as a <strong>.meleo</strong> file. Most shares are QR codes — just scan those with
+                your camera.
+              </p>
             </div>
           </div>
         </ModalPortal>
       )}
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".meleo,application/octet-stream,text/plain"
+        style={{ display: 'none' }}
+        onChange={(e) => { handleImportFile(e.target.files?.[0]); e.target.value = '' }}
+      />
     </div>
   )
 }
@@ -448,6 +485,7 @@ function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Pe
           </div>
 
           <h3>{existing ? 'Edit Contact' : 'New Contact'}</h3>
+          {existing && <SharedWarning sharedWith={existing.sharedWith} />}
 
         <section className="form-section">
           <h4 className="section-title">Contact Info</h4>
@@ -667,6 +705,7 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
   const [editingCallId, setEditingCallId] = useState<number | null>(null)
   const [editingAppt, setEditingAppt] = useState<Appointment | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [showShare, setShowShare] = useState(false)
 
   async function deletePerson() {
     // Transactional so an interruption (tab closed, exception) mid-delete can't leave
@@ -711,9 +750,11 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
           <div className="detail-head">
             <h3>{person.name}</h3>
             <span className={`badge status-${person.status}`}>{STATUS_LABELS[person.status]}</span>
+            <SharedBadge sharedWith={person.sharedWith} receivedFrom={person.receivedFrom} />
           </div>
           <p className="muted contact-line">{addressStr || 'No address on file'}</p>
           {person.phone && <p className="muted contact-line">{person.phone}</p>}
+          <SharedWarning sharedWith={person.sharedWith} />
 
           {household.length > 0 && (
             <div className="household-summary">
@@ -743,6 +784,7 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
           <button className="secondary" onClick={() => setShowEdit(true)}>
             Edit Contact
           </button>
+          <button className="secondary" onClick={() => setShowShare(true)}>↗ Share</button>
           <button onClick={() => setShowLogger((v) => !v)}>{showLogger ? 'Close Call Form' : '+ Log a Call'}</button>
         </div>
 
@@ -764,7 +806,7 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
 
         {editingAppt && <ReturnVisitEditor appt={editingAppt} onClose={() => setEditingAppt(null)} />}
 
-        {showLogger && <CallLogger personId={personId} onSaved={() => setShowLogger(false)} />}
+        {showLogger && <CallLogger personId={personId} sharedWith={person.sharedWith} onSaved={() => setShowLogger(false)} />}
 
         {/* Call history is the primary focus of this view */}
         <div className="view-header">
@@ -819,6 +861,15 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
       </div>
 
       {showEdit && <ContactForm existing={person} onClose={() => setShowEdit(false)} />}
+      {showShare && (
+        <ShareModal
+          kind="contact"
+          recordId={personId}
+          itemName={person.name}
+          buildPayload={(from) => buildContactPayload(personId, from)}
+          onClose={() => setShowShare(false)}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmDelete}
@@ -901,11 +952,13 @@ function ReturnVisitEditor({ appt, onClose }: { appt: Appointment; onClose: () =
 function CallLogger({
   personId,
   existing,
+  sharedWith,
   onSaved,
   onCancel,
 }: {
   personId: number
   existing?: Call
+  sharedWith?: Person['sharedWith']
   onSaved: () => void
   onCancel?: () => void
 }) {
@@ -962,6 +1015,7 @@ function CallLogger({
         </div>
       )}
       <h4>{existing ? 'Edit Call' : 'Log a Call'}</h4>
+      <SharedWarning sharedWith={sharedWith} />
       <p className="field-label">Date &amp; time</p>
       <div className="field-row">
         <label className="field">

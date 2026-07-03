@@ -668,6 +668,22 @@ button.small {
   margin-left: 8px;
 }
 
+.share-badge {
+  background: var(--visit-soft);
+  color: var(--visit);
+}
+
+.share-warning {
+  background: var(--credit-soft);
+  color: var(--text-h);
+  border: 1px solid var(--credit);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+
 .follow-up {
   color: var(--accent);
   font-weight: 500;
