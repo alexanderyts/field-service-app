@@ -3,7 +3,8 @@ import Contacts from './components/Contacts'
 import Schedule from './components/Schedule'
 import Reports from './components/Reports'
 import Misc from './components/Misc'
-import { SplashScreen, PrivacyGate, hasAcceptedPolicy } from './components/Onboarding'
+import { SplashScreen, PrivacyGate, ProfileGate, hasAcceptedPolicy } from './components/Onboarding'
+import { hasSeenProfilePrompt } from './profile'
 import Tutorial, { TutorialPrompt, hasSeenTutorialPrompt, markTutorialPromptSeen } from './components/Tutorial'
 import InstallBanner from './components/InstallPrompt'
 import { requestPersistentStorage } from './pwaInstall'
@@ -16,7 +17,13 @@ import './App.css'
 const MapView = lazy(() => import('./components/MapView'))
 
 type Tab = 'contacts' | 'schedule' | 'map' | 'reports' | 'misc'
-type Phase = 'splash' | 'splash-out' | 'policy' | 'app'
+type Phase = 'splash' | 'splash-out' | 'policy' | 'profile' | 'app'
+
+function nextPhase(): Phase {
+  if (!hasAcceptedPolicy()) return 'policy'
+  if (!hasSeenProfilePrompt()) return 'profile'
+  return 'app'
+}
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'contacts', label: 'Ministry', icon: '◎' },
@@ -39,7 +46,7 @@ function App() {
   // the same 0.4s the .splash-out keyframe already uses.
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('splash-out'), 2450)
-    const t2 = setTimeout(() => setPhase(hasAcceptedPolicy() ? 'app' : 'policy'), 2850)
+    const t2 = setTimeout(() => setPhase(nextPhase()), 2850)
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
@@ -97,7 +104,10 @@ function App() {
     return <SplashScreen leaving={phase === 'splash-out'} />
   }
   if (phase === 'policy') {
-    return <PrivacyGate onAccept={() => setPhase('app')} />
+    return <PrivacyGate onAccept={() => setPhase(nextPhase())} />
+  }
+  if (phase === 'profile') {
+    return <ProfileGate onDone={() => setPhase('app')} />
   }
 
   return (

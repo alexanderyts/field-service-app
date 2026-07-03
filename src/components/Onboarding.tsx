@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { COPYRIGHT_LINE, DEVELOPER_EMAIL, NOT_AFFILIATED } from '../legal'
+import { getProfileName, saveProfileName, markProfilePromptSeen } from '../profile'
 
 // Bumped from v1 -> v2 because the policy text itself changed (app renamed to Meleo, new
 // contact email) — existing testers should see and re-accept the updated document, not have
@@ -209,6 +210,62 @@ export function PrivacyGate({ onAccept }: { onAccept: () => void }) {
         </label>
         <button className="full" disabled={!checked} onClick={accept}>
           Get Started
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function ProfileGate({ onDone }: { onDone: () => void }) {
+  const existing = getProfileName()
+  const [firstName, setFirstName] = useState(existing.firstName)
+  const [lastName, setLastName] = useState(existing.lastName)
+
+  function finish(save: boolean) {
+    if (save && (firstName.trim() || lastName.trim())) saveProfileName(firstName, lastName)
+    markProfilePromptSeen()
+    onDone()
+  }
+
+  return (
+    <div className="privacy-screen">
+      <div className="privacy-header-bar">
+        <div className="brand-mark" />
+        <span className="privacy-app-name">Meleo</span>
+      </div>
+
+      <div className="privacy-scroll">
+        <h2 className="privacy-title">What should<br />we call you?</h2>
+        <p className="privacy-effective">Totally optional</p>
+
+        <div className="privacy-sections">
+          <section>
+            <p>
+              This stays on this device only — it's used to personalize the app for you, and
+              for optional sharing features you may choose to use later. It's never sent
+              anywhere.
+            </p>
+          </section>
+
+          <div className="field-row">
+            <div className="field">
+              <label className="field-label">First name</label>
+              <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" />
+            </div>
+            <div className="field">
+              <label className="field-label">Last name</label>
+              <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="privacy-footer">
+        <button className="full" onClick={() => finish(true)}>
+          Continue
+        </button>
+        <button className="full secondary" onClick={() => finish(false)}>
+          Skip for now
         </button>
       </div>
     </div>

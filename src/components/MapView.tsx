@@ -34,6 +34,26 @@ const contactIcons: Record<ContactStatus, L.DivIcon> = Object.fromEntries(
   )
 ) as Record<ContactStatus, L.DivIcon>
 
+// The tile layer never rotates (no bearing/heading control anywhere in the app), so a
+// fixed compass rose is always accurate — no device-orientation API or permission
+// prompt needed. Purely decorative/informational: pointer-events are disabled so it
+// never steals a drag/zoom/tap meant for the map underneath it.
+function MapCompass() {
+  return (
+    <div className="map-compass" aria-hidden="true">
+      <svg viewBox="0 0 44 44" width="44" height="44">
+        <circle cx="22" cy="22" r="20" fill="var(--surface)" fillOpacity="0.85" stroke="var(--border)" />
+        <path d="M22 8 L26 22 L22 19 L18 22 Z" fill="var(--accent)" />
+        <path d="M22 36 L18 22 L22 25 L26 22 Z" fill="var(--muted)" />
+        <text x="22" y="12" textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--accent)">N</text>
+        <text x="22" y="39" textAnchor="middle" fontSize="8" fill="var(--muted)">S</text>
+        <text x="6" y="25" textAnchor="middle" fontSize="8" fill="var(--muted)">W</text>
+        <text x="38" y="25" textAnchor="middle" fontSize="8" fill="var(--muted)">E</text>
+      </svg>
+    </div>
+  )
+}
+
 function RecenterButton({ target }: { target: { lat: number; lng: number } | null }) {
   const map = useMap()
   useEffect(() => {
@@ -159,6 +179,7 @@ export default function MapView({
           ))}
           {activeTerritory && <TerritoryStreetsOverlay streets={activeTerritory.streets} />}
         </MapContainer>
+        <MapCompass />
       </div>
 
       {/* Drawing happens in its own modal (see Territory.tsx) with its own map instance,

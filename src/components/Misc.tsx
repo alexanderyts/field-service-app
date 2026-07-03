@@ -6,6 +6,7 @@ import { InstallCard } from './InstallPrompt'
 import { tipServices, type TipKind } from '../tips'
 import { APP_VERSION } from '../version'
 import { COPYRIGHT_SUMMARY, NOT_AFFILIATED } from '../legal'
+import { getProfileName, saveProfileName } from '../profile'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
 import {
   NOTIFY_LEAD_OPTIONS,
@@ -40,6 +41,8 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
     if (localStorage.getItem('fieldservice_dark_mode') === 'yes') return 'dark'
     return 'light'
   })
+  const [firstName, setFirstName] = useState(() => getProfileName().firstName)
+  const [lastName, setLastName] = useState(() => getProfileName().lastName)
   const [minuteAnimEnabled, setMinuteAnimEnabledState] = useState(() => minuteBankAnimationsEnabled())
   const [notifyEnabled, setNotifyEnabledState] = useState(() => notificationsEnabled())
   const [notifyLead, setNotifyLeadState] = useState<NotifyLeadMinutes>(() => getNotifyLeadMinutes())
@@ -243,6 +246,33 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
 
         {settingsOpen && (
           <div className="misc-settings">
+            {/* Your name */}
+            <div className="field-row">
+              <div className="field">
+                <label className="field-label">First name</label>
+                <input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  onBlur={() => saveProfileName(firstName, lastName)}
+                  placeholder="First name"
+                />
+              </div>
+              <div className="field">
+                <label className="field-label">Last name</label>
+                <input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  onBlur={() => saveProfileName(firstName, lastName)}
+                  placeholder="Last name"
+                />
+              </div>
+            </div>
+            <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+              Stays on this device only — used for personalization and optional sharing features.
+            </p>
+
+            <div className="misc-settings-divider" />
+
             {/* Credit hours */}
             <label className="checkbox-row">
               <input type="checkbox" checked={creditEnabled} onChange={(e) => toggleCredit(e.target.checked)} />
