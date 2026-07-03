@@ -139,6 +139,9 @@ export interface StreetEntry {
   zip?: string
   houses: StreetHouse[]
   createdAt: number
+  /** Free-text name of whoever this individual street was handed to — not a Person FK,
+      just a lightweight note (matches how territory assignment works too). */
+  assignedTo?: string
 }
 
 export interface TerritoryStreet {
@@ -159,6 +162,12 @@ export interface Territory {
   name: string
   createdAt: number
   completed: boolean
+  /** True once "Group Selected into a Territory" has finalized this record with a real
+      name — it then shows up as a durable entry in the Ministry tab's Territories view,
+      and the Map tab stops treating it as the active draft to draw new streets into. */
+  grouped?: boolean
+  /** Free-text name of whoever this whole territory was handed to. */
+  assignedTo?: string
   streets: TerritoryStreet[]
 }
 

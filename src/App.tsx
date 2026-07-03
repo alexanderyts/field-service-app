@@ -36,7 +36,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 function App() {
   const [tab, setTab] = useState<Tab>('contacts')
   const [openContactId, setOpenContactId] = useState<number | null>(null)
-  const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number; personId: number } | null>(null)
+  const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number; personId?: number } | null>(null)
   const [phase, setPhase] = useState<Phase>('splash')
   const [showTutorialPrompt, setShowTutorialPrompt] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)

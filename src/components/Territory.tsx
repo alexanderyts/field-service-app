@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
 import { db, type Territory, type TerritoryCompletion, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
+import { renderStreetsImage } from '../territoryImage'
 
 function newStreetId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -185,12 +186,20 @@ export function TerritoryDrawModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingStroke])
 
+  const tracePreview = useMemo(
+    () => (pendingStroke ? renderStreetsImage([{ points: pendingStroke }], { width: 280, height: 160 }) : null),
+    [pendingStroke]
+  )
+
   async function savePendingStreet(name: string) {
     if (!pendingStroke) return
     const stroke = pendingStroke
     const street: TerritoryStreet = { id: newStreetId(), name, points: stroke, done: false }
     await db.territories.update(territory.id, { streets: [...territory.streets, street] })
     setPendingStroke(null)
+    // Back to the neutral "Draw Street" button rather than silently staying in
+    // continuous-draw mode — saving one street shouldn't auto-arm the next trace.
+    setDrawing(false)
     // Mirror the traced street into the Ministry tab's Streets list so house numbers can be
     // loaded against it. Best-effort address lookup runs after the trace is already saved, so
     // a slow/failed geocode never blocks or loses the street itself.
@@ -245,6 +254,13 @@ export function TerritoryDrawModal({
               <div className="modal-backdrop" onClick={() => setPendingStroke(null)}>
                 <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
                   <h3>Name this street</h3>
+                  {tracePreview && (
+                    <img
+                      src={tracePreview}
+                      alt="Preview of the traced street"
+                      style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)' }}
+                    />
+                  )}
                   <label className="field">
                     <span className="field-label">Street name</span>
                     <input
@@ -255,7 +271,9 @@ export function TerritoryDrawModal({
                   </label>
                   {lookingUpName && <p className="muted" style={{ fontSize: 12, margin: 0 }}>Looking up street name…</p>}
                   <button onClick={() => savePendingStreet(streetName.trim() || 'Untitled street')}>Save Street</button>
-                  <button className="secondary" onClick={() => setPendingStroke(null)}>Discard this trace</button>
+                  <button className="secondary" onClick={() => { setPendingStroke(null); setDrawing(true) }}>
+                    🔁 Redo this trace
+                  </button>
                 </div>
               </div>
             </ModalPortal>
@@ -280,6 +298,41 @@ export function TerritoryControls({
   const [drawOpen, setDrawOpen] = useState(false)
   const [confirmComplete, setConfirmComplete] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [groupNaming, setGroupNaming] = useState(false)
+  const [groupName, setGroupName] = useState('')
+
+  function toggleSelected(streetId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(streetId)) next.delete(streetId)
+      else next.add(streetId)
+      return next
+    })
+  }
+
+  /** Moves the checked streets out of this draft and into a brand-new, named, `grouped`
+      territory — a durable Ministry-tab entry. Whatever wasn't checked simply stays in
+      this draft, still individually traced and assignable. One transaction so a checked
+      street is never briefly missing from both records if something goes wrong mid-way. */
+  async function confirmGroup() {
+    if (!territory || selected.size === 0 || !groupName.trim()) return
+    const toMove = territory.streets.filter((s) => selected.has(s.id))
+    const remaining = territory.streets.filter((s) => !selected.has(s.id))
+    await db.transaction('rw', db.territories, async () => {
+      await db.territories.add({
+        name: groupName.trim(),
+        createdAt: Date.now(),
+        completed: false,
+        grouped: true,
+        streets: toMove,
+      } as Territory)
+      await db.territories.update(territory.id, { streets: remaining })
+    })
+    setSelected(new Set())
+    setGroupName('')
+    setGroupNaming(false)
+  }
 
   async function createTerritory() {
     const record: Omit<Territory, 'id'> = {
@@ -344,7 +397,10 @@ export function TerritoryControls({
         <ul className="list" style={{ marginTop: 10 }}>
           {territory.streets.map((s) => (
             <li key={s.id} className="list-item">
-              <span style={{ textDecoration: s.done ? 'line-through' : undefined }}>{s.name}</span>
+              <label className="checkbox-row" style={{ flex: 1, minWidth: 0 }}>
+                <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
+                <span style={{ textDecoration: s.done ? 'line-through' : undefined }}>{s.name}</span>
+              </label>
               <div className="row" style={{ gap: 6 }}>
                 <button className={s.done ? '' : 'secondary'} onClick={() => toggleStreetDone(s.id)}>
                   {s.done ? '✓ Finished' : 'Mark Finished'}
@@ -356,6 +412,12 @@ export function TerritoryControls({
         </ul>
       ) : (
         <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>No streets traced yet — open the map to start drawing.</p>
+      )}
+
+      {selected.size > 0 && (
+        <button className="secondary" onClick={() => setGroupNaming(true)}>
+          📦 Group {selected.size} Selected Street{selected.size === 1 ? '' : 's'} into a Territory
+        </button>
       )}
 
       <button
@@ -387,6 +449,28 @@ export function TerritoryControls({
         onConfirm={discardTerritory}
         onCancel={() => setConfirmDiscard(false)}
       />
+
+      {groupNaming && (
+        <ModalPortal>
+          <div className="modal-backdrop" onClick={() => setGroupNaming(false)}>
+            <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
+              <h3>Name this territory</h3>
+              <p className="muted" style={{ marginTop: -6 }}>
+                {selected.size} street{selected.size === 1 ? '' : 's'} will move into it, and it'll show up under
+                Ministry → Territories.
+              </p>
+              <label className="field">
+                <span className="field-label">Territory name</span>
+                <input value={groupName} onChange={(e) => setGroupName(e.target.value)} autoFocus />
+              </label>
+              <div className="row">
+                <button onClick={confirmGroup} disabled={!groupName.trim()}>Group Streets</button>
+                <button className="secondary" onClick={() => setGroupNaming(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
     </div>
   )
 }

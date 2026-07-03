@@ -8,9 +8,10 @@ import { expandState } from '../usStates'
 import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
 import StreetEntries from './StreetEntries'
+import Territories from './Territories'
 
 type SortKey = 'street' | 'name' | 'date' | 'city' | 'zip'
-type MinistryView = 'people' | 'streets'
+type MinistryView = 'people' | 'streets' | 'territories'
 
 /** Parses a `YYYY-MM-DD` (from a date input) as a local date, avoiding the UTC-midnight shift. */
 function parseLocalDate(dateStr: string): Date {
@@ -43,7 +44,7 @@ export default function Contacts({
 }: {
   openContactId?: number | null
   onOpenedContact?: () => void
-  onGoToMap?: (lat: number, lng: number, personId: number) => void
+  onGoToMap?: (lat: number, lng: number, personId?: number) => void
 }) {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const appointments = useLiveQuery(() => db.appointments.toArray(), []) ?? []
@@ -115,6 +116,7 @@ export default function Contacts({
       <div className="segmented">
         <button className={view === 'people' ? 'active' : ''} onClick={() => setView('people')}>People</button>
         <button className={view === 'streets' ? 'active' : ''} onClick={() => setView('streets')}>Streets</button>
+        <button className={view === 'territories' ? 'active' : ''} onClick={() => setView('territories')}>Territories</button>
       </div>
 
       {view === 'people' ? (
@@ -169,8 +171,10 @@ export default function Contacts({
 
           {selectedId != null && <ContactDetail personId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
         </>
+      ) : view === 'streets' ? (
+        <StreetEntries showNewForm={streetFormOpen} onCloseNewForm={() => setStreetFormOpen(false)} onGoToMap={onGoToMap} />
       ) : (
-        <StreetEntries showNewForm={streetFormOpen} onCloseNewForm={() => setStreetFormOpen(false)} />
+        <Territories onGoToMap={onGoToMap} />
       )}
 
       {showChooser && (
@@ -648,7 +652,7 @@ function householdSummary(person: Person): string[] {
 function ContactDetail({ personId, onClose, onGoToMap }: {
   personId: number
   onClose: () => void
-  onGoToMap?: (lat: number, lng: number, personId: number) => void
+  onGoToMap?: (lat: number, lng: number, personId?: number) => void
 }) {
   const person = useLiveQuery(() => db.people.get(personId), [personId])
   const calls = useLiveQuery(() => db.calls.where('personId').equals(personId).toArray(), [personId]) ?? []

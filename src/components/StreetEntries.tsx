@@ -1,9 +1,24 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, compareHouseNumbers, type StreetEntry, type StreetHouse, type HouseStatus } from '../db'
 import { expandState } from '../usStates'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
+
+/** Best-effort lookup of a traced street matching this Ministry-tab entry by name, across
+    every territory (not just the active draft) — used to power a "Jump to Map" action
+    for streets that have a real trace on the map. Returns the midpoint of its points. */
+export async function findStreetTraceMidpoint(streetName: string): Promise<{ lat: number; lng: number } | null> {
+  const territories = await db.territories.toArray()
+  for (const t of territories) {
+    const match = t.streets.find((s) => s.name.trim().toLowerCase() === streetName.trim().toLowerCase())
+    if (match && match.points.length > 0) {
+      const mid = match.points[Math.floor(match.points.length / 2)]
+      return { lat: mid.lat, lng: mid.lng }
+    }
+  }
+  return null
+}
 
 const HOUSE_STATUS_OPTIONS: { value: '' | HouseStatus; label: string }[] = [
   { value: '', label: '—' },
@@ -24,9 +39,11 @@ function houseId() {
 export default function StreetEntries({
   showNewForm,
   onCloseNewForm,
+  onGoToMap,
 }: {
   showNewForm: boolean
   onCloseNewForm: () => void
+  onGoToMap?: (lat: number, lng: number) => void
 }) {
   const entries = useLiveQuery(() => db.streetEntries.toArray(), []) ?? []
   const [search, setSearch] = useState('')
@@ -81,7 +98,7 @@ export default function StreetEntries({
         )}
       </ul>
 
-      {selectedId != null && <StreetDetail entryId={selectedId} onClose={() => setSelectedId(null)} />}
+      {selectedId != null && <StreetDetail entryId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
     </>
   )
 }
@@ -101,6 +118,7 @@ function StreetEntryForm({
   const [city, setCity] = useState(existing?.city ?? '')
   const [state, setState] = useState(existing?.state ?? '')
   const [zip, setZip] = useState(existing?.zip ?? '')
+  const [assignedTo, setAssignedTo] = useState(existing?.assignedTo ?? '')
   const [error, setError] = useState(false)
 
   async function save() {
@@ -110,6 +128,7 @@ function StreetEntryForm({
       city: city.trim() || undefined,
       state: expandState(state) || undefined,
       zip: zip.trim() || undefined,
+      assignedTo: assignedTo.trim() || undefined,
     }
     if (existing) {
       await db.streetEntries.update(existing.id, record)
@@ -146,6 +165,10 @@ function StreetEntryForm({
               <input value={zip} onChange={(e) => setZip(e.target.value)} />
             </label>
           </div>
+          <label className="field">
+            <span className="field-label">Assigned to (optional)</span>
+            <input value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} placeholder="e.g. John Smith" />
+          </label>
           {error && <p className="error">Please enter a street name.</p>}
           <div className="row">
             <button onClick={save}>{existing ? 'Save Changes' : 'Save Street'}</button>
@@ -157,11 +180,31 @@ function StreetEntryForm({
   )
 }
 
-function StreetDetail({ entryId, onClose }: { entryId: number; onClose: () => void }) {
+export function StreetDetail({
+  entryId,
+  onClose,
+  onGoToMap,
+}: {
+  entryId: number
+  onClose: () => void
+  onGoToMap?: (lat: number, lng: number) => void
+}) {
   const entry = useLiveQuery(() => db.streetEntries.get(entryId), [entryId])
   const [showEdit, setShowEdit] = useState(false)
   const [showPad, setShowPad] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [traceMidpoint, setTraceMidpoint] = useState<{ lat: number; lng: number } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    if (entry) {
+      findStreetTraceMidpoint(entry.name).then((mid) => { if (!cancelled) setTraceMidpoint(mid) })
+    }
+    return () => { cancelled = true }
+    // Deliberately keyed on the name alone — re-scanning every territory whenever any
+    // other field (houses, notes) changes on this entry would be wasted work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry?.name])
 
   if (!entry) return null
 
@@ -210,8 +253,16 @@ function StreetDetail({ entryId, onClose }: { entryId: number; onClose: () => vo
             <button className="icon-btn" title="Edit street" onClick={() => setShowEdit(true)}>✎</button>
           </div>
           <p className="muted contact-line">{address || 'No city/zip on file'}</p>
+          {entry.assignedTo && <p className="muted contact-line">👤 Assigned to {entry.assignedTo}</p>}
 
-          <button onClick={() => setShowPad(true)}>＋ Add House</button>
+          <div className="row">
+            <button onClick={() => setShowPad(true)}>＋ Add House</button>
+            {traceMidpoint && onGoToMap && (
+              <button className="secondary" onClick={() => { onGoToMap(traceMidpoint.lat, traceMidpoint.lng); onClose() }}>
+                Jump to Map
+              </button>
+            )}
+          </div>
 
           <ul className="house-list">
             {sortedHouses.map((h) => (

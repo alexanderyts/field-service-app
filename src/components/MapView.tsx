@@ -108,14 +108,16 @@ export default function MapView({
   focusLocation,
 }: {
   onGoToContact?: (personId: number) => void
-  focusLocation?: { lat: number; lng: number; personId: number } | null
+  focusLocation?: { lat: number; lng: number; personId?: number } | null
 }) {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const { getLocation, loading, error } = useCurrentLocation()
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null)
 
   const territories = useLiveQuery(() => db.territories.toArray(), []) ?? []
-  const activeTerritory = territories.find((t) => !t.completed)
+  // The draft you're actively tracing new streets into — a grouped territory has
+  // "graduated" into a durable Ministry-tab entry and is no longer a draw target.
+  const activeTerritory = territories.find((t) => !t.completed && !t.grouped)
 
   useEffect(() => {
     // Don't let an in-flight GPS fix hijack a requested "jump to contact" — RecenterButton
@@ -177,7 +179,12 @@ export default function MapView({
           {pinned.map((p) => (
             <ContactPin key={p.id} person={p} onGoToContact={onGoToContact} />
           ))}
-          {activeTerritory && <TerritoryStreetsOverlay streets={activeTerritory.streets} />}
+          {/* Every territory's traces show here, not just the active draft — a grouped
+              territory should still be visible on the map even once it's "graduated"
+              into a Ministry-tab entry. */}
+          {territories.map((t) => (
+            <TerritoryStreetsOverlay key={t.id} streets={t.streets} />
+          ))}
         </MapContainer>
         <MapCompass />
       </div>
