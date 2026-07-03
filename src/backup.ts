@@ -68,13 +68,13 @@ export async function exportBackup(): Promise<'shared' | 'downloaded'> {
   const backup = await buildBackup()
   const json = JSON.stringify(backup)
   const stamp = new Date().toISOString().slice(0, 10)
-  const filename = `field-service-backup-${stamp}.json`
+  const filename = `meleo-backup-${stamp}.json`
 
   try {
     const file = new File([json], filename, { type: 'application/json' })
     if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], title: 'Field Service backup' })
+        await navigator.share({ files: [file], title: 'Meleo backup' })
         return 'shared'
       } catch (e) {
         // User dismissed the share sheet — treat as done, don't also trigger a download.
@@ -105,16 +105,18 @@ export interface ImportSummary {
 /** Restore from a backup file. Replaces the contents of each table present in the file
     (clear + bulkAdd, preserving original primary keys so cross-table references like
     calls.personId stay valid). Tables not present in the file are left untouched. Throws a
-    friendly Error if the file isn't a recognizable Field Service backup. */
+    friendly Error if the file isn't a recognizable Meleo backup. */
 export async function importBackup(file: File): Promise<ImportSummary> {
   let data: BackupFile
   try {
     data = JSON.parse(await file.text())
   } catch {
-    throw new Error("That file isn't valid JSON — pick a Field Service backup file.")
+    throw new Error("That file isn't valid JSON — pick a Meleo backup file.")
   }
+  // `app` stays the internal 'field-service' tag (predates the Meleo rename) so backups
+  // exported before the rename still import correctly — this is a format id, not branding.
   if (!data || data.app !== 'field-service' || typeof data.tables !== 'object') {
-    throw new Error("That doesn't look like a Field Service backup file.")
+    throw new Error("That doesn't look like a Meleo backup file.")
   }
 
   const knownTables = new Set(db.tables.map((t) => t.name))

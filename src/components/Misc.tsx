@@ -455,7 +455,7 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
       />
 
       <p className="muted" style={{ textAlign: 'center', fontSize: 12, margin: '4px 0 0' }}>
-        Field Service v{APP_VERSION}
+        Meleo v{APP_VERSION}
       </p>
     </div>
   )

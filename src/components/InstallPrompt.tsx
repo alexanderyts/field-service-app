@@ -63,7 +63,7 @@ export default function InstallBanner() {
     <div className="install-banner">
       <span className="install-banner-icon">📲</span>
       <div className="install-banner-text">
-        <strong>Add Field Service to your Home Screen</strong>
+        <strong>Add Meleo to your Home Screen</strong>
         <span> so your data stays safe and it opens like a real app.</span>
         <div className="install-banner-action">
           <InstallBody onInstalled={dismiss} />
@@ -86,7 +86,7 @@ export function InstallCard() {
       <div className="card">
         <strong>📲 Installed</strong>
         <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
-          Field Service is running from your Home Screen — your data is protected from the
+          Meleo is running from your Home Screen — your data is protected from the
           browser's automatic 7-day cleanup. You're all set.
         </p>
       </div>

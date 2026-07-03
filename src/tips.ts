@@ -1,10 +1,12 @@
-import { DEVELOPER_EMAIL } from './legal'
-
 // Tip / support links, shown in the More tab. To add a service, add an entry below and set
 // `oneTime` and/or `monthly` to its checkout URL — the UI figures out the rest (a service
 // with only `oneTime` appears under "One-Time Tip"; one with `monthly` appears under
 // "Monthly Support"; a service with both appears under each). When more than one service
 // offers a given kind, the button opens a dropdown to choose between them.
+
+// Kept separate from legal.ts's DEVELOPER_EMAIL (the public contact address) — tips stay on
+// the developer's personal PayPal regardless of what the app's public contact email is.
+const PAYPAL_EMAIL = 'alexander.yts@gmail.com'
 
 export interface TipService {
   id: string
@@ -21,7 +23,7 @@ export const TIP_SERVICES: TipService[] = [
     id: 'paypal',
     label: 'PayPal',
     emoji: '🅿️',
-    oneTime: `https://www.paypal.com/send?recipient=${encodeURIComponent(DEVELOPER_EMAIL)}`,
+    oneTime: `https://www.paypal.com/send?recipient=${encodeURIComponent(PAYPAL_EMAIL)}`,
     // monthly: 'https://www.paypal.com/…',  // add a PayPal subscription/recurring link here
   },
 

@@ -30,7 +30,7 @@ interface TutorialStep {
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
     icon: '👋',
-    title: 'Welcome to Field Service',
+    title: 'Welcome to Meleo',
     body: "A quick tour of each tab — under a minute. Replay anytime from More.",
     tab: 'contacts',
     highlight: '[data-tutorial="tabbar"]',
@@ -97,7 +97,7 @@ export function TutorialPrompt({ onYes, onNo }: { onYes: () => void; onNo: () =>
     <div className="modal-backdrop" onClick={onNo}>
       <div className="modal tutorial-prompt-modal" onClick={(e) => e.stopPropagation()}>
         <div className="tutorial-icon">👋</div>
-        <h3 style={{ textAlign: 'center' }}>Welcome to Field Service</h3>
+        <h3 style={{ textAlign: 'center' }}>Welcome to Meleo</h3>
         <p className="muted" style={{ textAlign: 'center' }}>
           Want a quick guided tour of the app's main features? Takes about a minute.
         </p>

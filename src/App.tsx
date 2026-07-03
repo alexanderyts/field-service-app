@@ -34,9 +34,12 @@ function App() {
   const [showTutorialPrompt, setShowTutorialPrompt] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
 
+  // The word-transformation animation (see .splash-* in App.css) runs to about 2.05s on its
+  // own; hold long enough to let it finish and settle (~450ms rest) before fading out, over
+  // the same 0.4s the .splash-out keyframe already uses.
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase('splash-out'), 1800)
-    const t2 = setTimeout(() => setPhase(hasAcceptedPolicy() ? 'app' : 'policy'), 2200)
+    const t1 = setTimeout(() => setPhase('splash-out'), 2450)
+    const t2 = setTimeout(() => setPhase(hasAcceptedPolicy() ? 'app' : 'policy'), 2850)
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
@@ -65,12 +68,12 @@ function App() {
     return () => window.clearInterval(interval)
   }, [phase])
 
-  // The splash screen is a fixed dark-green overlay; without this, any gap around it
-  // (e.g. the home-indicator safe area on iOS) shows the page's own cream background
-  // instead, which reads as a stray white/light bar at the bottom of the screen.
+  // The splash screen is a fixed cream overlay; without this, any gap around it (e.g. the
+  // home-indicator safe area on iOS) shows the page's default background instead, which can
+  // read as a mismatched flash at the edges of the screen.
   useEffect(() => {
     const isSplash = phase === 'splash' || phase === 'splash-out'
-    document.body.style.background = isSplash ? '#0f2921' : ''
+    document.body.style.background = isSplash ? '#f3f1ec' : ''
   }, [phase])
 
   // Switching tabs is a hard content swap (unmount/mount), not real navigation — without
@@ -101,7 +104,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <span className="brand-mark" />
-        <h1>Field Service</h1>
+        <h1>Meleo</h1>
       </header>
 
       <InstallBanner />

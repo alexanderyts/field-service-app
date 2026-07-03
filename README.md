@@ -1,4 +1,4 @@
-# Field Service
+# Meleo
 
 A private, local-first app for organizing personal field ministry: contacts, territory map,
 literature catalog, time/credit tracking, scheduling, and monthly reports. All data is stored

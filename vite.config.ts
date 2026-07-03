@@ -14,8 +14,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Field Service App',
-        short_name: 'FieldService',
+        name: 'Meleo',
+        short_name: 'Meleo',
         description: 'Track ministry time, contacts, and territory visits',
         theme_color: '#2f6f5e',
         background_color: '#f3f1ec',

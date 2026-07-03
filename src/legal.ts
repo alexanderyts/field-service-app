@@ -4,12 +4,14 @@
 // This is informational boilerplate, not legal advice.
 
 export const DEVELOPER_NAME = 'Alexander'
-export const DEVELOPER_EMAIL = 'alexander.yts@gmail.com'
+/** Public contact/legal address — shown in the privacy policy and Legal section. Not the
+    PayPal tip destination; see tips.ts for that (kept on the developer's personal account). */
+export const DEVELOPER_EMAIL = 'meleoapp@gmail.com'
 export const COPYRIGHT_LINE = `© 2026 ${DEVELOPER_NAME}. All rights reserved.`
 
 /** Non-affiliation disclaimer. Shown prominently in both the first-launch gate and More tab. */
 export const NOT_AFFILIATED =
-  'Field Service is an independent personal hobby project. It is not associated with, ' +
+  'Meleo is an independent personal hobby project. It is not associated with, ' +
   'endorsed by, sponsored by, or affiliated with the Watchtower Bible and Tract Society ' +
   'of Pennsylvania, Jehovah’s Witnesses, or any other religious organization. All ' +
   'related names and marks belong to their respective owners.'

@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { COPYRIGHT_LINE, NOT_AFFILIATED } from '../legal'
+import { COPYRIGHT_LINE, DEVELOPER_EMAIL, NOT_AFFILIATED } from '../legal'
 
-const POLICY_KEY = 'fieldservice_privacy_v1'
+// Bumped from v1 -> v2 because the policy text itself changed (app renamed to Meleo, new
+// contact email) — existing testers should see and re-accept the updated document, not have
+// their old acceptance of a different document silently carried forward.
+const POLICY_KEY = 'fieldservice_privacy_v2'
 
 export function hasAcceptedPolicy(): boolean {
   try { return localStorage.getItem(POLICY_KEY) === 'yes' } catch { return false }
@@ -11,19 +14,34 @@ function storeAcceptance() {
   try { localStorage.setItem(POLICY_KEY, 'yes') } catch {}
 }
 
+/** ἐπιμελέομαι (epimeleomai) — "to take care of, to attend to with diligence"; it's the
+    word Luke uses for the Samaritan tending the wounded man. The app's name sits inside it
+    letter-for-letter: epi-MELEO-mai. The Greek fades in, the outer ἐπι/μαι quietly drop
+    away, and the remaining μελέο wipes into the Latin wordmark "Meleo". Pure CSS animation
+    (see .splash-* in App.css) — it just plays once on mount, no JS orchestration needed. */
 export function SplashScreen({ leaving }: { leaving: boolean }) {
   return (
     <div className={`splash${leaving ? ' splash-leaving' : ''}`}>
       <div className="splash-inner">
-        <div className="splash-mark-lg">
+        <div className="splash-icon">
           <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="24" cy="20" r="8" stroke="rgba(255,255,255,0.9)" strokeWidth="2.5" />
-            <path d="M24 28c-8 0-14 4-14 8" stroke="rgba(255,255,255,0.9)" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M24 28c8 0 14 4 14 8" stroke="rgba(255,255,255,0.9)" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M30 14l4-4M34 14l-4-4" stroke="rgba(255,255,255,0.55)" strokeWidth="2" strokeLinecap="round" />
+            <rect x="27" y="9" width="15" height="31" rx="2.4" stroke="#5a7d3a" strokeWidth="2.2" />
+            <circle cx="29.4" cy="25" r="1.3" fill="#5a7d3a" />
+            <circle cx="12.5" cy="20" r="3.3" stroke="#2f6f5e" strokeWidth="2.4" />
+            <path d="M12.5 23.3c-3.9 1.5-6.5 4.3-6.5 7.7v9" stroke="#2f6f5e" strokeWidth="2.4" strokeLinecap="round" />
+            <path d="M12.5 23.3c3.9 1.5 6.5 4.3 6.5 7.7v9" stroke="#2f6f5e" strokeWidth="2.4" strokeLinecap="round" />
           </svg>
         </div>
-        <h1 className="splash-name">Field Service</h1>
+        <div className="splash-wordstack">
+          <div className="splash-halo" />
+          <div className="splash-word-layer splash-greek">
+            <span className="splash-g-part splash-g-prefix">ἐπι</span>
+            <span className="splash-g-part splash-g-core">μελέο</span>
+            <span className="splash-g-part splash-g-suffix">μαι</span>
+          </div>
+          <div className="splash-wipe-edge" />
+          <div className="splash-word-layer splash-latin">Meleo</div>
+        </div>
         <p className="splash-tagline">Ministry Companion</p>
       </div>
     </div>
@@ -43,7 +61,7 @@ export function PrivacyGate({ onAccept }: { onAccept: () => void }) {
     <div className="privacy-screen">
       <div className="privacy-header-bar">
         <div className="brand-mark" />
-        <span className="privacy-app-name">Field Service</span>
+        <span className="privacy-app-name">Meleo</span>
       </div>
 
       <div className="privacy-scroll">
@@ -59,7 +77,7 @@ export function PrivacyGate({ onAccept }: { onAccept: () => void }) {
           <section>
             <h4>1. About This App</h4>
             <p>
-              Field Service ("the App") is a free personal ministry record-keeping tool provided by an
+              Meleo ("the App") is a free personal ministry record-keeping tool provided by an
               independent developer. It is provided as-is, with no warranties of any kind, express or implied.
             </p>
           </section>
@@ -178,7 +196,7 @@ export function PrivacyGate({ onAccept }: { onAccept: () => void }) {
             <h4>13. Contact</h4>
             <p>
               For questions or concerns about this policy, contact:{' '}
-              <strong>alexander.yts@gmail.com</strong>
+              <strong>{DEVELOPER_EMAIL}</strong>
             </p>
           </section>
         </div>

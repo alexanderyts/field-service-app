@@ -144,7 +144,7 @@ export default function Reports() {
   const isCurrentMonth = monthOffset === 0
 
   function emailReport() {
-    let body = `Field Service Report — ${monthLabel}\n\n`
+    let body = `Meleo Report — ${monthLabel}\n\n`
     body += `Total Hours: ${fmtDuration(totalMin)}\n`
     if (ministryMin) body += `  Ministry: ${fmtDuration(ministryMin)}\n`
     if (creditMin) body += `  Credit Hours: ${fmtDuration(creditMin)}\n`
@@ -158,7 +158,7 @@ export default function Reports() {
     if (scripturesShared) body += `Scriptures Shared: ${scripturesShared}\n`
     if (monthTerritoriesCompleted) body += `Temporary Territories Completed: ${monthTerritoriesCompleted} this month, ${yearTerritoriesCompleted} this service year\n`
     if (yearGoalMin) body += `\nYearly Goal Progress: ${fmtDuration(yearAppliedMin)} of ${fmtDuration(yearGoalMin)} (${yearPct}%)\n`
-    const subject = `Field Service Report — ${monthLabel}`
+    const subject = `Meleo Report — ${monthLabel}`
     window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
   }
 
