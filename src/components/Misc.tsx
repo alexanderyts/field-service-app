@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { db } from '../db'
 import ConfirmDialog from './ConfirmDialog'
 import { exportBackup, importBackup, type ImportSummary } from '../backup'
+import { InstallCard } from './InstallPrompt'
 import { APP_VERSION } from '../version'
 import { COPYRIGHT_SUMMARY, DEVELOPER_EMAIL, NOT_AFFILIATED } from '../legal'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
@@ -189,6 +190,9 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
           unlock nothing extra. Thank you either way! 🙏
         </p>
       </div>
+
+      {/* ── Add to Home Screen ──────────────────────────────── */}
+      <InstallCard />
 
       {/* ── 2. Theme ────────────────────────────────────────── */}
       <div className="card">

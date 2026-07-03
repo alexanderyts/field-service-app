@@ -265,6 +265,63 @@
   padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 
+/* Install / Add-to-Home-Screen banner — a gentle, dismissible bar under the header. */
+.install-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 12px;
+  padding: 12px 14px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.install-banner-icon {
+  font-size: 22px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.install-banner-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-h);
+}
+
+.install-banner-text strong {
+  display: inline;
+}
+
+.install-banner-action {
+  margin-top: 8px;
+}
+
+.install-banner-action button {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+.install-banner-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.install-steps {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
 .tabbar {
   /* A real fixed-position card, anchored to the viewport, floating above the content —
      not sitting in document flow and not sticky inside a scroll container. Content now

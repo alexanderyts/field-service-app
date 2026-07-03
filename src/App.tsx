@@ -5,6 +5,8 @@ import Reports from './components/Reports'
 import Misc from './components/Misc'
 import { SplashScreen, PrivacyGate, hasAcceptedPolicy } from './components/Onboarding'
 import Tutorial, { TutorialPrompt, hasSeenTutorialPrompt, markTutorialPromptSeen } from './components/Tutorial'
+import InstallBanner from './components/InstallPrompt'
+import { requestPersistentStorage } from './pwaInstall'
 import { checkReturnVisitNotifications } from './notifications'
 import './App.css'
 
@@ -43,6 +45,13 @@ function App() {
     if (phase === 'app' && !hasSeenTutorialPrompt()) {
       setShowTutorialPrompt(true)
     }
+  }, [phase])
+
+  // Ask the browser to keep our IndexedDB out of routine eviction. Best-effort — some
+  // browsers only grant it once the app is installed/engaged, so it's harmless to request
+  // on every launch (it re-checks and no-ops if already granted or unsupported).
+  useEffect(() => {
+    if (phase === 'app') void requestPersistentStorage()
   }, [phase])
 
   // Return-visit reminders only fire while the app is actually open (no backend to wake
@@ -94,6 +103,8 @@ function App() {
         <span className="brand-mark" />
         <h1>Field Service</h1>
       </header>
+
+      <InstallBanner />
 
       <main className="app-main">
         <Suspense fallback={<div className="tab-loading" />}>
