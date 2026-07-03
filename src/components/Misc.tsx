@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { db } from '../db'
 import ConfirmDialog from './ConfirmDialog'
+import { exportBackup, importBackup, type ImportSummary } from '../backup'
+import { APP_VERSION } from '../version'
 import { COPYRIGHT_SUMMARY, DEVELOPER_EMAIL, NOT_AFFILIATED } from '../legal'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
 import {
@@ -42,6 +44,54 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
   const [notifyPermission, setNotifyPermission] = useState<NotificationPermission | 'unsupported'>(() =>
     notificationsSupported() ? Notification.permission : 'unsupported'
   )
+
+  // Backup & restore
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [exportMsg, setExportMsg] = useState<string | null>(null)
+  const [pendingImport, setPendingImport] = useState<File | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null)
+
+  async function handleExport() {
+    setExportMsg(null)
+    setBackupBusy(true)
+    try {
+      const how = await exportBackup()
+      setExportMsg(how === 'shared' ? 'Backup ready to save or send.' : 'Backup file downloaded.')
+    } catch {
+      setExportMsg('Could not create the backup. Please try again.')
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  function pickImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // let the same file be re-picked later
+    if (!file) return
+    setImportError(null)
+    setImportSummary(null)
+    setPendingImport(file)
+  }
+
+  async function confirmImport() {
+    if (!pendingImport) return
+    setBackupBusy(true)
+    setImportError(null)
+    try {
+      const summary = await importBackup(pendingImport)
+      setImportSummary(summary)
+      setPendingImport(null)
+      // A live reload guarantees every screen re-reads the restored data + settings cleanly.
+      setTimeout(() => window.location.reload(), 900)
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed.')
+      setPendingImport(null)
+    } finally {
+      setBackupBusy(false)
+    }
+  }
 
   async function loadDemoData() {
     // Dynamic import so this dev-only generator (and its data) is a separate chunk that
@@ -247,6 +297,37 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
         )}
       </div>
 
+      {/* ── Backup & Restore ────────────────────────────────── */}
+      <div className="card">
+        <strong>💾 Backup &amp; Restore</strong>
+        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
+          Your data lives only on this device. Save a backup file to keep it safe, move it to a new
+          device, or carry it into a future version of the app. Back up regularly while field testing.
+        </p>
+        <div className="row">
+          <button onClick={handleExport} disabled={backupBusy}>Export Backup</button>
+          <button className="secondary" onClick={() => fileInputRef.current?.click()} disabled={backupBusy}>
+            Restore from Backup
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: 'none' }}
+          onChange={pickImportFile}
+        />
+        {exportMsg && <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>{exportMsg}</p>}
+        {importSummary && (
+          <p className="muted" style={{ fontSize: 12, margin: '8px 0 0', color: 'var(--accent)' }}>
+            Restored {Object.values(importSummary.tables).reduce((a, b) => a + b, 0)} records. Reloading…
+          </p>
+        )}
+        {importError && (
+          <p style={{ fontSize: 12, margin: '8px 0 0', color: 'var(--danger)' }}>{importError}</p>
+        )}
+      </div>
+
       {/* ── 4. Guided tour ──────────────────────────────────── */}
       <div className="card">
         <strong>Guided Tour</strong>
@@ -341,6 +422,21 @@ export default function Misc({ onReplayTutorial }: { onReplayTutorial: () => voi
         onConfirm={() => { setConfirmSeed(false); loadDemoData() }}
         onCancel={() => setConfirmSeed(false)}
       />
+
+      <ConfirmDialog
+        open={!!pendingImport}
+        title="Restore this backup?"
+        message="This replaces your current data with the contents of the backup file. Anything not in the file will be lost. Consider exporting a backup first."
+        confirmLabel="Restore"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={confirmImport}
+        onCancel={() => setPendingImport(null)}
+      />
+
+      <p className="muted" style={{ textAlign: 'center', fontSize: 12, margin: '4px 0 0' }}>
+        Field Service v{APP_VERSION}
+      </p>
     </div>
   )
 }
