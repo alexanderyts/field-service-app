@@ -117,6 +117,10 @@ export default function MapView({
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const { getLocation, loading, error } = useCurrentLocation()
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null)
+  // Bumped by the top "Draw Custom Territory" button so the tools are reachable without
+  // scrolling past the (touch-capturing) map to the controls below. TerritoryControls opens
+  // the draw modal whenever this changes.
+  const [drawSignal, setDrawSignal] = useState(0)
 
   const territories = useLiveQuery(() => db.territories.toArray(), []) ?? []
   const streetEntries = useLiveQuery(() => db.streetEntries.toArray(), []) ?? []
@@ -166,6 +170,12 @@ export default function MapView({
         </div>
       )}
 
+      {/* Reachable without scrolling past the map (which captures touch-drags) — opens the
+          same Custom-Territory draw tool the controls below the map offer. */}
+      <button className="secondary map-draw-btn" onClick={() => setDrawSignal((n) => n + 1)}>
+        ✏️ Draw Custom Territory
+      </button>
+
       {/* The map itself is the main thing this tab is for, so it stays right up top,
           visible without scrolling — the territory controls below it are a secondary,
           occasional-use tool. Any active temporary territory's streets are drawn on this
@@ -175,7 +185,7 @@ export default function MapView({
         {/* Height adapts to the viewport so the map bottom (attribution + any bottom-edge
             pins) clears the floating tab bar instead of hiding under it, while staying a
             comfortable size on tall and short screens alike. */}
-        <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: 'clamp(320px, calc(100dvh - 360px), 560px)', width: '100%' }}>
+        <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: 'clamp(300px, calc(100dvh - 410px), 520px)', width: '100%' }}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
@@ -206,7 +216,7 @@ export default function MapView({
       {/* Drawing happens in its own modal (see Territory.tsx) with its own map instance,
           not this page's map — that keeps it fully isolated from this page's normal
           scroll, so panning/zooming there can never fight the page scrolling underneath. */}
-      <TerritoryControls territory={activeTerritory} initialCenter={center} pendingDraw={pendingDraw} onDrawConsumed={onDrawConsumed} />
+      <TerritoryControls territory={activeTerritory} initialCenter={center} pendingDraw={pendingDraw} onDrawConsumed={onDrawConsumed} drawSignal={drawSignal} />
     </div>
   )
 }

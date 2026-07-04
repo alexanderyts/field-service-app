@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
-import { db } from '../db'
 import ConfirmDialog from './ConfirmDialog'
-import { exportBackup, importBackup, type ImportSummary } from '../backup'
+import { exportBackup, importBackup, wipeAllData, type ImportSummary } from '../backup'
 import { readMeleoFile } from '../share'
 import { InstallCard } from './InstallPrompt'
 import { tipServices, type TipKind } from '../tips'
@@ -149,15 +148,9 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
   }
 
   async function clearAllData() {
-    await Promise.all([
-      db.people.clear(),
-      db.calls.clear(),
-      db.timeLogs.clear(),
-      db.appointments.clear(),
-      db.schedulePrefs.clear(),
-    ])
-    localStorage.removeItem('fieldservice_privacy_v1')
-    localStorage.removeItem('fieldservice_minute_bank')
+    // True factory reset — every table + every fieldservice_* setting (aux pioneering, theme,
+    // credit toggle, notifications, profile, onboarding flags), so the app starts genuinely fresh.
+    await wipeAllData()
     window.location.reload()
   }
 

@@ -20,6 +20,11 @@ export default defineConfig({
         theme_color: '#2f6f5e',
         background_color: '#f3f1ec',
         display: 'standalone',
+        // When a link (e.g. a scanned share QR) is opened and Meleo is already installed,
+        // focus/navigate the existing installed window instead of spawning a new browser tab.
+        // Chromium-only; iOS ignores it (a scanned URL can't be routed into an installed PWA
+        // there — that needs the native build). See QR-PWA-NOTES.md.
+        launch_handler: { client_mode: ['navigate-existing', 'auto'] },
         // Unlike start_url/scope (which vite-plugin-pwa derives from `base` itself),
         // icon paths are used as given — so they need the same base prefix by hand,
         // or they'd 404 under GitHub Pages' '/field-service-app/' subpath.

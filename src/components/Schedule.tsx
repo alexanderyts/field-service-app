@@ -663,7 +663,6 @@ function ScheduleMain({
   // the same bar that steps weeks in the week/collapsed views.
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth())
   const [calYear, setCalYear] = useState(() => new Date().getFullYear())
-  const [addOpen, setAddOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
   // When the navigated week straddles a month boundary, this picks which of the two
   // months' days are "active" (the other side fades) — null means "use the natural
@@ -696,6 +695,17 @@ function ScheduleMain({
   // unmounted (e.g. a tab switch mid-animation) — harmless in React, but avoids the warning.
   const mountedRef = useRef(true)
   useEffect(() => () => { mountedRef.current = false }, [])
+
+  // When the Service Schedule expands (mini → week/calendar), pin its card to the top of the
+  // viewport so the whole expanded view is visible without hunting for it by scrolling. The
+  // progress card above scrolls off but still reflects the shown month if you scroll back up.
+  const schedCardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (scheduleView === 'collapsed') return
+    const el = schedCardRef.current
+    if (!el) return
+    requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }, [scheduleView])
   const [bankCollapsing, setBankCollapsing] = useState(false)
 
   const weekStartMs = thisWeekStartMs + weekOffset * 7 * 24 * 60 * 60 * 1000
@@ -763,7 +773,12 @@ function ScheduleMain({
   const defaultSegment = weekOffset === 0 && todaySegment >= 0 ? todaySegment : 0
   const segment = isSplitWeek ? (segmentOverride ?? defaultSegment) : 0
   const primaryMonth = touchedMonths[segment] ?? touchedMonths[0]
-  const monthYearLabel = `${MONTH_NAMES_LONG[primaryMonth.month]} ${primaryMonth.year}`
+  // The month the top progress card reflects: normally the navigated week's month, but when
+  // the inline calendar is open it follows the calendar's shown month (so stepping months
+  // advances the progress window too, mirroring how progressing weeks already drives it). The
+  // weekly "this week" pace line stays anchored to the real current week (see pioneerWeeklyGoalMin).
+  const displayedMonth = scheduleView === 'calendar' ? { year: calYear, month: calMonth } : primaryMonth
+  const monthYearLabel = `${MONTH_NAMES_LONG[displayedMonth.month]} ${displayedMonth.year}`
   // Only meaningful for a split week — the exact day range within it that belongs to
   // whichever month is currently shown, for the "June 28 – 30" style partial label.
   const segmentBoundaryMs = (() => {
@@ -826,35 +841,35 @@ function ScheduleMain({
 
   // How many days remain in the month being viewed — only meaningful when that's the
   // actual current month, since a past/future navigated week isn't "the month you live in".
-  const monthDaysLeft = daysLeftInMonth(primaryMonth.year, primaryMonth.month, now)
-  const monthElapsedPctVal = monthElapsedPct(primaryMonth.year, primaryMonth.month, now)
+  const monthDaysLeft = daysLeftInMonth(displayedMonth.year, displayedMonth.month, now)
+  const monthElapsedPctVal = monthElapsedPct(displayedMonth.year, displayedMonth.month, now)
 
   // Non-pioneer, no goal, not auxiliary pioneering this month — no hours involved at all,
   // just a monthly checkbox plus a couple of easy, encouraging stats. Kept as React state
   // (not read fresh each render) so toggling it in the collapsed box below immediately
   // updates the summary line up here too.
-  const [participatedThisMonth, setParticipatedThisMonthState] = useState(() => getParticipatedMonth(primaryMonth.year, primaryMonth.month))
+  const [participatedThisMonth, setParticipatedThisMonthState] = useState(() => getParticipatedMonth(displayedMonth.year, displayedMonth.month))
   useEffect(() => {
-    setParticipatedThisMonthState(getParticipatedMonth(primaryMonth.year, primaryMonth.month))
+    setParticipatedThisMonthState(getParticipatedMonth(displayedMonth.year, displayedMonth.month))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [primaryMonth.year, primaryMonth.month])
+  }, [displayedMonth.year, displayedMonth.month])
   function updateParticipated(participated: boolean) {
     setParticipatedThisMonthState(participated)
-    setParticipatedMonth(primaryMonth.year, primaryMonth.month, participated)
+    setParticipatedMonth(displayedMonth.year, displayedMonth.month, participated)
   }
 
   const contactsThisMonth = people.filter((p) => {
     const d = new Date(p.createdAt)
-    return d.getFullYear() === primaryMonth.year && d.getMonth() === primaryMonth.month
+    return d.getFullYear() === displayedMonth.year && d.getMonth() === displayedMonth.month
   }).length
   const scripturesThisMonth = calls.filter((c) => {
     if (!c.scriptures?.trim()) return false
     const d = new Date(c.date)
-    return d.getFullYear() === primaryMonth.year && d.getMonth() === primaryMonth.month
+    return d.getFullYear() === displayedMonth.year && d.getMonth() === displayedMonth.month
   }).length
   const territoriesThisMonth = territoryCompletions.filter((t) => {
     const d = new Date(t.completedAt)
-    return d.getFullYear() === primaryMonth.year && d.getMonth() === primaryMonth.month
+    return d.getFullYear() === displayedMonth.year && d.getMonth() === displayedMonth.month
   }).length
 
   // Only the "primary" month/service-year is ever shown (never both touched ones at
@@ -862,7 +877,7 @@ function ScheduleMain({
   // stacking a second progress bar, so the card is always exactly the height one month's
   // worth of content needs, with no reserved dead space for a month that isn't shown.
   const monthProgress = (() => {
-    const { year, month } = primaryMonth
+    const { year, month } = displayedMonth
     const stats = monthTotals(monthLogsFor(logs, year, month))
     const goalMin = ceilHourMin(effectiveMonthlyGoalMin(prefs, auxConfig, year, month))
     return {
@@ -921,7 +936,7 @@ function ScheduleMain({
       : prefs.goalPeriod === 'weekly'
         ? weeklyGoalMin
         : 0
-  const primaryServiceYear = serviceYearLabel(new Date(primaryMonth.year, primaryMonth.month, 1))
+  const primaryServiceYear = serviceYearLabel(new Date(displayedMonth.year, displayedMonth.month, 1))
   const yearProgress = (() => {
     const label = primaryServiceYear
     const stats = serviceYearlyTotals(logs, label)
@@ -1241,7 +1256,7 @@ function ScheduleMain({
           <div>
             <div className="goal-row">
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                Days left in {MONTH_NAMES_LONG[primaryMonth.month]}
+                Days left in {MONTH_NAMES_LONG[displayedMonth.month]}
                 <InfoTip text="How far through this month is — not tied to any goal." />
               </span>
               <strong>{monthDaysLeft} day{monthDaysLeft === 1 ? '' : 's'} left</strong>
@@ -1338,7 +1353,7 @@ function ScheduleMain({
       </div>
 
       {/* Service Schedule — mini week (collapsed), inline month calendar, or inline week grid */}
-      <div className="card">
+      <div className="card" ref={schedCardRef} style={{ scrollMarginTop: 72 }}>
         <div className="service-sched-header">
           <h4 style={{ margin: 0 }}>Service Schedule</h4>
         </div>
@@ -1417,14 +1432,18 @@ function ScheduleMain({
 
         {scheduleView === 'week' && (
           <div className="sched-view-body">
-            {(weekOffset !== 0 || segment !== defaultSegment) && (
-              <button className="secondary small" onClick={() => { goToWeekOffset(0); setHighlightTs(null) }}>
-                Jump to current week
+            {/* Return-visit button always sits first so it never moves; the jump-to-current
+                appears below it only when off the current week, keeping button positions stable. */}
+            <div className="sched-jump-row">
+              <button className="secondary small" onClick={jumpToNextReturnVisit}>
+                Jump to next return visit
               </button>
-            )}
-            <button className="secondary small" onClick={jumpToNextReturnVisit}>
-              Jump to next return visit
-            </button>
+              {(weekOffset !== 0 || segment !== defaultSegment) && (
+                <button className="secondary small" onClick={() => { goToWeekOffset(0); setHighlightTs(null) }}>
+                  ↩ Jump to current week
+                </button>
+              )}
+            </div>
             {weeklyGoalMin > 0 && suggestedWeeklyMin >= weeklyGoalMin && (
               <div className="goal-line">
                 <span className="rule" />
@@ -1559,9 +1578,7 @@ function ScheduleMain({
           who tracks hours logs via day taps (or the header's "+ Add time" shortcut). */}
       {!isPioneer && !nonPioneerTracksHours && (
         <MonthlyParticipationBox
-          open={addOpen}
-          onToggle={() => setAddOpen((o) => !o)}
-          month={primaryMonth.month}
+          month={displayedMonth.month}
           participated={participatedThisMonth}
           onChange={updateParticipated}
         />
@@ -2668,38 +2685,44 @@ function NumPad({ initialValue, label, max, onConfirm, onClose }: {
  * the box off is the whole interaction, once a month, no hours or dates involved.
  */
 function MonthlyParticipationBox({
-  open,
-  onToggle,
   month,
   participated,
   onChange,
 }: {
-  open: boolean
-  onToggle: () => void
   month: number
   participated: boolean
   onChange: (participated: boolean) => void
 }) {
+  // Non-pioneers who don't track hours just tick one box a month — so the whole card is that
+  // single toggle (the checkbox sits where an expand button used to), with a warm confirmation
+  // when it's checked instead of a bare box.
   return (
-    <div className="card">
-      <button className="collapse-header" onClick={onToggle}>
-        <strong>Participation in the Ministry</strong>
-        <span className="add-plus">{open ? '×' : '+'}</span>
-      </button>
+    <div className={`card participation-card${participated ? ' done' : ''}`}>
+      <label className="participation-header">
+        <div>
+          <strong>Participation in the Ministry</strong>
+          <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+            Did you share in the ministry during {MONTH_NAMES_LONG[month]}?
+          </p>
+        </div>
+        <input
+          type="checkbox"
+          className="participation-check"
+          checked={participated}
+          onChange={(e) => onChange(e.target.checked)}
+          aria-label={`I participated in the ministry in ${MONTH_NAMES_LONG[month]}`}
+        />
+      </label>
 
-      {open && (
-        <div className="add-time-body">
-          <label className="checkbox-row">
-            <input type="checkbox" checked={participated} onChange={(e) => onChange(e.target.checked)} />
-            <strong>I participated in the ministry in {MONTH_NAMES_LONG[month]}</strong>
-          </label>
-
-          {participated && (
-            <div className="highlight-box" style={{ textAlign: 'center' }}>
-              <strong style={{ fontSize: 16 }}>🎉 You did it!</strong>
-              <p className="muted" style={{ margin: '4px 0 0' }}>Every visit makes a difference. Keep it up!</p>
-            </div>
-          )}
+      {participated && (
+        <div className="participation-cue" role="status">
+          <span className="participation-cue-emoji" aria-hidden="true">🎉</span>
+          <div>
+            <strong>You did it!</strong>
+            <p className="muted" style={{ margin: '2px 0 0' }}>
+              {MONTH_NAMES_LONG[month]} is marked as a month you shared in the ministry. Every visit makes a difference.
+            </p>
+          </div>
         </div>
       )}
     </div>

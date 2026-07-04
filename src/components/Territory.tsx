@@ -322,6 +322,7 @@ export function TerritoryControls({
   initialCenter,
   pendingDraw,
   onDrawConsumed,
+  drawSignal,
 }: {
   territory: Territory | undefined
   initialCenter: { lat: number; lng: number }
@@ -329,6 +330,9 @@ export function TerritoryControls({
       (creating a draft first if none is active), then calls onDrawConsumed so it fires once. */
   pendingDraw?: boolean
   onDrawConsumed?: () => void
+  /** Incremented by the Map tab's top "Draw Custom Territory" button — each change opens the
+      drawing tool (unlike the one-shot pendingDraw, this can fire repeatedly on the Map tab). */
+  drawSignal?: number
 }) {
   const [drawOpen, setDrawOpen] = useState(false)
   const [editStreetId, setEditStreetId] = useState<string | null>(null)
@@ -352,6 +356,15 @@ export function TerritoryControls({
     createTerritory() // idempotent — reuses the active draft if there already is one
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingDraw])
+
+  // The Map tab's top button bumps drawSignal to open the draw tool on demand (repeatable).
+  const lastDrawSignal = useRef(0)
+  useEffect(() => {
+    if (!drawSignal || drawSignal === lastDrawSignal.current) return
+    lastDrawSignal.current = drawSignal
+    createTerritory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawSignal])
 
   function toggleSelected(streetId: string) {
     setSelected((prev) => {

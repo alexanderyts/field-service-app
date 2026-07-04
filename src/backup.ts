@@ -96,6 +96,25 @@ export async function exportBackup(): Promise<'shared' | 'downloaded'> {
   return 'downloaded'
 }
 
+/** Factory reset — wipe every Dexie table and every `fieldservice_*` localStorage key, so
+    the app is genuinely fresh (no lingering aux-pioneering config, theme, credit toggle,
+    notification settings, profile name, onboarding flags, etc.). Iterates `db.tables` rather
+    than a hardcoded list so any table added later is cleared too. Callers reload afterward. */
+export async function wipeAllData(): Promise<void> {
+  await db.open()
+  await db.transaction('rw', db.tables, async () => {
+    for (const table of db.tables) await table.clear()
+  })
+  try {
+    const keys: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('fieldservice_')) keys.push(key)
+    }
+    for (const key of keys) localStorage.removeItem(key)
+  } catch { /* localStorage blocked — DB is still wiped */ }
+}
+
 export interface ImportSummary {
   tables: Record<string, number>
   settings: number

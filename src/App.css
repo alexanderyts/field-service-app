@@ -8,19 +8,22 @@
   position: fixed;
   inset: 0;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  background: #f3f1ec;
+  /* Themed: main.tsx applies data-theme before first paint, so the splash inherits the user's
+     chosen theme instead of a fixed cream. (The OS-level PWA launch image from the manifest
+     background_color is still static — resolved by the future native build.) */
+  background: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
   animation: splash-in 0.5s ease both;
 
-  --splash-muted: #77726a;
-  --splash-accent: #2f6f5e;
-  --splash-accent-2: #5a7d3a;
-  --splash-accent-soft: #e4efe9;
-  --splash-surface: #ffffff;
-  --splash-border: #e4e0d8;
+  --splash-muted: var(--muted);
+  --splash-accent: var(--accent);
+  --splash-accent-2: var(--accent);
+  --splash-accent-soft: var(--accent-soft);
+  --splash-surface: var(--surface);
+  --splash-border: var(--border);
 }
 
 .splash.splash-leaving {
@@ -826,6 +829,13 @@ button.small {
   box-shadow: var(--shadow-sm);
 }
 
+/* Top-of-tab shortcut to the Custom-Territory draw tool, so it's reachable without scrolling
+   past the touch-capturing map to the controls below. */
+.map-draw-btn {
+  width: 100%;
+  margin: 8px 0 4px;
+}
+
 .map-compass {
   position: absolute;
   top: 10px;
@@ -1381,6 +1391,78 @@ button.small {
   letter-spacing: 0.02em;
   color: var(--accent);
   white-space: nowrap;
+}
+
+/* Week-view jump buttons — return-visit always first (stable), jump-to-current stacked below
+   it only when off the current week, with real spacing so they never crowd. */
+.sched-jump-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* Non-pioneer monthly participation — a single inline toggle (no expand); the checkbox sits
+   at the right of the header where a chevron/plus used to. */
+.participation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.participation-check {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.participation-card.done {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+/* Warm confirmation once they've ticked the box — more than a bare check. */
+.participation-cue {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.participation-cue strong {
+  color: var(--accent);
+}
+
+.participation-cue-emoji {
+  font-size: 22px;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .participation-cue {
+    animation: participation-pop 0.32s ease-out both;
+  }
+  .participation-cue-emoji {
+    animation: participation-emoji 0.5s ease-out both;
+  }
+}
+
+@keyframes participation-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes participation-emoji {
+  0%   { transform: scale(0.4) rotate(-12deg); }
+  60%  { transform: scale(1.25) rotate(6deg); }
+  100% { transform: scale(1) rotate(0); }
 }
 
 .legend {

@@ -4,6 +4,7 @@
 // the dev-gated button in Misc.tsx.
 import { db, type Person, type Call, type TimeLog, type Appointment, type ContactStatus, type TimeCategory } from './db'
 import { serviceYearBounds, serviceYearlyApplied } from './timeStats'
+import { wipeAllData } from './backup'
 
 function mulberry32(seed: number) {
   return function rng() {
@@ -385,13 +386,9 @@ export async function seedDemoData() {
   const now = new Date()
   const end = new Date(Math.min(new Date(2026, 5, 30).getTime(), now.getTime() - 86400000))
 
-  await Promise.all([
-    db.people.clear(),
-    db.calls.clear(),
-    db.timeLogs.clear(),
-    db.appointments.clear(),
-    db.schedulePrefs.clear(),
-  ])
+  // Full reset first (every table + all fieldservice_* settings) so the demo starts from a
+  // genuinely clean slate, then re-seed. Matches the More-tab "Clear All Data" behavior.
+  await wipeAllData()
 
   const people = buildPeople(rng, start, end)
   const calls = buildCalls(rng, people, end)
@@ -420,7 +417,10 @@ export async function seedDemoData() {
     goalPeriod: 'none',
   })
 
-  localStorage.setItem('fieldservice_privacy_v1', 'yes')
+  // Re-set the flags a preview wants: accept the current policy gate and skip the one-time
+  // onboarding prompts, and turn credit categories on (the demo logs credit time).
+  localStorage.setItem('fieldservice_privacy_v2', 'yes')
+  localStorage.setItem('fieldservice_profile_prompted', 'yes')
+  localStorage.setItem('fieldservice_tutorial_seen', 'yes')
   localStorage.setItem('fieldservice_credit_hours', 'yes')
-  localStorage.removeItem('fieldservice_minute_bank')
 }

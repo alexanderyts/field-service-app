@@ -28,11 +28,16 @@ const initialImport: string | null = (() => {
 // Contacts is the default tab, so it stays eagerly imported (no Suspense flash on first
 // paint). Everything else is code-split: Map pulls in Leaflet (~150KB), and Schedule is a
 // 3k-line component — deferring these off the initial bundle cuts first-paint JS/parse.
-// The one-time Suspense flash on first visit to each of these tabs is a fine trade.
-const Schedule = lazy(() => import('./components/Schedule'))
-const Reports = lazy(() => import('./components/Reports'))
-const Misc = lazy(() => import('./components/Misc'))
-const MapView = lazy(() => import('./components/MapView'))
+// The chunks are then prefetched during idle time once the app is up (see the warm-up effect),
+// so the very first switch to each tab is instant rather than showing a Suspense flash.
+const importSchedule = () => import('./components/Schedule')
+const importReports = () => import('./components/Reports')
+const importMisc = () => import('./components/Misc')
+const importMapView = () => import('./components/MapView')
+const Schedule = lazy(importSchedule)
+const Reports = lazy(importReports)
+const Misc = lazy(importMisc)
+const MapView = lazy(importMapView)
 
 type Tab = 'contacts' | 'schedule' | 'map' | 'reports' | 'misc'
 type Phase = 'splash' | 'splash-out' | 'policy' | 'profile' | 'app'
@@ -89,6 +94,19 @@ function App() {
     if (phase === 'app') void requestPersistentStorage()
   }, [phase])
 
+  // Warm the code-split tab chunks during idle time once the app is up, so the first switch
+  // to Schedule/Reports/Map/More is instant instead of showing a one-time Suspense flash.
+  useEffect(() => {
+    if (phase !== 'app') return
+    const warm = () => { void importSchedule(); void importReports(); void importMisc(); void importMapView() }
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(warm, { timeout: 2500 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const t = window.setTimeout(warm, 1200)
+    return () => window.clearTimeout(t)
+  }, [phase])
+
   // Return-visit reminders only fire while the app is actually open (no backend to wake
   // the phone otherwise) — checked once on reaching the app, then every few minutes for
   // as long as it stays open, so a visit that enters its lead window while someone's
@@ -100,12 +118,13 @@ function App() {
     return () => window.clearInterval(interval)
   }, [phase])
 
-  // The splash screen is a fixed cream overlay; without this, any gap around it (e.g. the
+  // The splash screen is a fixed overlay; without this, any gap around it (e.g. the
   // home-indicator safe area on iOS) shows the page's default background instead, which can
-  // read as a mismatched flash at the edges of the screen.
+  // read as a mismatched flash at the edges. Uses the themed background (var(--bg), set per
+  // the user's chosen theme on <html> before first paint) so it matches the splash itself.
   useEffect(() => {
     const isSplash = phase === 'splash' || phase === 'splash-out'
-    document.body.style.background = isSplash ? '#f3f1ec' : ''
+    document.body.style.background = isSplash ? 'var(--bg)' : ''
   }, [phase])
 
   // Switching tabs is a hard content swap (unmount/mount), not real navigation — without
@@ -138,7 +157,6 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <span className="brand-mark" />
         <h1>Meleo</h1>
       </header>
 

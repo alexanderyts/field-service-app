@@ -26,11 +26,11 @@ export function SplashScreen({ leaving }: { leaving: boolean }) {
       <div className="splash-inner">
         <div className="splash-icon">
           <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="27" y="9" width="15" height="31" rx="2.4" stroke="#5a7d3a" strokeWidth="2.2" />
-            <circle cx="29.4" cy="25" r="1.3" fill="#5a7d3a" />
-            <circle cx="12.5" cy="20" r="3.3" stroke="#2f6f5e" strokeWidth="2.4" />
-            <path d="M12.5 23.3c-3.9 1.5-6.5 4.3-6.5 7.7v9" stroke="#2f6f5e" strokeWidth="2.4" strokeLinecap="round" />
-            <path d="M12.5 23.3c3.9 1.5 6.5 4.3 6.5 7.7v9" stroke="#2f6f5e" strokeWidth="2.4" strokeLinecap="round" />
+            <rect x="27" y="9" width="15" height="31" rx="2.4" stroke="var(--splash-accent-2)" strokeWidth="2.2" />
+            <circle cx="29.4" cy="25" r="1.3" fill="var(--splash-accent-2)" />
+            <circle cx="12.5" cy="20" r="3.3" stroke="var(--splash-accent)" strokeWidth="2.4" />
+            <path d="M12.5 23.3c-3.9 1.5-6.5 4.3-6.5 7.7v9" stroke="var(--splash-accent)" strokeWidth="2.4" strokeLinecap="round" />
+            <path d="M12.5 23.3c3.9 1.5 6.5 4.3 6.5 7.7v9" stroke="var(--splash-accent)" strokeWidth="2.4" strokeLinecap="round" />
           </svg>
         </div>
         <div className="splash-wordstack">
