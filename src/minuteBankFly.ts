@@ -29,13 +29,9 @@ const FLIGHT_MS = 1150
     callers can sync a follow-up effect — like counting the bank up — to the moment of
     "arrival". No-ops safely if either element isn't on screen, or if the user has turned
     the animation off. */
-export function flyToMinuteBank(originEl: HTMLElement | null | undefined): Promise<void> {
-  if (!originEl || !minuteBankAnimationsEnabled()) return Promise.resolve()
+function flyFromPoint(startX: number, startY: number): Promise<void> {
+  if (!minuteBankAnimationsEnabled()) return Promise.resolve()
   if (!findBankTarget()) return Promise.resolve()
-
-  const from = originEl.getBoundingClientRect()
-  const startX = from.left + from.width / 2
-  const startY = from.top + from.height / 2
 
   const ball = document.createElement('div')
   ball.className = 'minute-bank-ball'
@@ -109,25 +105,26 @@ export function flyToMinuteBank(originEl: HTMLElement | null | undefined): Promi
   })
 }
 
-const COLLECT_MS = 420
+const COLLECT_MS = 620
 
-/** Plays a "gathering" glow+shrink on the field the minutes were entered in (see
-    .minute-collecting in App.css): it lights up orange, then shrinks down to a point. The
-    flying ball is launched from that same point once the field has shrunk, and — crucially —
-    the collect class is left on (holding the field shrunk & invisible) for the whole flight,
-    then removed only after the ball lands. That means there's no mid-flight "snap back" of
-    the field to full size; visually the field simply *becomes* the flying minute icon and
-    carries off to the bank. Resolves once the ball arrives. No-ops (and skips the delay
-    entirely) when minute-bank animations are turned off. */
+/** Plays a slow "gathering" glow+shrink on the field the minutes were entered in (see
+    .minute-collecting in App.css): it lights up orange, then shrinks down to a point, and the
+    flying ball launches from that same point. The field's centre is captured *up front* — the
+    moment the minutes are submitted — so the ball always starts exactly where the field was,
+    even though the caller closes the day modal right after this launches (the ball is a
+    document.body element and keeps flying on its own to the bank). The `.minute-collecting`
+    class is not removed here: the field unmounts with the closing modal, so there's never a
+    "snap back" to full size. No-ops (skipping the delay) when animations are off. */
 export async function collectAndFlyToMinuteBank(fieldEl: HTMLElement | null | undefined) {
   if (!fieldEl || !minuteBankAnimationsEnabled()) return
+  const r = fieldEl.getBoundingClientRect()
+  const startX = r.left + r.width / 2
+  const startY = r.top + r.height / 2
   fieldEl.classList.add('minute-collecting')
   await new Promise((resolve) => window.setTimeout(resolve, COLLECT_MS))
-  // Field is now shrunk to a point and transparent (the keyframe holds it via `forwards`).
-  // Launch the ball from that same centre before resetting the field, so the handoff reads
-  // as continuous rather than as two separate effects.
-  await flyToMinuteBank(fieldEl)
-  fieldEl.classList.remove('minute-collecting')
+  // Fire-and-forget: launch from the captured centre and return so the caller can close the
+  // modal now; the ball finishes its flight to the bank independently.
+  void flyFromPoint(startX, startY)
 }
 
 /** Tweens a displayed integer from `from` to `to` over `durationMs`, calling `onUpdate` on

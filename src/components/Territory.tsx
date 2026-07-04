@@ -5,8 +5,6 @@ import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import { renderStreetsImage, STREET_COLORS } from '../territoryImage'
 import { fetchRoadsNear, snapPathToRoads, type LatLng } from '../roadSnap'
-import { captureTraceSnapshot } from '../mapSnapshot'
-import type { Map as LeafletMap } from 'leaflet'
 
 function newStreetId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -81,21 +79,17 @@ function TerritoryPlaceLayer({
   placing,
   waypoints,
   onAddPoint,
-  onMap,
 }: {
   streets: TerritoryStreet[]
   placing: boolean
   waypoints: LatLng[]
   onAddPoint: (p: LatLng) => void
-  onMap?: (map: LeafletMap) => void
 }) {
   const map = useMap()
   const placingRef = useRef(placing)
   const addRef = useRef(onAddPoint)
   placingRef.current = placing
   addRef.current = onAddPoint
-
-  useEffect(() => { onMap?.(map) }, [map, onMap])
 
   useEffect(() => {
     if (!placing) return
@@ -153,7 +147,6 @@ export function TerritoryDrawModal({
   const [pendingStroke, setPendingStroke] = useState<LatLng[] | null>(null)
   const [streetName, setStreetName] = useState('')
   const [lookingUpName, setLookingUpName] = useState(false)
-  const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null)
 
   function startPlacing() { setWaypoints([]); setPlacing(true) }
 
@@ -199,11 +192,7 @@ export function TerritoryDrawModal({
   async function savePendingStreet(name: string) {
     if (!pendingStroke) return
     const stroke = pendingStroke
-    // Capture a real snapshot of the map tiles under this trace (with the line + name drawn
-    // on top) while the map is still showing this area. Best-effort — on any failure the
-    // schematic renderer is used instead.
-    const snapshot = mapInstance ? (await captureTraceSnapshot(mapInstance, stroke, name)) ?? undefined : undefined
-    const street: TerritoryStreet = { id: newStreetId(), name, points: stroke, done: false, snapshot }
+    const street: TerritoryStreet = { id: newStreetId(), name, points: stroke, done: false }
     await db.territories.update(territory.id, { streets: [...territory.streets, street] })
     setPendingStroke(null)
     // Back to the neutral "Draw Street" button rather than auto-arming the next trace.
@@ -252,7 +241,6 @@ export function TerritoryDrawModal({
                 placing={placing}
                 waypoints={waypoints}
                 onAddPoint={(p) => setWaypoints((w) => [...w, p])}
-                onMap={setMapInstance}
               />
             </MapContainer>
           </div>
@@ -461,7 +449,7 @@ export function TerritoryControls({
                   defaultValue={s.assignedTo ?? ''}
                   onBlur={(e) => setStreetAssignee(s.id, e.target.value)}
                 />
-                {s.snapshot && (
+                {s.points.length >= 2 && (
                   <button className="icon-btn" title="View traced map" onClick={() => setViewStreet(s)}>🗺️</button>
                 )}
               </div>
@@ -535,24 +523,20 @@ export function TerritoryControls({
   )
 }
 
-/** Shows a single traced street's real map snapshot (the picture captured over the tiles at
-    draw time), falling back to the schematic renderer when no snapshot was captured. Shared
-    by the draft checklist and the grouped-territory detail. */
+/** Shows a single traced street on a live, labelled map over real tiles — the same view as
+    the combined territory map, for one street. Shared by the draft checklist and the
+    grouped-territory detail. */
 export function StreetSnapshotModal({ street, onClose }: { street: TerritoryStreet; onClose: () => void }) {
-  const img = street.snapshot ?? renderStreetsImage([{ points: street.points, name: street.name }], { width: 360, height: 260 })
   return (
     <ModalPortal>
       <div className="modal-backdrop" onClick={onClose}>
-        <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">
             <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
           </div>
           <h3 style={{ marginTop: 0 }}>{street.name}</h3>
-          <img src={img} alt={`Map of ${street.name}`} style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)' }} />
-          {!street.snapshot && (
-            <p className="muted" style={{ fontSize: 12 }}>Schematic view — a real map snapshot wasn't captured for this street.</p>
-          )}
-          {street.assignedTo && <p className="muted" style={{ margin: '4px 0 0' }}>👤 Assigned to {street.assignedTo}</p>}
+          <TerritoryMiniMap streets={[street]} />
+          {street.assignedTo && <p className="muted" style={{ margin: '8px 0 0' }}>👤 Assigned to {street.assignedTo}</p>}
         </div>
       </div>
     </ModalPortal>

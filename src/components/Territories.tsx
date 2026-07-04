@@ -126,7 +126,7 @@ function TerritoryDetail({
                       )}
                     </div>
                     <div className="row" style={{ gap: 6 }}>
-                      {s.snapshot && (
+                      {s.points.length >= 2 && (
                         <button className="icon-btn" title="View traced map" onClick={() => setViewStreet(s)}>🗺️</button>
                       )}
                       {entry && (

@@ -1034,6 +1034,20 @@ function ScheduleMain({
     }
   }
 
+  // Clears one day completely — deletes that date's logged time entries AND hides its
+  // scheduled instance (an empty date-override, leaving the recurring weekly pattern intact).
+  // Reached from the ✕ on each week-view day row.
+  const [confirmClearDay, setConfirmClearDay] = useState<Date | null>(null)
+  async function clearDay(date: Date) {
+    const dayStart = new Date(date); dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(date); dayEnd.setHours(23, 59, 59, 999)
+    const ids = logs.filter((l) => l.date >= dayStart.getTime() && l.date <= dayEnd.getTime()).map((l) => l.id)
+    if (ids.length) await db.timeLogs.bulkDelete(ids)
+    if (blocksForDate(prefs, date).length > 0) {
+      await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(prefs.dateOverrides ?? {}), [fmtLocalDate(date)]: [] } })
+    }
+  }
+
   async function bankQuickLogMinutes(
     date: Date,
     h: number,
@@ -1047,7 +1061,10 @@ function ScheduleMain({
     const autoHour = bank >= 60
     if (autoHour) bank -= 60
     saveMinuteBank(bank)
+    // Keep the modal open through the gather (so the field's glow is visible), then close it
+    // once the ball has launched from the field's captured position.
     await collectAndFlyToMinuteBank(minutesFieldEl)
+    closeDayModalSmoothly()
     await animateBankValue(before, bank, 480, setDisplayedBank)
     if (autoHour) {
       const d = new Date(date)
@@ -1075,12 +1092,10 @@ function ScheduleMain({
       setQuickLogConfirm({ date, hours: h, minutes: m, category, otherNote, originEl })
       return
     }
-    // Close right away — the modal morphs shut at the same moment the minutes field
-    // starts gathering into the ball, rather than waiting for the whole flight (and the
-    // bank update after it) to finish. The ball itself keeps flying independently after
-    // the modal is gone, since it's a separate fixed-position element.
+    // Fade the modal's other fields while the minutes field gathers into the ball; the modal
+    // itself is morphed shut by bankQuickLogMinutes once the ball has launched (so the gather
+    // is visible and the ball originates from the field's real position).
     setDayModalClosing(true)
-    closeDayModalSmoothly()
     bankQuickLogMinutes(date, h, m, category, otherNote, originEl)
   }
 
@@ -1305,33 +1320,31 @@ function ScheduleMain({
       <div className="card">
         <div className="service-sched-header">
           <h4 style={{ margin: 0 }}>Service Schedule</h4>
-          <div className="service-sched-header-right">
-            {/* The minute bank now lives here (moved off the old Add Time card). The fly
-                animation re-reads this pill/anchor's live position each frame, so quick-logs
-                land here automatically. */}
-            <span className="minute-bank-anchor" aria-hidden="true" />
-            {(displayedBank > 0 || bankCollapsing) && (
-              <div
-                className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
-                onClick={() => setConfirmBankRoundUp(true)}
-                title="Tap to round up and add now"
-              >
-                <span>⏱ {displayedBank}m</span>
-                <div className="minute-bank-track">
-                  <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
-                </div>
+          <button
+            className="secondary small"
+            title="Log service time for today"
+            onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
+          >
+            + Quick add time
+          </button>
+        </div>
+        {/* The minute bank sits on its own row (below the title + quick-add), so the ball's
+            arrival pulse never overlaps the lettering or the button. The anchor is always
+            rendered so the very first fly has a stable landing target. */}
+        <div className="minute-bank-row">
+          <span className="minute-bank-anchor" aria-hidden="true" />
+          {(displayedBank > 0 || bankCollapsing) && (
+            <div
+              className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
+              onClick={() => setConfirmBankRoundUp(true)}
+              title="Tap to round up and add now"
+            >
+              <span>⏱ {displayedBank}m</span>
+              <div className="minute-bank-track">
+                <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
               </div>
-            )}
-            {(isPioneer || nonPioneerTracksHours) && (
-              <button
-                className="secondary small"
-                title="Log service time for today"
-                onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
-              >
-                + Quick add time
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
           Your scheduled ministry days and times, plus anything already logged this week.
@@ -1348,6 +1361,9 @@ function ScheduleMain({
               </p>
             )}
             <div className="week-nav">
+              {scheduleView === 'week' && (
+                <button className="icon-btn sched-close-x" onClick={() => setScheduleView('collapsed')} title="Close">×</button>
+              )}
               <button className="icon-btn" onClick={goPrevWeek} title="Previous">‹</button>
               <div className="week-nav-label">
                 <span>
@@ -1361,9 +1377,6 @@ function ScheduleMain({
                 </span>
               </div>
               <button className="icon-btn" onClick={goNextWeek} title="Next">›</button>
-              {scheduleView === 'week' && (
-                <button className="icon-btn sched-close-x" onClick={() => setScheduleView('collapsed')} title="Close">×</button>
-              )}
             </div>
           </>
         )}
@@ -1405,7 +1418,10 @@ function ScheduleMain({
             <button className="secondary small" onClick={jumpToNextReturnVisit}>
               Jump to next return visit
             </button>
-            <div className="week-grid">
+            {weeklyGoalMin > 0 && suggestedWeeklyMin >= weeklyGoalMin && (
+              <div className="week-goal-met">✓ Weekly goal scheduled</div>
+            )}
+            <div className={`week-grid${weeklyGoalMin > 0 && suggestedWeeklyMin >= weeklyGoalMin ? ' goal-met' : ''}`}>
               {DAYS.map((d, i) => {
                 const suggestedBlocks = blocksForDate(prefs, dayDateFor(i))
                 const dayEntries = CATEGORY_ORDER.map((cat) => [cat, perDayCat[i][cat] ?? 0] as const).filter(
@@ -1475,8 +1491,17 @@ function ScheduleMain({
                           />
                         )
                       })}
+                      {logged > 0 && <span className="day-track-total">{fmtDuration(logged)}</span>}
                     </div>
-                    <div className="day-logged">{logged > 0 ? fmtDuration(logged) : ''}</div>
+                    {(suggestedBlocks.length > 0 || logged > 0) && (
+                      <button
+                        className="cal-week-clear-btn day-clear-btn"
+                        title="Clear this day's schedule and logged time"
+                        onClick={(e) => { e.stopPropagation(); setConfirmClearDay(dayDate) }}
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
                 )
               })}
@@ -1530,7 +1555,7 @@ function ScheduleMain({
 
       <ReturnVisits onGoToContact={onGoToContact} />
 
-      {(isPioneer || nonPioneerTracksHours) && (
+      {(isPioneer || nonPioneerTracksHours || logs.length > 0) && (
         <div className="card">
           <h4>Recent Entries</h4>
           <ul className="list">
@@ -1614,7 +1639,6 @@ function ScheduleMain({
             const { date, hours, minutes, category, otherNote, originEl } = quickLogConfirm
             setQuickLogConfirm(null)
             setDayModalClosing(true)
-            closeDayModalSmoothly()
             bankQuickLogMinutes(date, hours, minutes, category, otherNote, originEl)
           }}
         />
@@ -1629,6 +1653,17 @@ function ScheduleMain({
         tone="primary"
         onConfirm={redeemMinuteBank}
         onCancel={() => setConfirmBankRoundUp(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmClearDay != null}
+        title="Clear this day?"
+        message={confirmClearDay ? `Clears ${confirmClearDay.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })} — its scheduled time for that date and any time you've logged that day. Your recurring weekly pattern and other days aren't affected. This can't be undone.` : ''}
+        confirmLabel="Yes, clear this day"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={() => { if (confirmClearDay) clearDay(confirmClearDay); setConfirmClearDay(null) }}
+        onCancel={() => setConfirmClearDay(null)}
       />
     </div>
   )
@@ -2304,9 +2339,10 @@ function ScheduleCalendarView({
   const startDow = new Date(viewYear, viewMonth, 1).getDay()
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
   const cells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
-  // Pad to a whole number of weeks so every row (including a trailing partial one) has a
-  // well-defined first/last visible cell for the checkmark/clear-week controls below.
-  while (cells.length % 7 !== 0) cells.push(null)
+  // Always pad to 6 full weeks (42 cells). Every month then renders the exact same number of
+  // rows, so the calendar's height is constant and matches the week view — switching between
+  // the two never resizes the card.
+  while (cells.length < 42) cells.push(null)
 
   const apptsByDay = new Map<number, Appointment[]>()
   for (const a of appointments) {
@@ -2400,10 +2436,10 @@ function ScheduleCalendarView({
     <>
       <div className="cal-inline cal-modal cal-modal-view">
         <div className="cal-header">
+          <button className="icon-btn sched-close-x" onClick={onCollapse} title="Close">×</button>
           <button className="icon-btn" onClick={prevMonth}>‹</button>
           <strong>{MONTH_NAMES[viewMonth]} {viewYear}</strong>
           <button className="icon-btn" onClick={nextMonth}>›</button>
-          <button className="icon-btn sched-close-x" onClick={onCollapse} title="Close">×</button>
         </div>
         <div className="cal-grid-wrap">
           <div className="cal-dow-row">

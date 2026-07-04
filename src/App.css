@@ -1140,11 +1140,13 @@ button.small {
   gap: 8px;
 }
 
-.service-sched-header-right {
+/* The minute bank's own row under the title/quick-add — right-aligned, and taking no
+   vertical space when the pill isn't showing (just the 1px landing anchor). */
+.minute-bank-row {
   display: flex;
+  justify-content: flex-end;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  min-height: 0;
 }
 
 /* The red X that replaces the old green expand toggle — only shown while the window is
@@ -1181,10 +1183,11 @@ button.small {
   gap: 14px;
 }
 
-/* Both expanded views (week grid + inline calendar) share a min-height so switching between
-   them doesn't make the Service Schedule card jump in size. */
+/* Both expanded views (week grid + inline calendar) share a min-height matched to the
+   constant 6-row calendar, so switching between them doesn't resize the Service Schedule
+   card. */
 .sched-view-body {
-  min-height: 420px;
+  min-height: 470px;
 }
 
 .slot-appt {
@@ -1257,13 +1260,46 @@ button.small {
 .slot-logged.bethel { background: var(--cat-bethel); }
 .slot-logged.other { background: var(--cat-other); }
 
-.day-logged {
-  width: 36px;
-  text-align: right;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
+/* Logged total shown inside the day's bar (right edge), with a faint backing so it stays
+   readable over any logged/scheduled slots behind it. */
+.day-track-total {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  color: var(--text-h);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  padding: 0 4px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Per-day clear ✕ on the week view — same look as the calendar's clear-week button. */
+.day-clear-btn {
   flex-shrink: 0;
+}
+
+/* "Weekly goal scheduled" cue on the week view, mirroring the calendar's week-complete
+   treatment: a small accent badge plus a faint accent wash behind the day rows. */
+.week-goal-met {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.week-grid.goal-met {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-radius: 10px;
+  padding: 8px;
+  margin: 0 -8px;
 }
 
 .legend {
@@ -2393,7 +2429,7 @@ button.small {
   background: var(--credit-soft);
   border-color: var(--credit);
   color: var(--credit);
-  animation: minute-collecting 0.42s ease-in-out forwards;
+  animation: minute-collecting 0.62s ease-in-out forwards;
   transform-origin: center;
   position: relative;
   z-index: 1;
