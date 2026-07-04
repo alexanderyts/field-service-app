@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Polyline, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
 import { db, type Territory, type TerritoryCompletion, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import { renderStreetsImage } from '../territoryImage'
-import { smoothStroke } from '../strokeSmooth'
+import { fetchRoadsNear, snapPathToRoads, type LatLng } from '../roadSnap'
 import { captureTraceSnapshot } from '../mapSnapshot'
 import type { Map as LeafletMap } from 'leaflet'
 
@@ -60,6 +60,7 @@ export function TerritoryStreetsOverlay({ streets }: { streets: TerritoryStreet[
         <Polyline
           key={s.id}
           positions={s.points.map((p) => [p.lat, p.lng])}
+          interactive={false}
           pathOptions={{ color: s.done ? '#3f9142' : '#d97a3e', weight: 5, opacity: 0.9 }}
         />
       ))}
@@ -69,92 +70,64 @@ export function TerritoryStreetsOverlay({ streets }: { streets: TerritoryStreet[
 
 /**
  * Renders inside the drawing modal's <MapContainer>: the saved street traces (via
- * TerritoryStreetsOverlay) plus, while `drawing` is on, a live preview of the stroke in
- * progress. Freehand capture uses raw pointer events on the map's own DOM container
- * rather than Leaflet's map events — Leaflet's synthetic mouse events aren't a reliable
- * continuous stream during a touch drag, especially with panning disabled, so this talks
- * to the browser directly and converts pixel coordinates to lat/lng itself.
+ * TerritoryStreetsOverlay) plus, while `placing` is on, the waypoints tapped so far and a
+ * preview line through them. Points are placed by *tapping* the map (Leaflet's `click`
+ * fires on a tap, not a pan-drag), so panning and zooming stay fully enabled and nothing is
+ * ever hidden under a moving finger. Double-click-zoom is suspended while placing so a
+ * quick double-tap to add a bend doesn't also zoom.
  */
-function TerritoryDrawLayer({
+function TerritoryPlaceLayer({
   streets,
-  drawing,
-  onStrokeComplete,
+  placing,
+  waypoints,
+  onAddPoint,
   onMap,
 }: {
   streets: TerritoryStreet[]
-  drawing: boolean
-  onStrokeComplete: (points: { lat: number; lng: number }[]) => void
+  placing: boolean
+  waypoints: LatLng[]
+  onAddPoint: (p: LatLng) => void
   onMap?: (map: LeafletMap) => void
 }) {
   const map = useMap()
-  const [liveStroke, setLiveStroke] = useState<{ lat: number; lng: number }[]>([])
+  const placingRef = useRef(placing)
+  const addRef = useRef(onAddPoint)
+  placingRef.current = placing
+  addRef.current = onAddPoint
 
-  // Hand the live Leaflet map instance up so the parent can capture a real snapshot of the
-  // tiles under a finished trace.
   useEffect(() => { onMap?.(map) }, [map, onMap])
 
   useEffect(() => {
-    if (!drawing) return
-    const container = map.getContainer()
-    const prevTouchAction = container.style.touchAction
-    container.style.touchAction = 'none'
-    map.dragging.disable()
+    if (!placing) return
     map.doubleClickZoom.disable()
-    map.scrollWheelZoom.disable()
-    map.touchZoom.disable()
+    return () => { map.doubleClickZoom.enable() }
+  }, [placing, map])
 
-    let points: { lat: number; lng: number }[] = []
-    let active = false
-
-    function toLatLng(e: PointerEvent) {
-      const rect = container.getBoundingClientRect()
-      const { lat, lng } = map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top])
-      return { lat, lng }
-    }
-
-    function onDown(e: PointerEvent) {
-      active = true
-      points = [toLatLng(e)]
-      setLiveStroke(points)
-      container.setPointerCapture(e.pointerId)
-    }
-    function onMoveEvt(e: PointerEvent) {
-      if (!active) return
-      points = [...points, toLatLng(e)]
-      setLiveStroke(points)
-    }
-    function onUp() {
-      if (!active) return
-      active = false
-      if (points.length > 1) onStrokeComplete(points)
-      points = []
-      setLiveStroke([])
-    }
-
-    container.addEventListener('pointerdown', onDown)
-    container.addEventListener('pointermove', onMoveEvt)
-    container.addEventListener('pointerup', onUp)
-    container.addEventListener('pointercancel', onUp)
-
-    return () => {
-      container.style.touchAction = prevTouchAction
-      map.dragging.enable()
-      map.doubleClickZoom.enable()
-      map.scrollWheelZoom.enable()
-      map.touchZoom.enable()
-      container.removeEventListener('pointerdown', onDown)
-      container.removeEventListener('pointermove', onMoveEvt)
-      container.removeEventListener('pointerup', onUp)
-      container.removeEventListener('pointercancel', onUp)
-    }
-  }, [drawing, map, onStrokeComplete])
+  useMapEvents({
+    click(e) {
+      if (placingRef.current) addRef.current({ lat: e.latlng.lat, lng: e.latlng.lng })
+    },
+  })
 
   return (
     <>
       <TerritoryStreetsOverlay streets={streets} />
-      {liveStroke.length > 1 && (
-        <Polyline positions={liveStroke.map((p) => [p.lat, p.lng])} pathOptions={{ color: '#6d5dd3', weight: 5, dashArray: '6 6' }} />
+      {waypoints.length > 1 && (
+        <Polyline
+          positions={waypoints.map((p) => [p.lat, p.lng])}
+          interactive={false}
+          pathOptions={{ color: '#6d5dd3', weight: 5 }}
+        />
       )}
+      {placing && waypoints.map((p, i) => (
+        <CircleMarker
+          key={i}
+          center={[p.lat, p.lng]}
+          radius={6}
+          interactive={false}
+          pathOptions={{ color: '#6d5dd3', weight: 3, fillColor: '#fff', fillOpacity: 1 }}
+        />
+      ))}
     </>
   )
 }
@@ -174,11 +147,33 @@ export function TerritoryDrawModal({
   initialCenter: { lat: number; lng: number }
   onClose: () => void
 }) {
-  const [drawing, setDrawing] = useState(false)
-  const [pendingStroke, setPendingStroke] = useState<{ lat: number; lng: number }[] | null>(null)
+  const [placing, setPlacing] = useState(false)
+  const [waypoints, setWaypoints] = useState<LatLng[]>([])
+  const [snapping, setSnapping] = useState(false)
+  const [pendingStroke, setPendingStroke] = useState<LatLng[] | null>(null)
   const [streetName, setStreetName] = useState('')
   const [lookingUpName, setLookingUpName] = useState(false)
   const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null)
+
+  function startPlacing() { setWaypoints([]); setPlacing(true) }
+
+  /** Finish placing: fetch nearby roads and snap the tapped path onto the real street
+      centerline (falling back to the raw taps offline / with no road nearby), then hand off
+      to the existing name-and-save flow. */
+  async function finishStreet() {
+    if (waypoints.length < 2) return
+    setSnapping(true)
+    let snapped: LatLng[] = waypoints
+    try {
+      const ways = await fetchRoadsNear(waypoints)
+      const result = snapPathToRoads(waypoints, ways)
+      if (result.length >= 2) snapped = result
+    } catch { /* keep the raw tapped path */ }
+    setSnapping(false)
+    setPlacing(false)
+    setWaypoints([])
+    setPendingStroke(snapped)
+  }
   // Tracks whether the user has typed into the name field since the current trace was
   // finished, so a slow reverse-geocode response can't clobber an edit they've already made.
   const nameEditedRef = useRef(false)
@@ -211,9 +206,9 @@ export function TerritoryDrawModal({
     const street: TerritoryStreet = { id: newStreetId(), name, points: stroke, done: false, snapshot }
     await db.territories.update(territory.id, { streets: [...territory.streets, street] })
     setPendingStroke(null)
-    // Back to the neutral "Draw Street" button rather than silently staying in
-    // continuous-draw mode — saving one street shouldn't auto-arm the next trace.
-    setDrawing(false)
+    // Back to the neutral "Draw Street" button rather than auto-arming the next trace.
+    setPlacing(false)
+    setWaypoints([])
     // Mirror the traced street into the Ministry tab's Streets list so house numbers can be
     // loaded against it. Best-effort address lookup runs after the trace is already saved, so
     // a slow/failed geocode never blocks or loses the street itself.
@@ -238,9 +233,9 @@ export function TerritoryDrawModal({
           </div>
           <h3 style={{ margin: 0 }}>{territory.name}</h3>
           <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>
-            {drawing
-              ? 'Trace a street on the map with your finger, then release to name it.'
-              : 'Pan and zoom to find the streets you want, then start drawing.'}
+            {placing
+              ? 'Tap along the street to drop points — pan and zoom anytime. Finish when done.'
+              : 'Pan and zoom to find the streets you want, then tap Draw Street.'}
           </p>
 
           <div style={{ touchAction: 'none', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
@@ -252,22 +247,44 @@ export function TerritoryDrawModal({
                 maxZoom={20}
                 crossOrigin="anonymous"
               />
-              <TerritoryDrawLayer
+              <TerritoryPlaceLayer
                 streets={territory.streets}
-                drawing={drawing}
-                onStrokeComplete={(pts) => setPendingStroke(smoothStroke(pts))}
+                placing={placing}
+                waypoints={waypoints}
+                onAddPoint={(p) => setWaypoints((w) => [...w, p])}
                 onMap={setMapInstance}
               />
             </MapContainer>
           </div>
 
-          <button className={drawing ? '' : 'secondary'} onClick={() => setDrawing((d) => !d)}>
-            {drawing ? '✋ Stop Drawing (Pan Map)' : '🖊️ Draw Street'}
-          </button>
-          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-            {territory.streets.length} street{territory.streets.length === 1 ? '' : 's'} traced so far.
-          </p>
-          <button className="secondary" onClick={onClose}>Done — Back to Territory</button>
+          {!placing ? (
+            <>
+              <button onClick={startPlacing}>🖊️ Draw Street</button>
+              <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                {territory.streets.length} street{territory.streets.length === 1 ? '' : 's'} traced so far.
+              </p>
+              <button className="secondary" onClick={onClose}>Done — Back to Territory</button>
+            </>
+          ) : (
+            <>
+              <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                {waypoints.length === 0
+                  ? 'Tap the start of the street, then tap along it — a couple of points for a straight street, more around bends.'
+                  : `${waypoints.length} point${waypoints.length === 1 ? '' : 's'} placed. Add more, or finish.`}
+              </p>
+              <div className="row">
+                <button onClick={finishStreet} disabled={waypoints.length < 2 || snapping}>
+                  {snapping ? 'Matching to street…' : '✓ Finish Street'}
+                </button>
+                <button className="secondary" onClick={() => setWaypoints((w) => w.slice(0, -1))} disabled={waypoints.length === 0 || snapping}>
+                  ↶ Undo Point
+                </button>
+                <button className="secondary" onClick={() => { setPlacing(false); setWaypoints([]) }} disabled={snapping}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
 
           {pendingStroke && (
             <ModalPortal>
@@ -291,7 +308,7 @@ export function TerritoryDrawModal({
                   </label>
                   {lookingUpName && <p className="muted" style={{ fontSize: 12, margin: 0 }}>Looking up street name…</p>}
                   <button onClick={() => savePendingStreet(streetName.trim() || 'Untitled street')}>Save Street</button>
-                  <button className="secondary" onClick={() => { setPendingStroke(null); setDrawing(true) }}>
+                  <button className="secondary" onClick={() => { setPendingStroke(null); startPlacing() }}>
                     🔁 Redo this trace
                   </button>
                 </div>
