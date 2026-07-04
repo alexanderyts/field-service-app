@@ -86,5 +86,14 @@ export async function checkReturnVisitNotifications() {
     changed = true
   }
 
+  // Forget ids whose appointment has already passed — they can never re-enter the lead
+  // window, so dropping them keeps the remembered set bounded by the number of *upcoming*
+  // visits. That's more correct than the old fixed cap, which (in theory) could slice off
+  // a still-upcoming id and re-notify it.
+  const futureIds = new Set(appointments.filter((a) => a.date >= now).map((a) => a.id))
+  for (const id of sent) {
+    if (!futureIds.has(id)) { sent.delete(id); changed = true }
+  }
+
   if (changed) saveSentIds(sent)
 }

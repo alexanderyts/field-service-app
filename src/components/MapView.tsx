@@ -172,7 +172,10 @@ export default function MapView({
           map too (TerritoryStreetsOverlay reads the same data the drawing modal writes
           to), not just inside that modal. */}
       <div className="map-wrap">
-        <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: '440px', width: '100%' }}>
+        {/* Height adapts to the viewport so the map bottom (attribution + any bottom-edge
+            pins) clears the floating tab bar instead of hiding under it, while staying a
+            comfortable size on tall and short screens alike. */}
+        <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: 'clamp(320px, calc(100dvh - 360px), 560px)', width: '100%' }}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"

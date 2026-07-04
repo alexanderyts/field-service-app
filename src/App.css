@@ -1140,6 +1140,15 @@ button.small {
   gap: 6px;
 }
 
+/* Shared ‹ label › stepper layout (Schedule nav bar + Reports month nav) — the flex row that
+   keeps the arrows at the edges and the label filling the middle. Screen-specific classes
+   (.sched-nav, .report-nav) layer their own treatment on top. */
+.stepper-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* The one persistent Service Schedule nav bar (collapsed / week / calendar). Borderless —
    just a hairline rule under it — with muted arrows so the single-line label is the anchor
    and switching views never restyles or reflows the bar. */

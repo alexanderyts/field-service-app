@@ -1,8 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import Contacts from './components/Contacts'
-import Schedule from './components/Schedule'
-import Reports from './components/Reports'
-import Misc from './components/Misc'
 import { SplashScreen, PrivacyGate, ProfileGate, hasAcceptedPolicy } from './components/Onboarding'
 import { hasSeenProfilePrompt } from './profile'
 import Tutorial, { TutorialPrompt, hasSeenTutorialPrompt, markTutorialPromptSeen } from './components/Tutorial'
@@ -28,9 +25,13 @@ const initialImport: string | null = (() => {
   }
 })()
 
-// Map is the one tab worth deferring — Leaflet alone is ~150KB. The other four are
-// small enough that lazy-loading them just adds a Suspense flash on every switch
-// (visible jank) for a bundle-size win that isn't worth it at their size.
+// Contacts is the default tab, so it stays eagerly imported (no Suspense flash on first
+// paint). Everything else is code-split: Map pulls in Leaflet (~150KB), and Schedule is a
+// 3k-line component — deferring these off the initial bundle cuts first-paint JS/parse.
+// The one-time Suspense flash on first visit to each of these tabs is a fine trade.
+const Schedule = lazy(() => import('./components/Schedule'))
+const Reports = lazy(() => import('./components/Reports'))
+const Misc = lazy(() => import('./components/Misc'))
 const MapView = lazy(() => import('./components/MapView'))
 
 type Tab = 'contacts' | 'schedule' | 'map' | 'reports' | 'misc'

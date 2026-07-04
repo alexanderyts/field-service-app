@@ -15,6 +15,7 @@ import {
 } from '../timeStats'
 import { getAuxConfig } from '../auxPioneering'
 import ServiceYearReview from './ServiceYearReview'
+import { StepperNav } from './SharedBits'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -165,11 +166,14 @@ export default function Reports() {
   if (!ran) {
     return (
       <div className="view">
-        <div className="report-nav">
-          <button className="icon-btn" onClick={() => setMonthOffset((o) => o - 1)}>‹</button>
+        <StepperNav
+          className="report-nav"
+          onPrev={() => setMonthOffset((o) => o - 1)}
+          onNext={() => setMonthOffset((o) => o + 1)}
+          nextDisabled={monthOffset >= 0}
+        >
           <h2 className="applet-title" style={{ margin: 0, textAlign: 'center' }}>{monthLabel}</h2>
-          <button className="icon-btn" onClick={() => setMonthOffset((o) => o + 1)} disabled={monthOffset >= 0}>›</button>
-        </div>
+        </StepperNav>
         <div className="report-run-wrap">
           {generating ? (
             <>
@@ -195,11 +199,14 @@ export default function Reports() {
       {/* Month navigation — kept symmetric: arrow · centered title · arrow. The Re-run
           and "Back to this month" actions live in their own centered row below so the two
           arrows always share a baseline and mirror each other. */}
-      <div className="report-nav">
-        <button className="icon-btn" onClick={() => setMonthOffset((o) => o - 1)}>‹</button>
+      <StepperNav
+        className="report-nav"
+        onPrev={() => setMonthOffset((o) => o - 1)}
+        onNext={() => setMonthOffset((o) => o + 1)}
+        nextDisabled={monthOffset >= 0}
+      >
         <h2 className="applet-title" style={{ margin: 0, textAlign: 'center' }}>{monthLabel}</h2>
-        <button className="icon-btn" onClick={() => setMonthOffset((o) => o + 1)} disabled={monthOffset >= 0}>›</button>
-      </div>
+      </StepperNav>
       <div className="report-nav-actions">
         <button className="secondary small" onClick={() => generateReport(false)} disabled={generating} title="Run again">↺ Re-run</button>
         {!isCurrentMonth && (

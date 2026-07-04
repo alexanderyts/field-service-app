@@ -15,6 +15,7 @@ import {
 } from '../timeStats'
 import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
+import { StepperNav } from './SharedBits'
 import { buildAuxSlipPdf, shareAuxSlipPdf } from '../auxSlip'
 import { getProfileName } from '../profile'
 import {
@@ -691,6 +692,10 @@ function ScheduleMain({
   // per-day quick-log flow (different code paths, same underlying bank) share one
   // consistent, always-in-sync visual.
   const [displayedBank, setDisplayedBank] = useState(() => getMinuteBank())
+  // Guards the deferred setState in close-animation timeouts from firing after this view has
+  // unmounted (e.g. a tab switch mid-animation) — harmless in React, but avoids the warning.
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
   const [bankCollapsing, setBankCollapsing] = useState(false)
 
   const weekStartMs = thisWeekStartMs + weekOffset * 7 * 24 * 60 * 60 * 1000
@@ -997,7 +1002,7 @@ function ScheduleMain({
       modalEl.classList.add('day-modal-closing')
     }
     backdropEl?.classList.add('closing')
-    window.setTimeout(() => setDayModalFor(null), 180)
+    window.setTimeout(() => { if (mountedRef.current) setDayModalFor(null) }, 180)
   }
 
   function dayDateFor(day: number): Date {
@@ -1357,12 +1362,18 @@ function ScheduleMain({
             switching never shifts the bar. The × sits in a reserved slot to the left of the
             › arrow, appearing only when expanded. Single-line uniform label so the week and
             month labels read identically. */}
-        <div className="week-nav sched-nav">
-          <button
-            className="icon-btn nav-arrow"
-            onClick={scheduleView === 'calendar' ? calPrevMonth : goPrevWeek}
-            title="Previous"
-          >‹</button>
+        <StepperNav
+          className="sched-nav"
+          onPrev={scheduleView === 'calendar' ? calPrevMonth : goPrevWeek}
+          onNext={scheduleView === 'calendar' ? calNextMonth : goNextWeek}
+          trailing={
+            <span className="sched-close-slot">
+              {(scheduleView === 'week' || scheduleView === 'calendar') && (
+                <button className="icon-btn sched-close-x" onClick={() => setScheduleView('collapsed')} title="Close">×</button>
+              )}
+            </span>
+          }
+        >
           <div className="week-nav-label">
             {scheduleView === 'calendar' ? (
               <span>{MONTH_NAMES[calMonth]} {calYear}</span>
@@ -1375,17 +1386,7 @@ function ScheduleMain({
               </span>
             )}
           </div>
-          <span className="sched-close-slot">
-            {(scheduleView === 'week' || scheduleView === 'calendar') && (
-              <button className="icon-btn sched-close-x" onClick={() => setScheduleView('collapsed')} title="Close">×</button>
-            )}
-          </span>
-          <button
-            className="icon-btn nav-arrow"
-            onClick={scheduleView === 'calendar' ? calNextMonth : goNextWeek}
-            title="Next"
-          >›</button>
-        </div>
+        </StepperNav>
 
         {scheduleView === 'collapsed' && (
           <>
@@ -2350,6 +2351,9 @@ function ScheduleCalendarView({
   const [tapDate, setTapDate] = useState<Date | null>(null)
   const [tapLeaving, setTapLeaving] = useState(false)
   const [confirmClearWeek, setConfirmClearWeek] = useState<Date | null>(null)
+  // Guards the delayed unmount setState below from firing after this view has unmounted.
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
 
   // No origin-rect morph here (calendar cells are too small to shrink a modal back into,
   // unlike the weekly grid's full-width day rows) — just a plain delayed unmount so
@@ -2364,7 +2368,7 @@ function ScheduleCalendarView({
     modalEl?.classList.add('day-modal-closing')
     backdropEl?.classList.add('closing')
     setTapLeaving(true)
-    window.setTimeout(() => { setTapDate(null); setTapLeaving(false) }, 180)
+    window.setTimeout(() => { if (mountedRef.current) { setTapDate(null); setTapLeaving(false) } }, 180)
   }
 
   const startDow = new Date(viewYear, viewMonth, 1).getDay()
