@@ -1320,31 +1320,6 @@ function ScheduleMain({
       <div className="card">
         <div className="service-sched-header">
           <h4 style={{ margin: 0 }}>Service Schedule</h4>
-          <button
-            className="secondary small"
-            title="Log service time for today"
-            onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
-          >
-            + Quick add time
-          </button>
-        </div>
-        {/* The minute bank sits on its own row (below the title + quick-add), so the ball's
-            arrival pulse never overlaps the lettering or the button. The anchor is always
-            rendered so the very first fly has a stable landing target. */}
-        <div className="minute-bank-row">
-          <span className="minute-bank-anchor" aria-hidden="true" />
-          {(displayedBank > 0 || bankCollapsing) && (
-            <div
-              className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
-              onClick={() => setConfirmBankRoundUp(true)}
-              title="Tap to round up and add now"
-            >
-              <span>⏱ {displayedBank}m</span>
-              <div className="minute-bank-track">
-                <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
-              </div>
-            </div>
-          )}
         </div>
         <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
           Your scheduled ministry days and times, plus anything already logged this week.
@@ -1361,9 +1336,6 @@ function ScheduleMain({
               </p>
             )}
             <div className="week-nav">
-              {scheduleView === 'week' && (
-                <button className="icon-btn sched-close-x" onClick={() => setScheduleView('collapsed')} title="Close">×</button>
-              )}
               <button className="icon-btn" onClick={goPrevWeek} title="Previous">‹</button>
               <div className="week-nav-label">
                 <span>
@@ -1376,6 +1348,11 @@ function ScheduleMain({
                   {weekOffset === 0 && segment === defaultSegment && <span className="muted"> · This week</span>}
                 </span>
               </div>
+              <span className="sched-close-slot">
+                {scheduleView === 'week' && (
+                  <button className="icon-btn sched-close-x" onClick={() => setScheduleView('collapsed')} title="Close">×</button>
+                )}
+              </span>
               <button className="icon-btn" onClick={goNextWeek} title="Next">›</button>
             </div>
           </>
@@ -1493,15 +1470,17 @@ function ScheduleMain({
                       })}
                       {logged > 0 && <span className="day-track-total">{fmtDuration(logged)}</span>}
                     </div>
-                    {(suggestedBlocks.length > 0 || logged > 0) && (
-                      <button
-                        className="cal-week-clear-btn day-clear-btn"
-                        title="Clear this day's schedule and logged time"
-                        onClick={(e) => { e.stopPropagation(); setConfirmClearDay(dayDate) }}
-                      >
-                        ×
-                      </button>
-                    )}
+                    <span className="day-clear-slot">
+                      {(suggestedBlocks.length > 0 || logged > 0) && (
+                        <button
+                          className="cal-week-clear-btn day-clear-btn"
+                          title="Clear this day's schedule and logged time"
+                          onClick={(e) => { e.stopPropagation(); setConfirmClearDay(dayDate) }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </span>
                   </div>
                 )
               })}
@@ -1555,10 +1534,36 @@ function ScheduleMain({
 
       <ReturnVisits onGoToContact={onGoToContact} />
 
-      {(isPioneer || nonPioneerTracksHours || logs.length > 0) && (
-        <div className="card">
-          <h4>Recent Entries</h4>
-          <ul className="list">
+      <div className="card">
+        <div className="recent-entries-header">
+          <h4 style={{ margin: 0 }}>Recent Entries</h4>
+          <button
+            className="secondary small"
+            title="Log service time for today"
+            onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
+          >
+            + Quick add time
+          </button>
+        </div>
+        {/* The minute bank lives here now (moved off the Service Schedule header to declutter
+            it). Its own row keeps the arrival pulse clear of the title/button; the anchor is
+            always rendered so the fly has a stable landing target. */}
+        <div className="minute-bank-row">
+          <span className="minute-bank-anchor" aria-hidden="true" />
+          {(displayedBank > 0 || bankCollapsing) && (
+            <div
+              className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
+              onClick={() => setConfirmBankRoundUp(true)}
+              title="Tap to round up and add now"
+            >
+              <span>⏱ {displayedBank}m</span>
+              <div className="minute-bank-track">
+                <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
+              </div>
+            </div>
+          )}
+        </div>
+        <ul className="list">
             {logs.slice(0, visibleLogCount).map((l) => (
               <li key={l.id} className="list-item">
                 <div className="visit-info">
@@ -1598,7 +1603,6 @@ function ScheduleMain({
           />
           {editingLog && <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} />}
         </div>
-      )}
 
       {dayModalFor != null && (
         <DayActionModal
@@ -2436,9 +2440,11 @@ function ScheduleCalendarView({
     <>
       <div className="cal-inline cal-modal cal-modal-view">
         <div className="cal-header">
-          <button className="icon-btn sched-close-x" onClick={onCollapse} title="Close">×</button>
           <button className="icon-btn" onClick={prevMonth}>‹</button>
           <strong>{MONTH_NAMES[viewMonth]} {viewYear}</strong>
+          <span className="sched-close-slot">
+            <button className="icon-btn sched-close-x" onClick={onCollapse} title="Close">×</button>
+          </span>
           <button className="icon-btn" onClick={nextMonth}>›</button>
         </div>
         <div className="cal-grid-wrap">

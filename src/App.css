@@ -1092,12 +1092,27 @@ button.small {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Fills the space between the controls above and the "See calendar view" bar below so the
+     week view has no dead gap and matches the calendar's height. */
+  flex: 1;
 }
 
 .day-row {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* Rows share the filled height evenly (the track stays 22px, just more breathing room)
+     instead of clustering at the top with empty space beneath. */
+  flex: 1;
+}
+
+/* Fixed-width trailing slot for the per-day clear ✕ — always present so the day-track bar
+   never changes width whether or not the ✕ is showing. */
+.day-clear-slot {
+  flex: 0 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .day-row.today .day-label {
@@ -1131,9 +1146,25 @@ button.small {
   font-size: 13px;
 }
 
-/* Service Schedule card header: title on the left, minute-bank pill + quick-add + the
-   red close X on the right. */
+/* Fixed-width reserved slot between the label and the next (›) arrow — the close ✕ pops into
+   it without resizing the week/month text. Always present (empty when there's no ✕). */
+.sched-close-slot {
+  flex: 0 0 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .service-sched-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Recent Entries card header — title left, quick-add top-right (moved here to declutter the
+   Service Schedule window). */
+.recent-entries-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1188,6 +1219,8 @@ button.small {
    card. */
 .sched-view-body {
   min-height: 470px;
+  display: flex;
+  flex-direction: column;
 }
 
 .slot-appt {
@@ -1284,22 +1317,27 @@ button.small {
 
 /* "Weekly goal scheduled" cue on the week view, mirroring the calendar's week-complete
    treatment: a small accent badge plus a faint accent wash behind the day rows. */
+/* "Weekly goal scheduled" cue — a clean full-width banner with real spacing above and below
+   (no longer crammed against the jump buttons), and no negative-margin wash spilling over the
+   card edges. */
 .week-goal-met {
-  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 700;
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  padding: 3px 9px;
-  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  padding: 6px 10px;
+  border-radius: 10px;
+  margin: 4px 0 2px;
 }
 
 .week-grid.goal-met {
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
   border-radius: 10px;
   padding: 8px;
-  margin: 0 -8px;
 }
 
 .legend {
