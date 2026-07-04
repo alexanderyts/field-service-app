@@ -1140,10 +1140,36 @@ button.small {
   gap: 6px;
 }
 
+/* The one persistent Service Schedule nav bar (collapsed / week / calendar). Borderless —
+   just a hairline rule under it — with muted arrows so the single-line label is the anchor
+   and switching views never restyles or reflows the bar. */
+.sched-nav {
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.icon-btn.nav-arrow {
+  color: var(--muted);
+}
+
+@media (hover: hover) {
+  .icon-btn.nav-arrow:hover {
+    color: var(--text-h);
+  }
+}
+
+/* Single-line uniform label: the week range and the month/year read identically and never
+   wrap, so the bar's height is constant across views. */
 .week-nav-label {
   flex: 1;
+  min-width: 0;
   text-align: center;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Fixed-width reserved slot between the label and the next (›) arrow — the close ✕ pops into
@@ -1256,6 +1282,15 @@ button.small {
   border: 1px solid var(--border);
   border-radius: 7px;
   overflow: hidden;
+  /* Faint time-of-day gridlines (quarter marks, with a stronger line at noon) so a bar's
+     horizontal position reads as a time of day. */
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--border) 55%, transparent) 0 0),
+    linear-gradient(color-mix(in srgb, var(--border) 55%, transparent) 0 0),
+    linear-gradient(color-mix(in srgb, var(--border) 90%, transparent) 0 0);
+  background-size: 1px 100%;
+  background-repeat: no-repeat;
+  background-position: 25% 0, 75% 0, 50% 0;
 }
 
 /* Border color and tinted background are set inline per block, from the block's
@@ -1264,7 +1299,7 @@ button.small {
   position: absolute;
   top: 0;
   bottom: 0;
-  border: 1px dashed var(--accent);
+  border: 1.5px solid var(--accent);
   border-radius: 6px;
 }
 
@@ -1275,7 +1310,8 @@ button.small {
   left: 3px;
   background: var(--accent);
   border-radius: 5px;
-  opacity: 0.92;
+  opacity: 0.95;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 8%, transparent);
 }
 
 .slot-logged.ministry {
@@ -1315,29 +1351,27 @@ button.small {
   flex-shrink: 0;
 }
 
-/* "Weekly goal scheduled" cue on the week view, mirroring the calendar's week-complete
-   treatment: a small accent badge plus a faint accent wash behind the day rows. */
-/* "Weekly goal scheduled" cue — a clean full-width banner with real spacing above and below
-   (no longer crammed against the jump buttons), and no negative-margin wash spilling over the
-   card edges. */
-.week-goal-met {
+/* "Weekly goal scheduled" cue on the week view — a subtle accent hairline rule flanking a
+   small label, instead of a heavy filled pill crammed against the jump buttons. */
+.goal-line {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  padding: 6px 10px;
-  border-radius: 10px;
-  margin: 4px 0 2px;
+  gap: 8px;
+  margin: 4px 0 6px;
 }
 
-.week-grid.goal-met {
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
-  border-radius: 10px;
-  padding: 8px;
+.goal-line .rule {
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.goal-line .txt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  white-space: nowrap;
 }
 
 .legend {
@@ -1362,7 +1396,7 @@ button.small {
 }
 
 .legend .sw.suggested {
-  border: 1px dashed var(--accent);
+  border: 1.5px solid var(--accent);
   background: rgba(47, 111, 94, 0.12);
 }
 
@@ -2180,6 +2214,9 @@ button.small {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Fill the shared body height so the calendar's week rows stretch to match the week
+     view's rows — both expanded views end up exactly the same height. */
+  flex: 1;
 }
 
 .cal-dow-row,
@@ -2188,6 +2225,19 @@ button.small {
   grid-template-columns: 1fr 26px;
   gap: 4px;
   align-items: stretch;
+}
+
+/* Week rows share the filled height evenly (the day-of-week header row stays its natural
+   size). */
+.cal-week-line {
+  flex: 1;
+}
+
+/* A whole week whose scheduled time already meets the goal gets a soft accent band across
+   the row, reinforcing the ✓ badge + outlined cells. */
+.cal-week-line.week-complete {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-radius: 10px;
 }
 
 .cal-week-days {
@@ -2265,6 +2315,8 @@ button.small {
 .cal-modal-view {
   max-width: 380px;
   max-height: 80vh;
+  /* Grow to fill the shared body frame (sched-view-body) so the grid inside can stretch. */
+  flex: 1;
 }
 
 /* A day cell shows either a proportional goal ring (when a weekly goal exists) or a
@@ -2273,7 +2325,7 @@ button.small {
    same day-detail modal the weekly view uses. */
 .cal-day-view {
   position: relative;
-  border-radius: 8px;
+  border-radius: 11px;
   padding: 8px 4px;
   font-size: 14px;
   font-weight: 500;
@@ -2303,9 +2355,15 @@ button.small {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   pointer-events: none;
+}
+
+/* Each cell of a goal-met week also gets an accent outline (inset so it never nudges the
+   grid), on top of the row's band and the ✓ badge. */
+.cal-day-view.week-complete {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .cal-ring {
@@ -2338,12 +2396,19 @@ button.small {
 
 .cal-week-check {
   position: absolute;
-  top: 1px;
+  top: 2px;
   left: 2px;
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--accent);
-  line-height: 1;
+  z-index: 2;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 13px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 /* Legend swatch for the calendar view — sized like a mini day cell; its border/fill/

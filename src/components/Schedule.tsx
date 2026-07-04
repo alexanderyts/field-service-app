@@ -657,6 +657,11 @@ function ScheduleMain({
   // move between these — replacing the old separate weekOpen flag + full-screen calendar
   // modal.
   const [scheduleView, setScheduleView] = useState<'collapsed' | 'calendar' | 'week'>('collapsed')
+  // The inline month-calendar's shown month/year lives here (lifted out of
+  // ScheduleCalendarView) so the one shared nav bar can step months while in calendar view,
+  // the same bar that steps weeks in the week/collapsed views.
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth())
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear())
   const [addOpen, setAddOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
   // When the navigated week straddles a month boundary, this picks which of the two
@@ -801,6 +806,17 @@ function ScheduleMain({
       setWeekOffset(prevOffset)
     }
     setHighlightTs(null)
+  }
+
+  // The shared nav's arrows step the inline calendar's month when it's the calendar view
+  // that's open (they step weeks otherwise).
+  function calPrevMonth() {
+    if (calMonth === 0) { setCalYear((y) => y - 1); setCalMonth(11) }
+    else setCalMonth((m) => m - 1)
+  }
+  function calNextMonth() {
+    if (calMonth === 11) { setCalYear((y) => y + 1); setCalMonth(0) }
+    else setCalMonth((m) => m + 1)
   }
 
   // How many days remain in the month being viewed — only meaningful when that's the
@@ -1325,38 +1341,51 @@ function ScheduleMain({
           Your scheduled ministry days and times, plus anything already logged this week.
         </p>
 
-        {scheduleView !== 'calendar' && (
-          <>
-            {weeklyGoalMin > 0 && (
-              <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
-                Planned this week: {fmtDuration(suggestedWeeklyMin)} / {fmtDuration(weeklyGoalMin)} goal
-                {suggestedWeeklyMin >= weeklyGoalMin
-                  ? ' — 🎉 goal covered!'
-                  : ` — ${fmtDuration(weeklyGoalMin - suggestedWeeklyMin)} more to schedule`}
-              </p>
-            )}
-            <div className="week-nav">
-              <button className="icon-btn" onClick={goPrevWeek} title="Previous">‹</button>
-              <div className="week-nav-label">
-                <span>
-                  <strong>
-                    {segmentEndMs - segmentStartMs <= 24 * 60 * 60 * 1000
-                      ? fmtDayMonthFull(segmentStartMs)
-                      : `${fmtDayMonth(segmentStartMs)} – ${fmtDayMonth(segmentEndMs - 86400000)}`}
-                  </strong>
-                  <span className="muted"> · Week {calendarWeekNumber(weekStartMs)}</span>
-                  {weekOffset === 0 && segment === defaultSegment && <span className="muted"> · This week</span>}
-                </span>
-              </div>
-              <span className="sched-close-slot">
-                {scheduleView === 'week' && (
-                  <button className="icon-btn sched-close-x" onClick={() => setScheduleView('collapsed')} title="Close">×</button>
-                )}
-              </span>
-              <button className="icon-btn" onClick={goNextWeek} title="Next">›</button>
-            </div>
-          </>
+        {/* Shown in all three states (not just the week views) so the nav bar below keeps the
+            exact same vertical position — a key part of the seamless collapsed↔week↔calendar
+            switch. It always summarizes the current week regardless of the month shown. */}
+        {weeklyGoalMin > 0 && (
+          <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
+            Planned this week: {fmtDuration(suggestedWeeklyMin)} / {fmtDuration(weeklyGoalMin)} goal
+            {suggestedWeeklyMin >= weeklyGoalMin
+              ? ' — 🎉 goal covered!'
+              : ` — ${fmtDuration(weeklyGoalMin - suggestedWeeklyMin)} more to schedule`}
+          </p>
         )}
+        {/* One persistent nav bar for collapsed / week / calendar. Only the label and what
+            the arrows step (weeks vs the inline calendar's month) change between views, so
+            switching never shifts the bar. The × sits in a reserved slot to the left of the
+            › arrow, appearing only when expanded. Single-line uniform label so the week and
+            month labels read identically. */}
+        <div className="week-nav sched-nav">
+          <button
+            className="icon-btn nav-arrow"
+            onClick={scheduleView === 'calendar' ? calPrevMonth : goPrevWeek}
+            title="Previous"
+          >‹</button>
+          <div className="week-nav-label">
+            {scheduleView === 'calendar' ? (
+              <span>{MONTH_NAMES[calMonth]} {calYear}</span>
+            ) : (
+              <span>
+                {segmentEndMs - segmentStartMs <= 24 * 60 * 60 * 1000
+                  ? fmtDayMonthFull(segmentStartMs)
+                  : `${fmtDayMonth(segmentStartMs)} – ${fmtDayMonth(segmentEndMs - 86400000)}`}
+                {` · Week ${calendarWeekNumber(weekStartMs)}`}
+              </span>
+            )}
+          </div>
+          <span className="sched-close-slot">
+            {(scheduleView === 'week' || scheduleView === 'calendar') && (
+              <button className="icon-btn sched-close-x" onClick={() => setScheduleView('collapsed')} title="Close">×</button>
+            )}
+          </span>
+          <button
+            className="icon-btn nav-arrow"
+            onClick={scheduleView === 'calendar' ? calNextMonth : goNextWeek}
+            title="Next"
+          >›</button>
+        </div>
 
         {scheduleView === 'collapsed' && (
           <>
@@ -1396,9 +1425,13 @@ function ScheduleMain({
               Jump to next return visit
             </button>
             {weeklyGoalMin > 0 && suggestedWeeklyMin >= weeklyGoalMin && (
-              <div className="week-goal-met">✓ Weekly goal scheduled</div>
+              <div className="goal-line">
+                <span className="rule" />
+                <span className="txt">✓ Weekly goal scheduled</span>
+                <span className="rule" />
+              </div>
             )}
-            <div className={`week-grid${weeklyGoalMin > 0 && suggestedWeeklyMin >= weeklyGoalMin ? ' goal-met' : ''}`}>
+            <div className="week-grid">
               {DAYS.map((d, i) => {
                 const suggestedBlocks = blocksForDate(prefs, dayDateFor(i))
                 const dayEntries = CATEGORY_ORDER.map((cat) => [cat, perDayCat[i][cat] ?? 0] as const).filter(
@@ -1507,6 +1540,8 @@ function ScheduleMain({
             people={people}
             onGoToContact={onGoToContact}
             weeklyGoalMin={effectiveWeeklyGoalMin}
+            viewYear={calYear}
+            viewMonth={calMonth}
             onSaveBlocks={saveDayBlocks}
             onRemoveDay={removeDaySchedule}
             onClearAllDays={clearAllSuggestedDays}
@@ -1514,7 +1549,6 @@ function ScheduleMain({
             onSubmitScheduled={submitScheduledTime}
             onClearWeek={(weekStart) => clearWeekSchedule(prefs, weekStart)}
             onSeeWeeklyView={() => setScheduleView('week')}
-            onCollapse={() => setScheduleView('collapsed')}
           />
           </div>
         )}
@@ -2273,7 +2307,7 @@ const DOW_SHORT = ['S','M','T','W','T','F','S']
 
 // ── Read-only schedule calendar view (suggested days + return visits) ────────
 const RING_SIZE = 32
-const RING_STROKE = 2.5
+const RING_STROKE = 2
 const RING_R = (RING_SIZE - RING_STROKE) / 2
 const RING_C = 2 * Math.PI * RING_R
 
@@ -2284,6 +2318,8 @@ function ScheduleCalendarView({
   people,
   onGoToContact,
   weeklyGoalMin,
+  viewYear,
+  viewMonth,
   onSaveBlocks,
   onRemoveDay,
   onClearAllDays,
@@ -2291,7 +2327,6 @@ function ScheduleCalendarView({
   onSubmitScheduled,
   onClearWeek,
   onSeeWeeklyView,
-  onCollapse,
 }: {
   prefs: SchedulePrefs
   appointments: Appointment[]
@@ -2299,6 +2334,10 @@ function ScheduleCalendarView({
   people: { id: number; name: string; street?: string }[]
   onGoToContact: (personId: number) => void
   weeklyGoalMin: number
+  // The shown month/year is owned by ScheduleMain (so the shared nav bar can step it) and
+  // passed in — this view no longer keeps its own month state or renders its own header.
+  viewYear: number
+  viewMonth: number
   onSaveBlocks: (date: Date, blocks: DayScheduleBlock[], repeatWeekly: boolean) => void
   onRemoveDay: (date: Date) => void
   onClearAllDays: () => void
@@ -2306,11 +2345,8 @@ function ScheduleCalendarView({
   onSubmitScheduled: (date: Date, blocks: DayScheduleBlock[]) => void
   onClearWeek: (weekStart: Date) => void
   onSeeWeeklyView: () => void
-  onCollapse: () => void
 }) {
   const today = new Date()
-  const [viewYear, setViewYear] = useState(today.getFullYear())
-  const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [tapDate, setTapDate] = useState<Date | null>(null)
   const [tapLeaving, setTapLeaving] = useState(false)
   const [confirmClearWeek, setConfirmClearWeek] = useState<Date | null>(null)
@@ -2329,15 +2365,6 @@ function ScheduleCalendarView({
     backdropEl?.classList.add('closing')
     setTapLeaving(true)
     window.setTimeout(() => { setTapDate(null); setTapLeaving(false) }, 180)
-  }
-
-  function prevMonth() {
-    if (viewMonth === 0) { setViewYear((y) => y - 1); setViewMonth(11) }
-    else setViewMonth((m) => m - 1)
-  }
-  function nextMonth() {
-    if (viewMonth === 11) { setViewYear((y) => y + 1); setViewMonth(0) }
-    else setViewMonth((m) => m + 1)
   }
 
   const startDow = new Date(viewYear, viewMonth, 1).getDay()
@@ -2439,14 +2466,8 @@ function ScheduleCalendarView({
   return (
     <>
       <div className="cal-inline cal-modal cal-modal-view">
-        <div className="cal-header">
-          <button className="icon-btn" onClick={prevMonth}>‹</button>
-          <strong>{MONTH_NAMES[viewMonth]} {viewYear}</strong>
-          <span className="sched-close-slot">
-            <button className="icon-btn sched-close-x" onClick={onCollapse} title="Close">×</button>
-          </span>
-          <button className="icon-btn" onClick={nextMonth}>›</button>
-        </div>
+        {/* No header here anymore — the shared Service Schedule nav bar (in ScheduleMain)
+            owns the month label, the ‹ › month stepping, and the collapse ×. */}
         <div className="cal-grid-wrap">
           <div className="cal-dow-row">
             <div className="cal-week-days">
@@ -2457,7 +2478,7 @@ function ScheduleCalendarView({
           {weekRows.map((wr, row) => {
             const rowCells = cells.slice(row * 7, row * 7 + 7)
             return (
-              <div key={row} className="cal-week-line">
+              <div key={row} className={`cal-week-line${wr.isComplete ? ' week-complete' : ''}`}>
                 <div className="cal-week-days">
                   {rowCells.map((day, ci) => {
                     if (day === null) return <span key={`e${row}-${ci}`} />
@@ -2559,20 +2580,9 @@ function ScheduleCalendarView({
           {monthAppts.length > 0 && <span><i className="sw appt" /> Return visit</span>}
         </div>
 
-        {monthAppts.length > 0 && (
-          <div className="cal-appt-list">
-            <h4 style={{ marginBottom: 2 }}>Return Visits This Month</h4>
-            {monthAppts.map(([day, appts]) =>
-              appts.map((a, idx) => (
-                <div key={`${day}-${idx}`} className="cal-appt-row">
-                  <strong>{MONTH_NAMES[viewMonth].slice(0, 3)} {day}</strong> — {a.title}
-                  <span className="muted"> · {new Date(a.date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
+        {/* No standalone "Return Visits This Month" list — it made the calendar taller than the
+            week view. Return visits still surface as the purple day-dots (tap a day for its
+            details), and the legend still explains that dot. */}
         <button className="secondary schedule-view-bar" onClick={onSeeWeeklyView}>See week view</button>
       </div>
 
