@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { ShareRef } from '../db'
+import type { RingSeg } from '../goalSegments'
 
 /** The shared ‹ label › stepper used by the Service Schedule nav bar and the Reports month
     nav — one place for the prev/next arrow chrome so the two read consistently. Callers pass
@@ -30,6 +31,60 @@ export function StepperNav({
       {trailing}
       <button className="icon-btn nav-arrow" onClick={onNext} disabled={nextDisabled} title="Next">›</button>
     </div>
+  )
+}
+
+/** The day goal ring: filled thick band for logged segments, hollow double-outlined band for
+    scheduled ones, each arc's length its share of the weekly goal and accumulating around the
+    circle. Drawn in a fixed 24-unit viewBox so all the geometry scales cleanly from `size`. The
+    `.goal-ring` class positions it (absolutely centered) at the call site. */
+export function GoalRing({ segments, size = 31, title }: { segments: RingSeg[]; size?: number; title?: string }) {
+  const Rf = 9, Ro = 10.1, Ri = 7.9
+  const Cf = 2 * Math.PI * Rf, Co = 2 * Math.PI * Ro, Ci = 2 * Math.PI * Ri
+  const parts: ReactNode[] = []
+  let off = 0
+  segments.forEach((s, idx) => {
+    const room = 1 - off
+    if (room <= 0.001) return
+    const p = Math.min(Math.max(s.frac, 0.02), room)
+    if (s.logged) {
+      parts.push(
+        <circle key={idx} cx={12} cy={12} r={Rf} fill="none" stroke={s.color} strokeWidth={3.2}
+          strokeDasharray={`${p * Cf} ${Cf - p * Cf}`} strokeDashoffset={-off * Cf} transform="rotate(-90 12 12)" />,
+      )
+    } else {
+      parts.push(
+        <circle key={`${idx}o`} cx={12} cy={12} r={Ro} fill="none" stroke={s.color} strokeWidth={1}
+          strokeDasharray={`${p * Co} ${Co - p * Co}`} strokeDashoffset={-off * Co} transform="rotate(-90 12 12)" />,
+        <circle key={`${idx}i`} cx={12} cy={12} r={Ri} fill="none" stroke={s.color} strokeWidth={1}
+          strokeDasharray={`${p * Ci} ${Ci - p * Ci}`} strokeDashoffset={-off * Ci} transform="rotate(-90 12 12)" />,
+      )
+    }
+    off += p
+  })
+  return (
+    <svg className="goal-ring" width={size} height={size} viewBox="0 0 24 24" aria-hidden={!title}>
+      {title && <title>{title}</title>}
+      {parts}
+    </svg>
+  )
+}
+
+/** A small full ring for legends/keys — hollow double-outline (scheduled) or filled band
+    (logged) — so the legend swatch looks like the day rings it explains. */
+export function RingSwatch({ color, logged = false, size = 14 }: { color: string; logged?: boolean; size?: number }) {
+  if (logged) {
+    return (
+      <svg className="ring-sw" width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+        <circle cx={12} cy={12} r={9} fill="none" stroke={color} strokeWidth={3.4} />
+      </svg>
+    )
+  }
+  return (
+    <svg className="ring-sw" width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+      <circle cx={12} cy={12} r={10.2} fill="none" stroke={color} strokeWidth={1.2} />
+      <circle cx={12} cy={12} r={7.8} fill="none" stroke={color} strokeWidth={1.2} />
+    </svg>
   )
 }
 

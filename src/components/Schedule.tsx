@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Appointment, type DayScheduleBlock, type SchedulePrefs, type TimeCategory, type TimeLog } from '../db'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../categories'
@@ -15,7 +15,8 @@ import {
 } from '../timeStats'
 import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
-import { StepperNav } from './SharedBits'
+import { StepperNav, GoalRing, RingSwatch } from './SharedBits'
+import { daySegments } from '../goalSegments'
 import { buildAuxSlipPdf, shareAuxSlipPdf } from '../auxSlip'
 import { getProfileName } from '../profile'
 import {
@@ -635,6 +636,52 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
   )
 }
 
+// Drive a single rAF loop that grows/shrinks `el`'s height AND the page scroll together, so the
+// Service Schedule card expands/minimizes in one continuous motion (the card pinning under the
+// header) instead of an instant snap + a separate jump. `mountedRef` guards the deferred frames
+// against a mid-animation unmount (tab switch). easeInOutCubic for a soft start and stop.
+function animateHeightScroll(
+  el: HTMLElement,
+  fromH: number,
+  toH: number,
+  fromScroll: number | null,
+  toScroll: number,
+  onDone: () => void,
+  mountedRef: MutableRefObject<boolean>,
+  activeRef: MutableRefObject<number>,
+  token: number,
+  holdHeight = false,
+) {
+  const DUR = 420
+  const t0 = performance.now()
+  const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+  el.style.overflow = 'hidden'
+  function frame(now: number) {
+    // A newer expand/minimize superseded this one (e.g. Minimize tapped mid-expand) — bail so the
+    // two loops don't fight over the frame height; the newer one owns it now.
+    if (activeRef.current !== token) return
+    const e = Math.min(1, (now - t0) / DUR)
+    const k = ease(e)
+    el.style.height = `${fromH + (toH - fromH) * k}px`
+    if (fromScroll != null) window.scrollTo(0, fromScroll + (toScroll - fromScroll) * k)
+    if (e < 1 && mountedRef.current) {
+      requestAnimationFrame(frame)
+    } else {
+      // On minimize we keep the frame pinned at `toH` (overflow clipped) and let onDone swap in
+      // the collapsed content first — releasing to auto here would briefly re-expand to the (still
+      // mounted, transform-folded but full-layout-height) week content and cause a visible shake.
+      if (!holdHeight) {
+        el.style.height = ''
+        el.style.overflow = ''
+      } else {
+        el.style.height = `${toH}px`
+      }
+      onDone()
+    }
+  }
+  requestAnimationFrame(frame)
+}
+
 function ScheduleMain({
   prefs,
   onRedo,
@@ -694,17 +741,99 @@ function ScheduleMain({
   // Guards the deferred setState in close-animation timeouts from firing after this view has
   // unmounted (e.g. a tab switch mid-animation) — harmless in React, but avoids the warning.
   const mountedRef = useRef(true)
-  useEffect(() => () => { mountedRef.current = false }, [])
-
-  // When the Service Schedule expands (mini → week/calendar), pin its card to the top of the
-  // viewport so the whole expanded view is visible without hunting for it by scrolling. The
-  // progress card above scrolls off but still reflects the shown month if you scroll back up.
-  const schedCardRef = useRef<HTMLDivElement>(null)
+  // Set true on (re)mount as well as false on unmount — otherwise React StrictMode's dev
+  // mount/cleanup/mount cycle leaves it stuck false, which would kill the rAF animation loop.
   useEffect(() => {
-    if (scheduleView === 'collapsed') return
-    const el = schedCardRef.current
-    if (!el) return
-    requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  // The Service Schedule card, the progress card above it, and the animatable body frame that
+  // holds the collapsed/week/calendar content. `animFromRef` carries the pre-change body height
+  // captured at click time so the layout effect can animate from it; `prevViewRef` tells the
+  // effect which way we moved.
+  const schedCardRef = useRef<HTMLDivElement>(null)
+  const progressCardRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const animFromRef = useRef<number | null>(null)
+  const prevViewRef = useRef(scheduleView)
+  const collapsedBodyHRef = useRef(0)
+  const minimizeReleaseRef = useRef(false)
+  // Incremented at the start of each expand/minimize so an in-flight animation abandons itself
+  // when a newer one begins (rapid taps / minimize-during-expand), instead of both driving height.
+  const animTokenRef = useRef(0)
+  const defaultExpand: 'week' | 'calendar' = prefs.scheduleDefaultExpand ?? 'week'
+
+  // Once the collapsed content is mounted: release any height the minimize animation was holding
+  // (now that the mini-week — not the still-mounted week — defines the natural height, so letting
+  // go can't spring back up), then cache that natural collapsed height for the next minimize.
+  useLayoutEffect(() => {
+    const el = bodyRef.current
+    if (!el || scheduleView !== 'collapsed') return
+    if (minimizeReleaseRef.current) {
+      minimizeReleaseRef.current = false
+      el.style.height = ''
+      el.style.overflow = ''
+    }
+    if (!el.style.height) collapsedBodyHRef.current = el.offsetHeight
+  })
+
+  function progressScrollTarget(): number {
+    const headerH = (document.querySelector('.app-header') as HTMLElement | null)?.offsetHeight ?? 0
+    const pc = progressCardRef.current
+    if (!pc) return window.scrollY
+    return Math.max(0, window.scrollY + pc.getBoundingClientRect().top - headerH - 10)
+  }
+
+  // Expand / switch: capture the from-height and let the layout effect animate. Minimize is
+  // special — it keeps the expanded content mounted, folds the week rows (or lets the calendar
+  // shrink), animates the frame down to the cached collapsed height, and only THEN swaps to the
+  // mini-week, so the collapse actually plays out instead of the rows vanishing instantly.
+  function changeView(next: 'collapsed' | 'calendar' | 'week') {
+    const el = bodyRef.current
+    if (next === 'collapsed' && scheduleView !== 'collapsed' && el) {
+      const from = el.offsetHeight
+      const to = collapsedBodyHRef.current || 120
+      const grid = scheduleView === 'week' ? (el.querySelector('.week-grid') as HTMLElement | null) : null
+      if (grid) grid.classList.add('foldup')
+      el.style.height = `${from}px`
+      void el.offsetHeight
+      minimizeReleaseRef.current = true
+      const token = ++animTokenRef.current
+      animateHeightScroll(el, from, to, window.scrollY, progressScrollTarget(), () => {
+        if (grid) grid.classList.remove('foldup')
+        // frame stays pinned at `to` (holdHeight) — the collapsed layout effect releases it once
+        // the mini-week has rendered, so there's no re-expand flash during the content swap.
+        setScheduleView('collapsed')
+      }, mountedRef, animTokenRef, token, true)
+      return
+    }
+    animFromRef.current = el?.offsetHeight ?? 0
+    setScheduleView(next)
+  }
+
+  // Handles EXPAND (collapsed → week/calendar) and week↔calendar SWITCH. Minimize is driven
+  // directly in changeView. On expand the page glides so the progress card pins just under the
+  // header (staying visible the whole time — a tiny scroll that also avoids the clamp-jump); a
+  // switch keeps the same height (equal panes) and never scrolls. Kept even under
+  // prefers-reduced-motion: these are short, subtle, functional transitions — and on Windows
+  // "Show animations: off" that query trips, which would otherwise snap the card with no motion.
+  useLayoutEffect(() => {
+    const prev = prevViewRef.current
+    prevViewRef.current = scheduleView
+    const el = bodyRef.current
+    const from = animFromRef.current
+    animFromRef.current = null
+    if (!el || from == null) return
+
+    el.style.height = 'auto'
+    const to = el.offsetHeight
+    const expanding = prev === 'collapsed' && scheduleView !== 'collapsed'
+    const toScroll = expanding ? progressScrollTarget() : window.scrollY
+    el.style.height = `${from}px`
+    void el.offsetHeight // reflow so the browser accepts `from` as the animation's start
+    const token = ++animTokenRef.current
+    animateHeightScroll(el, from, to, expanding ? window.scrollY : null, toScroll, () => {}, mountedRef, animTokenRef, token)
   }, [scheduleView])
   const [bankCollapsing, setBankCollapsing] = useState(false)
 
@@ -717,7 +846,7 @@ function ScheduleMain({
     const targetWeekStart = startOfWeek(new Date(next.date)).getTime()
     setSegmentOverride(null)
     setWeekOffset(Math.round((targetWeekStart - thisWeekStartMs) / (7 * 24 * 60 * 60 * 1000)))
-    setScheduleView('week')
+    changeView('week')
     setHighlightTs(next.date)
   }
 
@@ -1170,7 +1299,7 @@ function ScheduleMain({
         <button className="secondary small" onClick={onRedo}>Redo survey</button>
       </div>
 
-      <div className="card highlight">
+      <div className="card highlight" ref={progressCardRef}>
         <div className="goal-row" style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
           <span>{monthYearLabel}</span>
           <button className="secondary small" onClick={() => setProgressExpanded((v) => !v)}>
@@ -1353,41 +1482,43 @@ function ScheduleMain({
       </div>
 
       {/* Service Schedule — mini week (collapsed), inline month calendar, or inline week grid */}
-      <div className="card" ref={schedCardRef} style={{ scrollMarginTop: 72 }}>
+      <div className="card sched-card" ref={schedCardRef}>
+        {/* The prose that used to sit above the nav (subtitle + "Planned this week") now lives in
+            the ⓘ tooltip, so nothing above the nav appears/disappears between views — the nav bar
+            holds one fixed position and the expand/minimize animation stays clean. The quick
+            toggle (collapsed only) jumps straight to whichever view isn't the default. */}
         <div className="service-sched-header">
-          <h4 style={{ margin: 0 }}>Service Schedule</h4>
+          <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            Service Schedule
+            {weeklyGoalMin > 0 && (
+              <InfoTip
+                text={`Your scheduled ministry days and times, plus anything logged this week. Planned this week: ${fmtDuration(suggestedWeeklyMin)} of ${fmtDuration(weeklyGoalMin)} goal${
+                  suggestedWeeklyMin >= weeklyGoalMin
+                    ? ' — 🎉 goal covered'
+                    : ` — ${fmtDuration(weeklyGoalMin - suggestedWeeklyMin)} more to schedule`
+                }. Logged so far: ${fmtDuration(weekTotal)}.`}
+              />
+            )}
+          </h4>
+          {scheduleView === 'collapsed' && (
+            <button
+              className="icon-btn sched-quick-toggle"
+              data-tutorial="calendar-view-btn"
+              onClick={() => changeView(defaultExpand === 'calendar' ? 'week' : 'calendar')}
+              title={defaultExpand === 'calendar' ? 'Open week view' : 'Open calendar view'}
+            >
+              {defaultExpand === 'calendar' ? '🗓️' : '📅'}
+            </button>
+          )}
         </div>
-        <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
-          Your scheduled ministry days and times, plus anything already logged this week.
-        </p>
 
-        {/* Shown in all three states (not just the week views) so the nav bar below keeps the
-            exact same vertical position — a key part of the seamless collapsed↔week↔calendar
-            switch. It always summarizes the current week regardless of the month shown. */}
-        {weeklyGoalMin > 0 && (
-          <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
-            Planned this week: {fmtDuration(suggestedWeeklyMin)} / {fmtDuration(weeklyGoalMin)} goal
-            {suggestedWeeklyMin >= weeklyGoalMin
-              ? ' — 🎉 goal covered!'
-              : ` — ${fmtDuration(weeklyGoalMin - suggestedWeeklyMin)} more to schedule`}
-          </p>
-        )}
-        {/* One persistent nav bar for collapsed / week / calendar. Only the label and what
-            the arrows step (weeks vs the inline calendar's month) change between views, so
-            switching never shifts the bar. The × sits in a reserved slot to the left of the
-            › arrow, appearing only when expanded. Single-line uniform label so the week and
-            month labels read identically. */}
+        {/* One persistent nav bar for collapsed / week / calendar. Only the label and what the
+            arrows step (weeks vs the inline calendar's month) change between views, so switching
+            never shifts the bar. Single-line uniform label so week and month labels read alike. */}
         <StepperNav
           className="sched-nav"
           onPrev={scheduleView === 'calendar' ? calPrevMonth : goPrevWeek}
           onNext={scheduleView === 'calendar' ? calNextMonth : goNextWeek}
-          trailing={
-            <span className="sched-close-slot">
-              {(scheduleView === 'week' || scheduleView === 'calendar') && (
-                <button className="icon-btn sched-close-x" onClick={() => setScheduleView('collapsed')} title="Close">×</button>
-              )}
-            </span>
-          }
         >
           <div className="week-nav-label">
             {scheduleView === 'calendar' ? (
@@ -1403,13 +1534,25 @@ function ScheduleMain({
           </div>
         </StepperNav>
 
+        {/* The one element whose height the expand/minimize animation drives — everything that
+            differs between collapsed / week / calendar lives inside it, so growing this frame (in
+            sync with the page scroll) moves the whole view as one piece. */}
+        <div className={`sched-body-frame view-${scheduleView}`} ref={bodyRef}>
         {scheduleView === 'collapsed' && (
           <>
             <div className="week-mini">
               {DAYS.map((d, i) => {
-                const isService = blocksForDate(prefs, dayDateFor(i)).length > 0
+                const blocks = blocksForDate(prefs, dayDateFor(i))
+                const isService = blocks.length > 0
                 const logged = Object.values(perDayCat[i]).reduce((a, b) => a + b, 0)
                 const hasVisit = perDayAppointments[i].length > 0
+                // Same ring language as the calendar — each arc is that day's share of the weekly
+                // goal (hollow = scheduled, filled = logged), multiple ministry types accumulating.
+                const segments = daySegments(
+                  blocks.map((b) => ({ category: b.category, minutes: b.end - b.start })),
+                  perDayCat[i],
+                  effectiveWeeklyGoalMin,
+                )
                 return (
                   <div
                     key={i}
@@ -1418,14 +1561,15 @@ function ScheduleMain({
                     style={{ cursor: 'pointer' }}
                     title={isDayInShownMonth(i) ? undefined : `Part of ${MONTH_NAMES_LONG[dayDateFor(i).getMonth()]} — not the month shown above`}
                   >
-                    {d[0]}
+                    {segments.length > 0 && <GoalRing segments={segments} size={30} />}
+                    <span className="mini-day-letter">{d[0]}</span>
                     {hasVisit && <span className="mini-day-dot" title="Return visit scheduled" />}
                   </div>
                 )
               })}
             </div>
-            <button className="secondary schedule-view-bar" data-tutorial="calendar-view-btn" onClick={() => setScheduleView('calendar')}>
-              📅 See calendar view
+            <button className="secondary schedule-view-bar" onClick={() => changeView(defaultExpand)}>
+              ▾ Expand {defaultExpand === 'calendar' ? 'calendar' : 'week'} view
             </button>
           </>
         )}
@@ -1444,13 +1588,6 @@ function ScheduleMain({
                 </button>
               )}
             </div>
-            {weeklyGoalMin > 0 && suggestedWeeklyMin >= weeklyGoalMin && (
-              <div className="goal-line">
-                <span className="rule" />
-                <span className="txt">✓ Weekly goal scheduled</span>
-                <span className="rule" />
-              </div>
-            )}
             <div className="week-grid">
               {DAYS.map((d, i) => {
                 const suggestedBlocks = blocksForDate(prefs, dayDateFor(i))
@@ -1477,7 +1614,7 @@ function ScheduleMain({
                     title={inShownMonth ? undefined : `Part of ${MONTH_NAMES_LONG[dayDate.getMonth()]} — not the month shown above`}
                   >
                     <div className="day-label">
-                      <span>{d}</span>
+                      <span>{d[0]}</span>
                       <span className="day-num">{dayDate.getDate()}</span>
                     </div>
                     <div className="day-track">
@@ -1538,6 +1675,30 @@ function ScheduleMain({
                 )
               })}
             </div>
+            {/* The week view's bars show WHEN in the day time falls; this cumulative meter is the
+                separate cue for whether the whole week's goal is scheduled (light fill hits the
+                end) and logged (solid fill completes it). Additive to the top progress card, which
+                tracks logged only. */}
+            {weeklyGoalMin > 0 && (
+              <div
+                className={`week-goal-meter${
+                  weekTotal >= weeklyGoalMin ? ' done' : suggestedWeeklyMin >= weeklyGoalMin ? ' scheduled' : ''
+                }`}
+              >
+                <span className="wgm-cap">Weekly goal</span>
+                <div className="wgm-track">
+                  <span className="wgm-sched" style={{ width: `${Math.min(100, (suggestedWeeklyMin / weeklyGoalMin) * 100)}%` }} />
+                  <span className="wgm-log" style={{ width: `${Math.min(100, (weekTotal / weeklyGoalMin) * 100)}%` }} />
+                </div>
+                <span className="wgm-state">
+                  {weekTotal >= weeklyGoalMin
+                    ? '✓ Goal complete'
+                    : suggestedWeeklyMin >= weeklyGoalMin
+                      ? '◯ Goal scheduled'
+                      : `${fmtDuration(suggestedWeeklyMin)} of ${fmtDuration(weeklyGoalMin)} scheduled`}
+                </span>
+              </div>
+            )}
             <div className="legend">
               <span><i className="sw suggested" /> Scheduled</span>
               {weekCategoriesUsed.map((cat) => (
@@ -1545,8 +1706,11 @@ function ScheduleMain({
               ))}
               <span><i className="sw appt" /> Return Visit</span>
             </div>
-            <button className="secondary schedule-view-bar" onClick={() => setScheduleView('calendar')}>
+            <button className="secondary schedule-view-bar" onClick={() => changeView('calendar')}>
               📅 See calendar view
+            </button>
+            <button className="secondary schedule-min-bar" onClick={() => changeView('collapsed')}>
+              ▲ Minimize
             </button>
           </div>
         )}
@@ -1568,10 +1732,14 @@ function ScheduleMain({
             onLogTime={quickLogTime}
             onSubmitScheduled={submitScheduledTime}
             onClearWeek={(weekStart) => clearWeekSchedule(prefs, weekStart)}
-            onSeeWeeklyView={() => setScheduleView('week')}
+            onSeeWeeklyView={() => changeView('week')}
           />
+          <button className="secondary schedule-min-bar" onClick={() => changeView('collapsed')}>
+            ▲ Minimize
+          </button>
           </div>
         )}
+        </div>
       </div>
 
       {/* Non-pioneers not tracking hours just check a single box off once a month; everyone
@@ -2325,9 +2493,6 @@ const DOW_SHORT = ['S','M','T','W','T','F','S']
 
 // ── Read-only schedule calendar view (suggested days + return visits) ────────
 const RING_SIZE = 32
-const RING_STROKE = 2
-const RING_R = (RING_SIZE - RING_STROKE) / 2
-const RING_C = 2 * Math.PI * RING_R
 
 function ScheduleCalendarView({
   prefs,
@@ -2450,6 +2615,9 @@ function ScheduleCalendarView({
   const loggedCatsInMonth = CATEGORY_ORDER.filter((c) =>
     Array.from(loggedByDay.keys()).some((day) => predominantCategory(day) === c)
   )
+  // Colour key for the legend — every category that appears this month (scheduled or logged),
+  // since the rings colour by category and the reader needs the colour→category mapping once.
+  const catsInMonth = CATEGORY_ORDER.filter((c) => suggestedCatsInMonth.includes(c) || loggedCatsInMonth.includes(c))
   const monthHasToday = viewYear === today.getFullYear() && viewMonth === today.getMonth()
 
   // Week-row summaries, one per 7-cell chunk — computed from the REAL calendar week each
@@ -2508,49 +2676,25 @@ function ScheduleCalendarView({
                     const isToday = monthHasToday && day === today.getDate()
                     const loggedCat = predominantCategory(day)
                     const dayAppts = apptsByDay.get(day) ?? []
-                    const cellStyle: CSSProperties = {}
-                    if (loggedCat) {
-                      cellStyle.background = `color-mix(in srgb, var(--cat-${loggedCat}) 30%, var(--surface))`
-                    }
+                    // Same ring language as the mini-week: each arc is that day's share of the
+                    // weekly goal (hollow = scheduled, filled = logged), types accumulating.
+                    const segments = daySegments(scheduledBlocks, loggedByDay.get(day) ?? {}, weeklyGoalMin)
                     const titleParts = [
                       ...scheduledBlocks.map((b) => `Scheduled ${CATEGORY_LABELS[b.category]}`),
                       loggedCat ? `${CATEGORY_LABELS[loggedCat]} time logged` : '',
                       ...dayAppts.map((a) => a.title),
                       wr.isComplete && ci === wr.firstIdx ? 'Weekly goal met' : '',
                     ].filter(Boolean)
-                    let ringOffset = 0
                     return (
                       <div
                         key={day}
                         className={[
                           'cal-day-view', isService ? 'service' : '', loggedCat ? 'logged' : '', isToday ? 'today' : '', wr.isComplete ? 'week-complete' : '',
                         ].filter(Boolean).join(' ')}
-                        style={cellStyle}
                         title={titleParts.join(', ')}
                         onClick={() => setTapDate(new Date(viewYear, viewMonth, day))}
                       >
-                        {weeklyGoalMin > 0 && isService && (
-                          <svg className="cal-ring" width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
-                            <circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R} fill="none" stroke="var(--border)" strokeWidth={RING_STROKE} opacity={0.5} />
-                            {scheduledBlocks.map((b) => {
-                              const pct = Math.min(1, b.minutes / weeklyGoalMin)
-                              const segLen = pct * RING_C
-                              const dashoffset = -ringOffset
-                              ringOffset += segLen
-                              return (
-                                <circle
-                                  key={b.category}
-                                  cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R}
-                                  fill="none" stroke={`var(--cat-${b.category})`} strokeWidth={RING_STROKE}
-                                  strokeDasharray={`${segLen} ${RING_C - segLen}`}
-                                  strokeDashoffset={dashoffset}
-                                  strokeLinecap="round"
-                                  transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-                                />
-                              )
-                            })}
-                          </svg>
-                        )}
+                        {segments.length > 0 && <GoalRing segments={segments} size={RING_SIZE} />}
                         {weeklyGoalMin <= 0 && isService && (
                           <span className="cal-day-plain-dot" style={{ background: `var(--cat-${scheduledBlocks[0].category})` }} />
                         )}
@@ -2584,17 +2728,17 @@ function ScheduleCalendarView({
           {monthHasToday && (
             <span><i className="cal-sw" style={{ outline: '2px solid var(--accent)', outlineOffset: -2 }} /> Today</span>
           )}
-          {weeklyGoalMin > 0 && suggestedCatsInMonth.length > 0 && (
-            <span><i className="cal-sw cal-sw-ring" /> Share of weekly goal scheduled</span>
+          {/* When there's a goal, the ring's band shape carries scheduled-vs-logged (a hollow
+              swatch and a filled one), and the colored dots below map each colour to a category. */}
+          {weeklyGoalMin > 0 && (
+            <>
+              <span><RingSwatch color="var(--accent)" /> Scheduled</span>
+              <span><RingSwatch color="var(--accent)" logged /> Logged</span>
+            </>
           )}
-          {weeklyGoalMin <= 0 && suggestedCatsInMonth.map((cat) => (
-            <span key={`sug-${cat}`}>
-              <i className="cal-sw" style={{ background: `var(--cat-${cat})`, borderRadius: '50%' }} /> Scheduled {CATEGORY_LABELS[cat]}
-            </span>
-          ))}
-          {loggedCatsInMonth.map((cat) => (
-            <span key={`log-${cat}`}>
-              <i className="cal-sw" style={{ background: `color-mix(in srgb, var(--cat-${cat}) 30%, var(--surface))` }} /> {CATEGORY_LABELS[cat]} logged
+          {catsInMonth.map((cat) => (
+            <span key={`c-${cat}`}>
+              <i className="cal-sw" style={{ background: `var(--cat-${cat})`, borderRadius: '50%' }} /> {CATEGORY_LABELS[cat]}
             </span>
           ))}
           {weeklyGoalMin > 0 && <span><i className="cal-sw" style={{ background: 'color-mix(in srgb, var(--accent) 16%, var(--surface))' }} /> ✓ Weekly goal met</span>}

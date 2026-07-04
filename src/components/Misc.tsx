@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db } from '../db'
 import ConfirmDialog from './ConfirmDialog'
 import { exportBackup, importBackup, wipeAllData, type ImportSummary } from '../backup'
 import { readMeleoFile } from '../share'
@@ -34,6 +36,11 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
   const [confirmClear, setConfirmClear] = useState(false)
   const [confirmSeed, setConfirmSeed] = useState(false)
   const [creditEnabled, setCreditEnabled] = useState(() => localStorage.getItem('fieldservice_credit_hours') === 'yes')
+  const schedulePrefs = useLiveQuery(() => db.schedulePrefs.get(1), [])
+  const defaultExpandCalendar = schedulePrefs?.scheduleDefaultExpand === 'calendar'
+  async function setDefaultExpandCalendar(v: boolean) {
+    await db.schedulePrefs.update(1, { scheduleDefaultExpand: v ? 'calendar' : 'week' })
+  }
   const [theme, setThemeState] = useState<'light' | 'dark' | 'pastel' | 'mark'>(() => {
     const t = localStorage.getItem('fieldservice_theme')
     if (t === 'dark' || t === 'pastel' || t === 'mark') return t
@@ -295,6 +302,19 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
                 <strong>Minute-bank animation</strong>
                 <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
                   Plays a short animation when leftover minutes get banked. Turn off for an instant save.
+                </p>
+              </div>
+            </label>
+
+            <div className="misc-settings-divider" />
+
+            {/* Default Service Schedule expansion */}
+            <label className="checkbox-row">
+              <input type="checkbox" checked={defaultExpandCalendar} onChange={(e) => setDefaultExpandCalendar(e.target.checked)} />
+              <div>
+                <strong>Expand to calendar by default</strong>
+                <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+                  When you expand the Service Schedule, open the month calendar instead of the week grid. The quick-toggle still opens the other view.
                 </p>
               </div>
             </label>

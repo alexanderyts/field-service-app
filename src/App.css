@@ -1240,11 +1240,98 @@ button.small {
   }
 }
 
-/* Full-width contextual bar under the mini week / week grid / calendar — the only way to
-   move between the Service Schedule views now (no expand button). */
+/* Full-width contextual bar under the mini week / week grid / calendar — switches between the
+   Service Schedule views (or, when collapsed, expands into the default one). */
 .schedule-view-bar {
   width: 100%;
   margin-top: 10px;
+}
+
+/* The bottom "Minimize" bar in the expanded views — accent-outlined so it reads as a distinct
+   action from the neutral view-switch bar directly above it. Replaces the old header ✕. */
+.schedule-min-bar {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .schedule-min-bar:hover {
+    background: var(--accent-soft);
+  }
+}
+
+/* Small top-right quick-toggle on the collapsed card — jumps straight to whichever view is NOT
+   the default expansion, so both views are one tap away without expanding first. Positioned
+   absolutely (out of the header's flow) so it appearing/disappearing between views can't change
+   the header height — the card no longer resizes as you expand/minimize. */
+.icon-btn.sched-quick-toggle {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  width: 30px;
+  height: 30px;
+  font-size: 14px;
+  /* Fades in when it reappears on minimize (it only renders while collapsed), so it doesn't
+     pop into place at the end of the collapse animation. */
+  animation: schedToggleIn 0.28s ease both;
+}
+
+@keyframes schedToggleIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Positioning context for the absolute quick-toggle (top-right corner of the card). */
+.sched-card {
+  position: relative;
+}
+
+/* The one element the expand/minimize animation grows and shrinks — holds whichever view's body
+   is showing. Height is set imperatively only during the animation; otherwise it's natural. */
+.sched-body-frame {
+  position: relative;
+}
+
+/* On expand, the week rows cascade in (a gentle top-to-bottom stagger) as the frame grows —
+   keyed to the frame's view class so it plays when the week view mounts, not on week nav. */
+.sched-body-frame.view-week .week-grid .day-row {
+  animation: schedRowIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.sched-body-frame.view-week .week-grid .day-row:nth-child(1) { animation-delay: 0.02s; }
+.sched-body-frame.view-week .week-grid .day-row:nth-child(2) { animation-delay: 0.06s; }
+.sched-body-frame.view-week .week-grid .day-row:nth-child(3) { animation-delay: 0.10s; }
+.sched-body-frame.view-week .week-grid .day-row:nth-child(4) { animation-delay: 0.14s; }
+.sched-body-frame.view-week .week-grid .day-row:nth-child(5) { animation-delay: 0.18s; }
+.sched-body-frame.view-week .week-grid .day-row:nth-child(6) { animation-delay: 0.22s; }
+.sched-body-frame.view-week .week-grid .day-row:nth-child(7) { animation-delay: 0.26s; }
+
+@keyframes schedRowIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* On minimize the week rows fold up bottom-to-top (reversed stagger) while the frame shrinks —
+   so the week gathers itself away instead of the content just being clipped. Higher specificity
+   than the cascade-in rule above so it wins while the (still-mounted) rows collapse. */
+.sched-body-frame.view-week .week-grid.foldup .day-row {
+  animation: schedRowFold 0.3s ease both;
+  transform-origin: top;
+}
+.sched-body-frame.view-week .week-grid.foldup .day-row:nth-child(7) { animation-delay: 0s; }
+.sched-body-frame.view-week .week-grid.foldup .day-row:nth-child(6) { animation-delay: 0.03s; }
+.sched-body-frame.view-week .week-grid.foldup .day-row:nth-child(5) { animation-delay: 0.06s; }
+.sched-body-frame.view-week .week-grid.foldup .day-row:nth-child(4) { animation-delay: 0.09s; }
+.sched-body-frame.view-week .week-grid.foldup .day-row:nth-child(3) { animation-delay: 0.12s; }
+.sched-body-frame.view-week .week-grid.foldup .day-row:nth-child(2) { animation-delay: 0.15s; }
+.sched-body-frame.view-week .week-grid.foldup .day-row:nth-child(1) { animation-delay: 0.18s; }
+
+@keyframes schedRowFold {
+  from { opacity: 1; transform: scaleY(1) translateY(0); }
+  to { opacity: 0; transform: scaleY(0.35) translateY(-8px); }
 }
 
 /* The calendar rendered inline inside the Service Schedule card rather than as a modal:
@@ -1279,18 +1366,23 @@ button.small {
 
 .day-label {
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
   width: 34px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   flex-shrink: 0;
 }
 
+/* Same size as the day letter — the number reads as "the number" through weight and colour,
+   not size (the old 13/700-vs-12 pairing made the digits loom). */
 .day-num {
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 700;
+  color: var(--text-h);
 }
 
 .day-track {
@@ -1370,27 +1462,64 @@ button.small {
   flex-shrink: 0;
 }
 
-/* "Weekly goal scheduled" cue on the week view — a subtle accent hairline rule flanking a
-   small label, instead of a heavy filled pill crammed against the jump buttons. */
-.goal-line {
+/* Week-view goal meter — cumulative progress toward the SAME weekly goal the rings size against:
+   a light fill (scheduled) reaching the end = goal is fully scheduled, a solid fill (logged)
+   reaching the end = goal complete. A different form from the day rings on purpose. */
+.week-goal-meter {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 4px 0 6px;
-}
-
-.goal-line .rule {
-  flex: 1;
-  height: 1px;
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
-}
-
-.goal-line .txt {
+  margin: 2px 0 8px;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--accent);
+}
+
+.week-goal-meter .wgm-cap {
+  color: var(--muted);
+  font-weight: 600;
   white-space: nowrap;
+}
+
+.week-goal-meter .wgm-track {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.week-goal-meter .wgm-sched {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-right: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.week-goal-meter .wgm-log {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--accent);
+  border-radius: 5px 0 0 5px;
+}
+
+.week-goal-meter .wgm-state {
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.week-goal-meter.scheduled .wgm-state,
+.week-goal-meter.done .wgm-state {
+  color: var(--accent);
+}
+
+.week-goal-meter.done .wgm-track {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 /* Week-view jump buttons — return-visit always first (stable), jump-to-current stacked below
@@ -1739,37 +1868,51 @@ button.small {
 .mini-day {
   position: relative;
   flex: 1;
-  text-align: center;
-  padding: 8px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
   border-radius: 9px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--muted);
 }
 
+/* The day goal ring (shared with the calendar) sits centered behind the day letter/number. */
+.goal-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  line-height: 0;
+  pointer-events: none;
+}
+
+.mini-day-letter {
+  position: relative;
+  z-index: 1;
+}
+
 .mini-day-dot {
   position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 7px;
-  height: 7px;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--visit);
   display: inline-block;
+  z-index: 1;
 }
 
-.mini-day.service {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
+/* The ring now carries scheduled/logged, so the cell itself stays neutral — just make the
+   letter fully legible on days that have something going on. */
+.mini-day.service,
 .mini-day.done {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  color: var(--text);
 }
 
 .mini-day.faded {
@@ -2430,9 +2573,8 @@ button.small {
   font-weight: 600;
 }
 
-.cal-day-view.logged {
-  background: color-mix(in srgb, var(--cat-ministry) 30%, var(--surface));
-}
+/* Logged time is carried by the filled ring band now, so the cell itself no longer takes a
+   heavy background wash — keeps the multi-color rings legible. */
 
 .cal-day-view.today {
   outline: 2px solid var(--accent);
@@ -2457,13 +2599,6 @@ button.small {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
-.cal-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
 /* Sits directly on top of the ring's center (like a typical "number inside a progress
    ring" widget) rather than in normal flow, so the ring and the day number share the
    same visual center instead of the ring floating free relative to the digits. */
@@ -2472,6 +2607,7 @@ button.small {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  font-size: 11px;
   z-index: 1;
 }
 
@@ -2512,10 +2648,10 @@ button.small {
   flex-shrink: 0;
 }
 
-.cal-sw-ring {
-  border-radius: 50%;
-  border: 2px solid var(--accent);
-  background: transparent;
+/* Legend ring swatch (hollow = scheduled, filled = logged) — matches the day rings' look. */
+.ring-sw {
+  flex-shrink: 0;
+  vertical-align: -3px;
 }
 
 .cal-day-appt-dot {

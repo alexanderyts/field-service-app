@@ -131,6 +131,9 @@ export interface SchedulePrefs {
       `weeklyHours` is still kept in sync (monthly ÷ 4.3) so week-schedule planning and the
       calendar goal rings have a weekly number to size against. */
   monthlyHours?: number
+  /** Which view the Service Schedule card opens into when expanded from the mini-week — the
+      week grid (default) or the month calendar. The collapsed quick-toggle opens the other one. */
+  scheduleDefaultExpand?: 'week' | 'calendar'
 }
 
 /** Why a house is worth flagging on a return pass — kept deliberately small. 'none' is the
