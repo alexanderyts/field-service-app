@@ -10,7 +10,7 @@ export interface CanvasPoint {
   lng: number
 }
 
-const STREET_COLORS = ['#2f6f5e', '#d97a3e', '#6d5dd3', '#c1587a', '#3b82a6', '#a68a3b']
+export const STREET_COLORS = ['#2f6f5e', '#d97a3e', '#6d5dd3', '#c1587a', '#3b82a6', '#a68a3b']
 
 /** Normalizes every street's points to one shared bounding box (preserving aspect ratio,
     centered, with padding) and draws each as a colored polyline on an off-screen canvas.

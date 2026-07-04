@@ -1,11 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
-import { renderStreetsImage } from '../territoryImage'
 import { StreetDetail } from './StreetEntries'
-import { StreetSnapshotModal } from './Territory'
+import { StreetSnapshotModal, TerritoryMiniMap } from './Territory'
 import ShareModal from './ShareModal'
 import { SharedBadge, SharedWarning } from './SharedBits'
 import { buildTerritoryPayload } from '../share'
@@ -72,11 +71,6 @@ function TerritoryDetail({
     await db.territories.update(territory.id, { streets })
   }
 
-  const image = useMemo(
-    () => (territory ? renderStreetsImage(territory.streets, { width: 360, height: 260 }) : null),
-    [territory]
-  )
-
   if (!territory) return null
 
   function entryFor(streetName: string) {
@@ -99,7 +93,7 @@ function TerritoryDetail({
 
           <div className="detail-head">
             <h3>{territory.name}</h3>
-            <button className="icon-btn" title="View combined map image" onClick={() => setShowImage(true)}>🖼️</button>
+            <button className="icon-btn" title="View all streets on the map" onClick={() => setShowImage(true)}>🗺️</button>
           </div>
           <p className="muted contact-line">
             {territory.streets.length} street{territory.streets.length === 1 ? '' : 's'}
@@ -179,17 +173,15 @@ function TerritoryDetail({
         {showImage && (
           <ModalPortal>
             <div className="modal-backdrop" onClick={() => setShowImage(false)}>
-              <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
                 <div className="modal-toolbar">
                   <button className="icon-btn close-x" onClick={() => setShowImage(false)} title="Close">×</button>
                 </div>
                 <h3 style={{ marginTop: 0 }}>{territory.name}</h3>
-                {image && (
-                  <img src={image} alt={`Map of ${territory.name}`} style={{ width: '100%', borderRadius: 8 }} />
-                )}
-                <p className="muted" style={{ fontSize: 12 }}>
-                  A schematic overview of each traced street's shape and position, labelled by name. For the real
-                  map picture of an individual street, tap its 🗺️ in the list.
+                <TerritoryMiniMap streets={territory.streets} />
+                <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
+                  Every street in this territory on the map — pan and zoom to see how they connect. Each line is
+                  labelled by name.
                 </p>
               </div>
             </div>

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, TileLayer, Polyline, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import { db, type Territory, type TerritoryCompletion, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
-import { renderStreetsImage } from '../territoryImage'
+import { renderStreetsImage, STREET_COLORS } from '../territoryImage'
 import { fetchRoadsNear, snapPathToRoads, type LatLng } from '../roadSnap'
 import { captureTraceSnapshot } from '../mapSnapshot'
 import type { Map as LeafletMap } from 'leaflet'
@@ -556,5 +556,52 @@ export function StreetSnapshotModal({ street, onClose }: { street: TerritoryStre
         </div>
       </div>
     </ModalPortal>
+  )
+}
+
+/** Zooms/pans the map to frame every one of the territory's traced streets at once, so the
+    whole group and how the streets sit relative to each other is visible on open. */
+function FitToStreets({ streets }: { streets: TerritoryStreet[] }) {
+  const map = useMap()
+  useEffect(() => {
+    const pts = streets.flatMap((s) => s.points).map((p) => [p.lat, p.lng] as [number, number])
+    if (pts.length === 1) map.setView(pts[0], 16)
+    else if (pts.length > 1) map.fitBounds(pts, { padding: [28, 28] })
+    // The map mounts inside a just-opened modal, so its container may have been zero-size on
+    // first layout — recompute once it's settled so tiles fill correctly.
+    const t = window.setTimeout(() => map.invalidateSize(), 120)
+    return () => window.clearTimeout(t)
+  }, [map, streets])
+  return null
+}
+
+/** A live, interactive map of a whole territory: every traced street drawn as a colored,
+    name-labelled line over real tiles, auto-framed to fit them all — so their true positions
+    and relationship to each other are visible, not just a schematic. */
+export function TerritoryMiniMap({ streets }: { streets: TerritoryStreet[] }) {
+  const drawn = streets.filter((s) => s.points.length >= 2)
+  const first = drawn[0]?.points[0]
+  const center: [number, number] = first ? [first.lat, first.lng] : [32.3, -90.0]
+  return (
+    <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
+      <MapContainer center={center} zoom={15} style={{ height: 340, width: '100%' }}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          subdomains="abcd"
+          maxZoom={20}
+        />
+        {drawn.map((s, i) => (
+          <Polyline
+            key={s.id}
+            positions={s.points.map((p) => [p.lat, p.lng])}
+            pathOptions={{ color: STREET_COLORS[i % STREET_COLORS.length], weight: 5, opacity: 0.9 }}
+          >
+            <Tooltip permanent direction="center" className="territory-street-label">{s.name}</Tooltip>
+          </Polyline>
+        ))}
+        <FitToStreets streets={streets} />
+      </MapContainer>
+    </div>
   )
 }
