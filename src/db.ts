@@ -149,8 +149,9 @@ export interface StreetHouse {
 
 /** A street the publisher is tracking door-to-door — the list of house numbers worked on a
     given road, with per-house flags/notes. Distinct from a Territory (a hand-traced map
-    shape): a StreetEntry is the address-book side, and one is auto-created in the Ministry
-    tab whenever a street is traced into a temporary territory (see Territory.tsx). */
+    shape): a StreetEntry is the address-book side. A street traced on the map is only added
+    here when the user explicitly "sends it to Ministry" (or groups it into a territory) — at
+    which point its traced `points` come along so it still shows on the Territory Map. */
 export interface StreetEntry {
   id: number
   name: string
@@ -162,6 +163,9 @@ export interface StreetEntry {
   /** Free-text name of whoever this individual street was handed to — not a Person FK,
       just a lightweight note (matches how territory assignment works too). */
   assignedTo?: string
+  /** The traced map shape, if this street came from (or was sent from) a map trace — lets it
+      keep rendering on the Territory Map after it leaves the draft custom-territory list. */
+  points?: { lat: number; lng: number }[]
   sharedWith?: ShareRef[]
   receivedFrom?: ShareRef
 }

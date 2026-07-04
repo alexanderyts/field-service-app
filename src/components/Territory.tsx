@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import { db, type Territory, type TerritoryCompletion, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
-import { renderStreetsImage, STREET_COLORS } from '../territoryImage'
+import ShareModal from './ShareModal'
+import { STREET_COLORS } from '../territoryImage'
 import { fetchRoadsNear, snapPathToRoads, type LatLng } from '../roadSnap'
+import { buildTracedStreetPayload } from '../share'
 
 function newStreetId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -135,10 +137,14 @@ function TerritoryPlaceLayer({
 export function TerritoryDrawModal({
   territory,
   initialCenter,
+  editStreetId,
   onClose,
 }: {
   territory: Territory
   initialCenter: { lat: number; lng: number }
+  /** When set, the modal re-traces this existing street: it opens straight into placing mode
+      and, on finish, replaces that street's points (no name step) instead of adding a new one. */
+  editStreetId?: string
   onClose: () => void
 }) {
   const [placing, setPlacing] = useState(false)
@@ -149,6 +155,13 @@ export function TerritoryDrawModal({
   const [lookingUpName, setLookingUpName] = useState(false)
 
   function startPlacing() { setWaypoints([]); setPlacing(true) }
+
+  // Re-trace mode arms drawing immediately.
+  useEffect(() => { if (editStreetId) setPlacing(true) }, [editStreetId])
+
+  const editCenter = editStreetId
+    ? territory.streets.find((s) => s.id === editStreetId)?.points[0] ?? initialCenter
+    : initialCenter
 
   /** Finish placing: fetch nearby roads and snap the tapped path onto the real street
       centerline (falling back to the raw taps offline / with no road nearby), then hand off
@@ -165,7 +178,14 @@ export function TerritoryDrawModal({
     setSnapping(false)
     setPlacing(false)
     setWaypoints([])
-    setPendingStroke(snapped)
+    if (editStreetId) {
+      // Re-trace: swap this street's points and we're done — keep its name/assignment.
+      const streets = territory.streets.map((s) => (s.id === editStreetId ? { ...s, points: snapped } : s))
+      await db.territories.update(territory.id, { streets })
+      onClose()
+    } else {
+      setPendingStroke(snapped)
+    }
   }
   // Tracks whether the user has typed into the name field since the current trace was
   // finished, so a slow reverse-geocode response can't clobber an edit they've already made.
@@ -184,33 +204,17 @@ export function TerritoryDrawModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingStroke])
 
-  const tracePreview = useMemo(
-    () => (pendingStroke ? renderStreetsImage([{ points: pendingStroke }], { width: 280, height: 160 }) : null),
-    [pendingStroke]
-  )
-
   async function savePendingStreet(name: string) {
     if (!pendingStroke) return
     const stroke = pendingStroke
     const street: TerritoryStreet = { id: newStreetId(), name, points: stroke, done: false }
     await db.territories.update(territory.id, { streets: [...territory.streets, street] })
     setPendingStroke(null)
-    // Back to the neutral "Draw Street" button rather than auto-arming the next trace.
+    // Back to the neutral "Draw Street" button rather than auto-arming the next trace. The
+    // street is NOT added to the Ministry tab automatically — the user sends it there
+    // explicitly (or groups it into a territory) from the street list.
     setPlacing(false)
     setWaypoints([])
-    // Mirror the traced street into the Ministry tab's Streets list so house numbers can be
-    // loaded against it. Best-effort address lookup runs after the trace is already saved, so
-    // a slow/failed geocode never blocks or loses the street itself.
-    const mid = stroke[Math.floor(stroke.length / 2)]
-    const addr = await reverseGeocodeAddress(mid.lat, mid.lng)
-    await db.streetEntries.add({
-      name,
-      city: addr?.city,
-      state: addr?.state,
-      zip: addr?.zip,
-      houses: [],
-      createdAt: Date.now(),
-    })
   }
 
   return (
@@ -220,15 +224,17 @@ export function TerritoryDrawModal({
           <div className="modal-toolbar">
             <button className="icon-btn close-x" onClick={onClose} title="Done">×</button>
           </div>
-          <h3 style={{ margin: 0 }}>{territory.name}</h3>
+          <h3 style={{ margin: 0 }}>{editStreetId ? 'Re-trace street' : territory.name}</h3>
           <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>
-            {placing
-              ? 'Tap along the street to drop points — pan and zoom anytime. Finish when done.'
-              : 'Pan and zoom to find the streets you want, then tap Draw Street.'}
+            {editStreetId
+              ? 'Tap a fresh set of points along the street — this replaces the old trace when you finish.'
+              : placing
+                ? 'Tap along the street to drop points — pan and zoom anytime. Finish when done.'
+                : 'Pan and zoom to find the streets you want, then tap Draw Street.'}
           </p>
 
           <div style={{ touchAction: 'none', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
-            <MapContainer center={[initialCenter.lat, initialCenter.lng]} zoom={16} style={{ height: 'min(52vh, 440px)', width: '100%' }}>
+            <MapContainer center={[editCenter.lat, editCenter.lng]} zoom={16} style={{ height: 'min(52vh, 440px)', width: '100%' }}>
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
                 url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
@@ -277,13 +283,11 @@ export function TerritoryDrawModal({
           {pendingStroke && (
             <ModalPortal>
               <div className="modal-backdrop" onClick={() => setPendingStroke(null)}>
-                <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
                   <h3>Name this street</h3>
-                  {tracePreview && (
-                    <img
-                      src={tracePreview}
-                      alt="Preview of the traced street"
-                      style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)' }}
+                  {pendingStroke && (
+                    <TerritoryMiniMap
+                      streets={[{ id: 'preview', name: streetName.trim() || 'New street', points: pendingStroke, done: false }]}
                     />
                   )}
                   <label className="field">
@@ -316,17 +320,38 @@ export function TerritoryDrawModal({
 export function TerritoryControls({
   territory,
   initialCenter,
+  pendingDraw,
+  onDrawConsumed,
 }: {
   territory: Territory | undefined
   initialCenter: { lat: number; lng: number }
+  /** Set by "New Custom Territory" from the Ministry chooser — opens the drawing tool
+      (creating a draft first if none is active), then calls onDrawConsumed so it fires once. */
+  pendingDraw?: boolean
+  onDrawConsumed?: () => void
 }) {
   const [drawOpen, setDrawOpen] = useState(false)
+  const [editStreetId, setEditStreetId] = useState<string | null>(null)
   const [confirmComplete, setConfirmComplete] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [groupNaming, setGroupNaming] = useState(false)
   const [groupName, setGroupName] = useState('')
   const [viewStreet, setViewStreet] = useState<TerritoryStreet | null>(null)
+  const [shareStreet, setShareStreet] = useState<TerritoryStreet | null>(null)
+  const [confirmSend, setConfirmSend] = useState<TerritoryStreet | null>(null)
+
+  // Respond to the Ministry chooser's "New Custom Territory" (the Map tab mounts fresh on the
+  // switch, so this fires on mount): open the drawing tool, creating a draft if none exists,
+  // then clear the flag so it's consumed exactly once.
+  const drawHandled = useRef(false)
+  useEffect(() => {
+    if (!pendingDraw || drawHandled.current) return
+    drawHandled.current = true
+    onDrawConsumed?.()
+    createTerritory() // idempotent — reuses the active draft if there already is one
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDraw])
 
   function toggleSelected(streetId: string) {
     setSelected((prev) => {
@@ -345,7 +370,7 @@ export function TerritoryControls({
     if (!territory || selected.size === 0 || !groupName.trim()) return
     const toMove = territory.streets.filter((s) => selected.has(s.id))
     const remaining = territory.streets.filter((s) => !selected.has(s.id))
-    await db.transaction('rw', db.territories, async () => {
+    await db.transaction('rw', db.territories, db.streetEntries, async () => {
       await db.territories.add({
         name: groupName.trim(),
         createdAt: Date.now(),
@@ -354,20 +379,57 @@ export function TerritoryControls({
         streets: toMove,
       } as Territory)
       await db.territories.update(territory.id, { streets: remaining })
+      // Mirror each grouped street into Ministry → Streets (houses only, no points — the
+      // grouped territory itself renders the lines on the map, so a points-carrying mirror
+      // would double-draw them). Skips names that already exist.
+      const existingNames = new Set((await db.streetEntries.toArray()).map((e) => e.name.trim().toLowerCase()))
+      for (const s of toMove) {
+        if (existingNames.has(s.name.trim().toLowerCase())) continue
+        existingNames.add(s.name.trim().toLowerCase())
+        await db.streetEntries.add({ name: s.name, houses: [], assignedTo: s.assignedTo, createdAt: Date.now() })
+      }
     })
     setSelected(new Set())
     setGroupName('')
     setGroupNaming(false)
   }
 
-  async function createTerritory() {
-    const record: Omit<Territory, 'id'> = {
-      name: 'Temporary Territory',
+  /** Sends a single traced street to Ministry → Streets as a standalone entry (carrying its
+      trace `points`, so it keeps showing on the map), and removes it from this draft list.
+      Duplicate names prompt first (unless already confirmed). */
+  async function sendStreetToMinistry(street: TerritoryStreet, confirmed = false) {
+    if (!territory) return
+    const dup = (await db.streetEntries.toArray()).some((e) => e.name.trim().toLowerCase() === street.name.trim().toLowerCase())
+    if (dup && !confirmed) { setConfirmSend(street); return }
+    setConfirmSend(null)
+    const mid = street.points[Math.floor(street.points.length / 2)]
+    const addr = mid ? await reverseGeocodeAddress(mid.lat, mid.lng) : null
+    await db.streetEntries.add({
+      name: street.name,
+      city: addr?.city,
+      state: addr?.state,
+      zip: addr?.zip,
+      houses: [],
+      points: street.points,
+      assignedTo: street.assignedTo,
       createdAt: Date.now(),
-      completed: false,
-      streets: [],
+    })
+    await db.territories.update(territory.id, { streets: territory.streets.filter((s) => s.id !== street.id) })
+  }
+
+  async function createTerritory() {
+    // Reuse the active draft if one already exists (guards against creating a duplicate when
+    // called from the chooser before the live query has resolved the current territory).
+    const existing = (await db.territories.toArray()).find((t) => !t.completed && !t.grouped)
+    if (!existing) {
+      const record: Omit<Territory, 'id'> = {
+        name: 'Custom Territory',
+        createdAt: Date.now(),
+        completed: false,
+        streets: [],
+      }
+      await db.territories.add(record as Territory)
     }
-    await db.territories.add(record as Territory)
     setDrawOpen(true)
   }
 
@@ -410,7 +472,7 @@ export function TerritoryControls({
   if (!territory) {
     return (
       <button className="secondary" onClick={createTerritory}>
-        📍 Create Temporary Territory
+        📍 Create Custom Territory
       </button>
     )
   }
@@ -427,32 +489,28 @@ export function TerritoryControls({
       <button onClick={() => setDrawOpen(true)}>🗺️ Open Map to Draw Streets</button>
 
       {territory.streets.length > 0 ? (
-        <ul className="list" style={{ marginTop: 10 }}>
+        <ul className="draft-street-list">
           {territory.streets.map((s) => (
-            <li key={s.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
-                <label className="checkbox-row" style={{ flex: 1, minWidth: 0 }}>
-                  <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
-                  <span style={{ textDecoration: s.done ? 'line-through' : undefined }}>{s.name}</span>
-                </label>
-                <div className="row" style={{ gap: 6 }}>
-                  <button className={s.done ? 'small' : 'secondary small'} onClick={() => toggleStreetDone(s.id)}>
-                    {s.done ? '✓ Finished' : 'Mark Finished'}
-                  </button>
-                  <button className="icon-btn" title="Remove street" onClick={() => removeStreet(s.id)}>×</button>
-                </div>
+            <li key={s.id} className="draft-street-row">
+              <label className="checkbox-row draft-street-name">
+                <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
+                <span style={{ textDecoration: s.done ? 'line-through' : undefined }}>{s.name}</span>
+                {s.assignedTo && <span className="badge">👤 {s.assignedTo}</span>}
+              </label>
+              <div className="draft-street-actions">
+                <button className="secondary small" onClick={() => toggleStreetDone(s.id)}>{s.done ? '✓ Done' : 'Mark done'}</button>
+                <button className="secondary small" onClick={() => sendStreetToMinistry(s)}>📥 Send to Ministry</button>
+                <button className="secondary small" onClick={() => { setEditStreetId(s.id); setDrawOpen(true) }}>✏️ Edit trace</button>
+                <button className="secondary small" onClick={() => setViewStreet(s)}>🗺️ Map</button>
+                <button className="secondary small" onClick={() => setShareStreet(s)}>↗ Share</button>
+                <button className="secondary small" onClick={() => removeStreet(s.id)}>🗑 Remove</button>
               </div>
-              <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                <input
-                  className="assign-input"
-                  placeholder="Assign to…"
-                  defaultValue={s.assignedTo ?? ''}
-                  onBlur={(e) => setStreetAssignee(s.id, e.target.value)}
-                />
-                {s.points.length >= 2 && (
-                  <button className="icon-btn" title="View traced map" onClick={() => setViewStreet(s)}>🗺️</button>
-                )}
-              </div>
+              <input
+                className="assign-input"
+                placeholder="Assign to…"
+                defaultValue={s.assignedTo ?? ''}
+                onBlur={(e) => setStreetAssignee(s.id, e.target.value)}
+              />
             </li>
           ))}
         </ul>
@@ -475,10 +533,35 @@ export function TerritoryControls({
       </button>
 
       {drawOpen && (
-        <TerritoryDrawModal territory={territory} initialCenter={initialCenter} onClose={() => setDrawOpen(false)} />
+        <TerritoryDrawModal
+          territory={territory}
+          initialCenter={initialCenter}
+          editStreetId={editStreetId ?? undefined}
+          onClose={() => { setDrawOpen(false); setEditStreetId(null) }}
+        />
       )}
 
       {viewStreet && <StreetSnapshotModal street={viewStreet} onClose={() => setViewStreet(null)} />}
+
+      {shareStreet && (
+        <ShareModal
+          kind="street"
+          itemName={shareStreet.name}
+          buildPayload={(from) => buildTracedStreetPayload(shareStreet, from)}
+          onClose={() => setShareStreet(null)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={confirmSend != null}
+        title="A street with this name already exists"
+        message={confirmSend ? `"${confirmSend.name}" is already in Ministry → Streets. Send this one anyway (a second entry)?` : ''}
+        confirmLabel="Send anyway"
+        cancelLabel="Cancel"
+        tone="primary"
+        onConfirm={() => { if (confirmSend) sendStreetToMinistry(confirmSend, true) }}
+        onCancel={() => setConfirmSend(null)}
+      />
 
       <ConfirmDialog
         open={confirmComplete}
@@ -491,7 +574,7 @@ export function TerritoryControls({
       />
       <ConfirmDialog
         open={confirmDiscard}
-        title="Discard this temporary territory?"
+        title="Discard this custom territory?"
         message="This removes it and all traced streets. This can't be undone."
         confirmLabel="Discard"
         onConfirm={discardTerritory}

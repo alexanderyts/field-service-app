@@ -66,7 +66,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   {
     icon: '◈',
     title: 'Map',
-    body: "Contacts with an address are pinned here, color-coded by status. Trace a temporary territory, mark streets done, and it counts toward your reports — each street also lands in Ministry for house numbers.",
+    body: "Contacts with an address are pinned here, color-coded by status. Trace a custom territory by tapping along each street, then send streets to the Ministry tab for house numbers or group them into a territory.",
     tab: 'map',
     highlight: '[data-tutorial="tab-map"]',
   },

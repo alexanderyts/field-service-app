@@ -156,7 +156,7 @@ export default function Reports() {
     if (atHomeCalls) body += `Conversations: ${atHomeCalls}\n`
     if (notHomeCalls) body += `Not at Home: ${notHomeCalls}\n`
     if (scripturesShared) body += `Scriptures Shared: ${scripturesShared}\n`
-    if (monthTerritoriesCompleted) body += `Temporary Territories Completed: ${monthTerritoriesCompleted} this month, ${yearTerritoriesCompleted} this service year\n`
+    if (monthTerritoriesCompleted) body += `Custom Territories Completed: ${monthTerritoriesCompleted} this month, ${yearTerritoriesCompleted} this service year\n`
     if (yearGoalMin) body += `\nYearly Goal Progress: ${fmtDuration(yearAppliedMin)} of ${fmtDuration(yearGoalMin)} (${yearPct}%)\n`
     const subject = `Meleo Report — ${monthLabel}`
     window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
@@ -328,7 +328,7 @@ export default function Reports() {
           own card rather than folded into the (goal-gated) yearly progress card below. */}
       {(monthTerritoriesCompleted > 0 || yearTerritoriesCompleted > 0) && (
         <div className="card">
-          <h4 style={{ marginBottom: 8 }}>Temporary Territories</h4>
+          <h4 style={{ marginBottom: 8 }}>Custom Territories</h4>
           <p>🗺️ {monthTerritoriesCompleted} completed this month</p>
           <p className="muted">{yearTerritoriesCompleted} completed this service year ({serviceYearRangeLabel(reportServiceYear)})</p>
         </div>

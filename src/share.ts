@@ -127,6 +127,12 @@ export function buildStreetPayload(entry: StreetEntry, from: string): SharePaylo
   return { v: 1, kind: 'street', from, data }
 }
 
+/** Builds a share payload from a street traced on the map (name + points, no house numbers
+    yet) — so a draft custom-territory street can be shared before it's sent to Ministry. */
+export function buildTracedStreetPayload(street: { name: string; points: { lat: number; lng: number }[] }, from: string): SharePayload {
+  return { v: 1, kind: 'street', from, data: { name: street.name, points: street.points, houses: [] } }
+}
+
 export function buildTerritoryPayload(territory: Territory, from: string): SharePayload {
   /* eslint-disable @typescript-eslint/no-unused-vars */
   const { id, createdAt, completed, sharedWith, receivedFrom, ...data } = territory

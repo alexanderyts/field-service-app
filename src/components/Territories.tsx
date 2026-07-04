@@ -19,12 +19,35 @@ export default function Territories({ onGoToMap }: { onGoToMap?: (lat: number, l
   const territories = useLiveQuery(() => db.territories.toArray(), []) ?? []
   const grouped = territories.filter((t) => t.grouped).sort((a, b) => b.createdAt - a.createdAt)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [editMode, setEditMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [confirmBulk, setConfirmBulk] = useState(false)
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  }
+  async function bulkDelete() {
+    await db.territories.bulkDelete([...selectedIds])
+    setSelectedIds(new Set()); setEditMode(false); setConfirmBulk(false)
+  }
 
   return (
     <>
+      {grouped.length > 0 && (
+        <div className="list-edit-bar">
+          <button className="secondary small" onClick={() => { setEditMode((m) => !m); setSelectedIds(new Set()) }}>
+            {editMode ? 'Done' : '✎ Edit'}
+          </button>
+          {editMode && selectedIds.size > 0 && (
+            <button className="danger small" onClick={() => setConfirmBulk(true)}>Delete selected ({selectedIds.size})</button>
+          )}
+        </div>
+      )}
+
       <ul className="list">
         {grouped.map((t) => (
-          <li key={t.id} className="list-item clickable" onClick={() => setSelectedId(t.id)}>
+          <li key={t.id} className="list-item clickable" onClick={() => (editMode ? toggleSelect(t.id) : setSelectedId(t.id))}>
+            {editMode && <input type="checkbox" checked={selectedIds.has(t.id)} readOnly style={{ marginRight: 10, flexShrink: 0 }} />}
             <div>
               <strong>{t.name}</strong>
               <span className="badge">{t.streets.length} street{t.streets.length === 1 ? '' : 's'}</span>
@@ -40,7 +63,18 @@ export default function Territories({ onGoToMap }: { onGoToMap?: (lat: number, l
         )}
       </ul>
 
-      {selectedId != null && (
+      <ConfirmDialog
+        open={confirmBulk}
+        title={`Delete ${selectedIds.size} territor${selectedIds.size === 1 ? 'y' : 'ies'}?`}
+        message="This removes the selected territory groupings. The streets' own Ministry-tab entries aren't affected. This can't be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={bulkDelete}
+        onCancel={() => setConfirmBulk(false)}
+      />
+
+      {selectedId != null && !editMode && (
         <TerritoryDetail territoryId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />
       )}
     </>

@@ -1306,7 +1306,7 @@ function ScheduleMain({
                       <p className="muted">📖 {scripturesThisMonth} scripture{scripturesThisMonth === 1 ? '' : 's'} shared this month</p>
                     )}
                     {territoriesThisMonth > 0 && (
-                      <p className="muted">🗺️ {territoriesThisMonth} temp territor{territoriesThisMonth === 1 ? 'y' : 'ies'} completed this month</p>
+                      <p className="muted">🗺️ {territoriesThisMonth} custom territor{territoriesThisMonth === 1 ? 'y' : 'ies'} completed this month</p>
                     )}
                   </>
                 )}

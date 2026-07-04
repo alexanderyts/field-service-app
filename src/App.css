@@ -2934,6 +2934,62 @@ button.small {
   padding: 6px 10px;
 }
 
+/* Edit / delete-selected toolbar above a Ministry list. */
+.list-edit-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 2px;
+}
+
+/* A selection checkbox sits centered at the row's left, with the content filling the rest so
+   the row doesn't spread apart under the list's space-between. */
+.list-item > input[type='checkbox'] {
+  align-self: center;
+}
+.list-item > input[type='checkbox'] + div {
+  flex: 1;
+}
+
+/* Draft custom-territory street list — clean, uniform rows (no mixed button shapes). */
+.draft-street-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.draft-street-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.draft-street-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.draft-street-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.draft-street-actions button {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
 /* Permanent street-name label on the live territory map (a Leaflet tooltip) — a small pill
    over the traced line, no default tooltip chrome or arrow. */
 .leaflet-tooltip.territory-street-label {

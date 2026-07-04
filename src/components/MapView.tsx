@@ -106,18 +106,28 @@ function ContactPin({ person, onGoToContact }: { person: Person; onGoToContact?:
 export default function MapView({
   onGoToContact,
   focusLocation,
+  pendingDraw,
+  onDrawConsumed,
 }: {
   onGoToContact?: (personId: number) => void
   focusLocation?: { lat: number; lng: number; personId?: number } | null
+  pendingDraw?: boolean
+  onDrawConsumed?: () => void
 }) {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const { getLocation, loading, error } = useCurrentLocation()
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null)
 
   const territories = useLiveQuery(() => db.territories.toArray(), []) ?? []
+  const streetEntries = useLiveQuery(() => db.streetEntries.toArray(), []) ?? []
   // The draft you're actively tracing new streets into — a grouped territory has
   // "graduated" into a durable Ministry-tab entry and is no longer a draw target.
   const activeTerritory = territories.find((t) => !t.completed && !t.grouped)
+  // Streets sent to Ministry keep their trace `points`, so they still render on the map even
+  // after leaving the draft custom-territory list.
+  const sentStreets = streetEntries
+    .filter((e) => e.points && e.points.length >= 2)
+    .map((e) => ({ id: `se-${e.id}`, name: e.name, points: e.points!, done: false }))
 
   useEffect(() => {
     // Don't let an in-flight GPS fix hijack a requested "jump to contact" — RecenterButton
@@ -185,6 +195,7 @@ export default function MapView({
           {territories.map((t) => (
             <TerritoryStreetsOverlay key={t.id} streets={t.streets} />
           ))}
+          <TerritoryStreetsOverlay streets={sentStreets} />
         </MapContainer>
         <MapCompass />
       </div>
@@ -192,7 +203,7 @@ export default function MapView({
       {/* Drawing happens in its own modal (see Territory.tsx) with its own map instance,
           not this page's map — that keeps it fully isolated from this page's normal
           scroll, so panning/zooming there can never fight the page scrolling underneath. */}
-      <TerritoryControls territory={activeTerritory} initialCenter={center} />
+      <TerritoryControls territory={activeTerritory} initialCenter={center} pendingDraw={pendingDraw} onDrawConsumed={onDrawConsumed} />
     </div>
   )
 }

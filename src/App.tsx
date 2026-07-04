@@ -54,6 +54,10 @@ function App() {
   const [tab, setTab] = useState<Tab>('contacts')
   const [openContactId, setOpenContactId] = useState<number | null>(null)
   const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number; personId?: number } | null>(null)
+  // Set when "New Custom Territory" is picked from the Ministry chooser — switches to the Map
+  // tab, which opens the drawing tool and clears this (so it's consumed exactly once, even
+  // though the Map tab mounts fresh on the switch).
+  const [pendingDraw, setPendingDraw] = useState(false)
   const [phase, setPhase] = useState<Phase>('splash')
   const [showTutorialPrompt, setShowTutorialPrompt] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
@@ -148,6 +152,7 @@ function App() {
                 onOpenedContact={() => setOpenContactId(null)}
                 onGoToMap={(lat, lng, personId) => { setMapFocus({ lat, lng, personId }); setTab('map') }}
                 onImportEncoded={setPendingImport}
+                onNewTerritory={() => { setPendingDraw(true); setTab('map') }}
               />
             )}
             {tab === 'schedule' && (
@@ -162,6 +167,8 @@ function App() {
               <MapView
                 focusLocation={mapFocus}
                 onGoToContact={(id) => { setOpenContactId(id); setTab('contacts') }}
+                pendingDraw={pendingDraw}
+                onDrawConsumed={() => setPendingDraw(false)}
               />
             )}
             {tab === 'reports' && <Reports />}

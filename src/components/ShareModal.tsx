@@ -22,7 +22,9 @@ export default function ShareModal({
   onClose,
 }: {
   kind: ShareKind
-  recordId: number
+  /** The Dexie id of the shared record, so the share is logged onto it (`sharedWith`). Omit
+      for ephemeral items with no standalone record yet (e.g. a draft traced street). */
+  recordId?: number
   itemName: string
   buildPayload: (from: string) => SharePayload | Promise<SharePayload>
   onClose: () => void
@@ -41,7 +43,7 @@ export default function ShareModal({
     setError(null)
     try {
       const from = fullProfileName()
-      await recordShare(kind, recordId, recipient.trim() || 'Someone')
+      if (recordId != null) await recordShare(kind, recordId, recipient.trim() || 'Someone')
       const payload = await buildPayload(from)
       const enc = await encodeSharePayload(payload)
       setEncoded(enc)

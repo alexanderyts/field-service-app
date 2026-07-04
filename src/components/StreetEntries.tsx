@@ -51,6 +51,17 @@ export default function StreetEntries({
   const entries = useLiveQuery(() => db.streetEntries.toArray(), []) ?? []
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [editMode, setEditMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [confirmBulk, setConfirmBulk] = useState(false)
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  }
+  async function bulkDelete() {
+    await db.streetEntries.bulkDelete([...selectedIds])
+    setSelectedIds(new Set()); setEditMode(false); setConfirmBulk(false)
+  }
 
   const q = search.trim().toLowerCase()
   const filtered = entries
@@ -81,11 +92,23 @@ export default function StreetEntries({
         />
       )}
 
+      {filtered.length > 0 && (
+        <div className="list-edit-bar">
+          <button className="secondary small" onClick={() => { setEditMode((m) => !m); setSelectedIds(new Set()) }}>
+            {editMode ? 'Done' : '✎ Edit'}
+          </button>
+          {editMode && selectedIds.size > 0 && (
+            <button className="danger small" onClick={() => setConfirmBulk(true)}>Delete selected ({selectedIds.size})</button>
+          )}
+        </div>
+      )}
+
       <ul className="list">
         {filtered.map((e) => {
           const address = [e.city, e.state, e.zip].filter(Boolean).join(', ')
           return (
-            <li key={e.id} className="list-item clickable" onClick={() => setSelectedId(e.id)}>
+            <li key={e.id} className="list-item clickable" onClick={() => (editMode ? toggleSelect(e.id) : setSelectedId(e.id))}>
+              {editMode && <input type="checkbox" checked={selectedIds.has(e.id)} readOnly style={{ marginRight: 10, flexShrink: 0 }} />}
               <div>
                 <strong>{e.name}</strong>
                 <span className="badge">{e.houses.length} house{e.houses.length === 1 ? '' : 's'}</span>
@@ -102,7 +125,18 @@ export default function StreetEntries({
         )}
       </ul>
 
-      {selectedId != null && <StreetDetail entryId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
+      <ConfirmDialog
+        open={confirmBulk}
+        title={`Delete ${selectedIds.size} street${selectedIds.size === 1 ? '' : 's'}?`}
+        message="This permanently removes the selected street entries and their house numbers. This can't be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={bulkDelete}
+        onCancel={() => setConfirmBulk(false)}
+      />
+
+      {selectedId != null && !editMode && <StreetDetail entryId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
     </>
   )
 }
@@ -124,8 +158,9 @@ function StreetEntryForm({
   const [zip, setZip] = useState(existing?.zip ?? '')
   const [assignedTo, setAssignedTo] = useState(existing?.assignedTo ?? '')
   const [error, setError] = useState(false)
+  const [dupConfirm, setDupConfirm] = useState(false)
 
-  async function save() {
+  async function save(force = false) {
     if (!name.trim()) { setError(true); return }
     const record = {
       name: name.trim(),
@@ -137,10 +172,14 @@ function StreetEntryForm({
     if (existing) {
       await db.streetEntries.update(existing.id, record)
       onClose()
-    } else {
-      const id = (await db.streetEntries.add({ ...record, houses: [], createdAt: Date.now() })) as number
-      onSaved?.(id)
+      return
     }
+    if (!force) {
+      const dup = (await db.streetEntries.toArray()).some((e) => e.name.trim().toLowerCase() === record.name.toLowerCase())
+      if (dup) { setDupConfirm(true); return }
+    }
+    const id = (await db.streetEntries.add({ ...record, houses: [], createdAt: Date.now() })) as number
+    onSaved?.(id)
   }
 
   return (
@@ -176,10 +215,21 @@ function StreetEntryForm({
           </label>
           {error && <p className="error">Please enter a street name.</p>}
           <div className="row">
-            <button onClick={save}>{existing ? 'Save Changes' : 'Save Street'}</button>
+            <button onClick={() => save()}>{existing ? 'Save Changes' : 'Save Street'}</button>
             <button className="secondary" onClick={onClose}>Cancel</button>
           </div>
         </div>
+
+        <ConfirmDialog
+          open={dupConfirm}
+          title="A street with this name already exists"
+          message={`"${name.trim()}" is already in your Streets list. Add another entry with the same name?`}
+          confirmLabel="Add anyway"
+          cancelLabel="Cancel"
+          tone="primary"
+          onConfirm={() => { setDupConfirm(false); save(true) }}
+          onCancel={() => setDupConfirm(false)}
+        />
       </div>
     </ModalPortal>
   )

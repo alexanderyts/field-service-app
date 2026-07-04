@@ -45,11 +45,13 @@ export default function Contacts({
   onOpenedContact,
   onGoToMap,
   onImportEncoded,
+  onNewTerritory,
 }: {
   openContactId?: number | null
   onOpenedContact?: () => void
   onGoToMap?: (lat: number, lng: number, personId?: number) => void
   onImportEncoded?: (encoded: string) => void
+  onNewTerritory?: () => void
 }) {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const appointments = useLiveQuery(() => db.appointments.toArray(), []) ?? []
@@ -61,7 +63,27 @@ export default function Contacts({
   const [view, setView] = useState<MinistryView>('people')
   const [showChooser, setShowChooser] = useState(false)
   const [streetFormOpen, setStreetFormOpen] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [confirmBulk, setConfirmBulk] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  async function bulkDeletePeople() {
+    for (const id of selectedIds) {
+      await db.people.delete(id)
+      await db.calls.where('personId').equals(id).delete()
+      const appts = await db.appointments.filter((a) => a.personId === id).toArray()
+      if (appts.length) await db.appointments.bulkDelete(appts.map((a) => a.id))
+    }
+    setSelectedIds(new Set()); setEditMode(false); setConfirmBulk(false)
+  }
 
   async function handleImportFile(file: File | undefined) {
     if (!file) return
@@ -168,9 +190,27 @@ export default function Contacts({
 
           {showNew && <ContactForm onClose={() => setShowNew(false)} />}
 
+          {sorted.length > 0 && (
+            <div className="list-edit-bar">
+              <button className="secondary small" onClick={() => { setEditMode((m) => !m); setSelectedIds(new Set()) }}>
+                {editMode ? 'Done' : '✎ Edit'}
+              </button>
+              {editMode && selectedIds.size > 0 && (
+                <button className="danger small" onClick={() => setConfirmBulk(true)}>Delete selected ({selectedIds.size})</button>
+              )}
+            </div>
+          )}
+
           <ul className="list">
             {sorted.map((p) => (
-              <li key={p.id} className="list-item clickable" onClick={() => setSelectedId(p.id)}>
+              <li
+                key={p.id}
+                className="list-item clickable"
+                onClick={() => (editMode ? toggleSelect(p.id) : setSelectedId(p.id))}
+              >
+                {editMode && (
+                  <input type="checkbox" checked={selectedIds.has(p.id)} readOnly style={{ marginRight: 10, flexShrink: 0 }} />
+                )}
                 <div>
                   <strong>{p.name}</strong>
                   <span className={`badge status-${p.status}`}>{STATUS_LABELS[p.status]}</span>
@@ -187,7 +227,18 @@ export default function Contacts({
             {sorted.length === 0 && <p className="muted">No contacts match.</p>}
           </ul>
 
-          {selectedId != null && <ContactDetail personId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
+          <ConfirmDialog
+            open={confirmBulk}
+            title={`Delete ${selectedIds.size} contact${selectedIds.size === 1 ? '' : 's'}?`}
+            message="This permanently removes the selected contacts and their call logs and return visits. This can't be undone."
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+            tone="danger"
+            onConfirm={bulkDeletePeople}
+            onCancel={() => setConfirmBulk(false)}
+          />
+
+          {selectedId != null && !editMode && <ContactDetail personId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
         </>
       ) : view === 'streets' ? (
         <StreetEntries showNewForm={streetFormOpen} onCloseNewForm={() => setStreetFormOpen(false)} onGoToMap={onGoToMap} />
@@ -204,17 +255,26 @@ export default function Contacts({
               </div>
               <h3>Add a new entry</h3>
               <p className="muted" style={{ marginTop: -6 }}>What would you like to add?</p>
-              <button
-                onClick={() => { setShowChooser(false); setView('people'); setShowNew(true) }}
-              >
-                👤 New Contact
-              </button>
-              <button
-                className="secondary"
-                onClick={() => { setShowChooser(false); setView('streets'); setStreetFormOpen(true) }}
-              >
-                🛣️ New Street
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button
+                  className="secondary"
+                  onClick={() => { setShowChooser(false); setView('people'); setShowNew(true) }}
+                >
+                  👤 New Contact
+                </button>
+                <button
+                  className="secondary"
+                  onClick={() => { setShowChooser(false); setView('streets'); setStreetFormOpen(true) }}
+                >
+                  🛣️ New Street
+                </button>
+                <button
+                  className="secondary"
+                  onClick={() => { setShowChooser(false); onNewTerritory?.() }}
+                >
+                  🗺️ New Custom Territory
+                </button>
+              </div>
               <div className="section-divider" />
               <button
                 className="secondary"
