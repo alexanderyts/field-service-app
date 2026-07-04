@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../db'
+import { db, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import { renderStreetsImage } from '../territoryImage'
 import { StreetDetail } from './StreetEntries'
+import { StreetSnapshotModal } from './Territory'
 import ShareModal from './ShareModal'
 import { SharedBadge, SharedWarning } from './SharedBits'
 import { buildTerritoryPayload } from '../share'
@@ -62,6 +63,14 @@ function TerritoryDetail({
   const [openStreetEntryId, setOpenStreetEntryId] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showShare, setShowShare] = useState(false)
+  const [viewStreet, setViewStreet] = useState<TerritoryStreet | null>(null)
+
+  async function setStreetAssignee(streetId: string, name: string) {
+    if (!territory) return
+    const trimmed = name.trim() || undefined
+    const streets = territory.streets.map((s) => (s.id === streetId ? { ...s, assignedTo: trimmed } : s))
+    await db.territories.update(territory.id, { streets })
+  }
 
   const image = useMemo(
     () => (territory ? renderStreetsImage(territory.streets, { width: 360, height: 260 }) : null),
@@ -114,25 +123,36 @@ function TerritoryDetail({
               const entry = entryFor(s.name)
               const mid = s.points[Math.floor(s.points.length / 2)]
               return (
-                <li key={s.id} className="list-item">
-                  <div>
-                    <strong>{s.name}</strong>
-                    {entry && (
-                      <span className="badge">{entry.houses.length} house{entry.houses.length === 1 ? '' : 's'}</span>
-                    )}
+                <li key={s.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                  <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+                    <div>
+                      <strong>{s.name}</strong>
+                      {entry && (
+                        <span className="badge">{entry.houses.length} house{entry.houses.length === 1 ? '' : 's'}</span>
+                      )}
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      {s.snapshot && (
+                        <button className="icon-btn" title="View traced map" onClick={() => setViewStreet(s)}>🗺️</button>
+                      )}
+                      {entry && (
+                        <button className="secondary small" onClick={() => setOpenStreetEntryId(entry.id)}>
+                          Houses
+                        </button>
+                      )}
+                      {onGoToMap && mid && (
+                        <button className="secondary small" onClick={() => { onGoToMap(mid.lat, mid.lng); onClose() }}>
+                          Map
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="row" style={{ gap: 6 }}>
-                    {entry && (
-                      <button className="secondary small" onClick={() => setOpenStreetEntryId(entry.id)}>
-                        Houses
-                      </button>
-                    )}
-                    {onGoToMap && mid && (
-                      <button className="secondary small" onClick={() => { onGoToMap(mid.lat, mid.lng); onClose() }}>
-                        Map
-                      </button>
-                    )}
-                  </div>
+                  <input
+                    className="assign-input"
+                    placeholder="Assign to…"
+                    defaultValue={s.assignedTo ?? ''}
+                    onBlur={(e) => setStreetAssignee(s.id, e.target.value)}
+                  />
                 </li>
               )
             })}
@@ -168,8 +188,8 @@ function TerritoryDetail({
                   <img src={image} alt={`Map of ${territory.name}`} style={{ width: '100%', borderRadius: 8 }} />
                 )}
                 <p className="muted" style={{ fontSize: 12 }}>
-                  A schematic view of each traced street's shape and position relative to the others — not a real
-                  map screenshot.
+                  A schematic overview of each traced street's shape and position, labelled by name. For the real
+                  map picture of an individual street, tap its 🗺️ in the list.
                 </p>
               </div>
             </div>
@@ -179,6 +199,8 @@ function TerritoryDetail({
         {openStreetEntryId != null && (
           <StreetDetail entryId={openStreetEntryId} onClose={() => setOpenStreetEntryId(null)} onGoToMap={onGoToMap} />
         )}
+
+        {viewStreet && <StreetSnapshotModal street={viewStreet} onClose={() => setViewStreet(null)} />}
 
         <ConfirmDialog
           open={confirmDelete}

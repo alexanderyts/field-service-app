@@ -731,7 +731,7 @@ button.small {
    suddenly flashing bright again) — see closeDayModalSmoothly in Schedule.tsx, which
    computes --closeTX/TY/SX/SY per-close from the day row's actual position. */
 .day-action-modal {
-  transition: transform 0.24s ease, opacity 0.24s ease;
+  transition: transform 0.17s ease, opacity 0.17s ease;
 }
 
 .day-action-modal.day-modal-closing {
@@ -741,7 +741,7 @@ button.small {
 }
 
 .day-modal-backdrop {
-  transition: opacity 0.24s ease;
+  transition: opacity 0.17s ease;
 }
 
 .day-modal-backdrop.closing {
@@ -1175,10 +1175,16 @@ button.small {
   max-width: none;
   max-height: none;
   padding: 0;
-  margin-top: 12px;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* Both expanded views (week grid + inline calendar) share a min-height so switching between
+   them doesn't make the Service Schedule card jump in size. */
+.sched-view-body {
+  min-height: 420px;
 }
 
 .slot-appt {
@@ -2093,6 +2099,55 @@ button.small {
   gap: 4px;
 }
 
+/* Calendar body laid out as week rows: a 7-column day grid plus a trailing action column
+   that holds the per-week "clear schedule" ✕, so the ✕ sits to the right of the whole week
+   instead of overlapping the last date (which made that date hard to tap). */
+.cal-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cal-dow-row,
+.cal-week-line {
+  display: grid;
+  grid-template-columns: 1fr 26px;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.cal-week-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-week-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cal-week-clear-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+@media (hover: hover) {
+  .cal-week-clear-btn:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+}
+
 .cal-dow {
   text-align: center;
   font-size: 11px;
@@ -2215,28 +2270,6 @@ button.small {
   font-weight: 700;
   color: var(--accent);
   line-height: 1;
-}
-
-.cal-week-clear {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 16px;
-  height: 16px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1;
-  padding: 0;
-  border-radius: 50%;
-}
-
-@media (hover: hover) {
-  .cal-week-clear:hover {
-    background: var(--danger-soft);
-    color: var(--danger);
-  }
 }
 
 /* Legend swatch for the calendar view — sized like a mini day cell; its border/fill/
@@ -2806,6 +2839,25 @@ button.small {
 
 .numpad-grid-alpha {
   grid-template-columns: repeat(5, 1fr);
+}
+
+/* Enter + backspace as a dedicated row under the character grid — enter left, backspace
+   right, each half-width, matching on both the number and letter pads. */
+.numpad-actions {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.numpad-actions .numpad-key {
+  flex: 1;
+}
+
+/* Compact per-street "assign to" input used in territory street lists. */
+.assign-input {
+  width: 100%;
+  font-size: 13px;
+  padding: 6px 10px;
 }
 
 .numpad-key {

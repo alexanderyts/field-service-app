@@ -16,7 +16,7 @@ const STREET_COLORS = ['#2f6f5e', '#d97a3e', '#6d5dd3', '#c1587a', '#3b82a6', '#
     centered, with padding) and draws each as a colored polyline on an off-screen canvas.
     Returns a PNG data URL. */
 export function renderStreetsImage(
-  streets: { points: CanvasPoint[] }[],
+  streets: { points: CanvasPoint[]; name?: string }[],
   options?: { width?: number; height?: number }
 ): string {
   const width = options?.width ?? 320
@@ -77,6 +77,30 @@ export function renderStreetsImage(
       ctx.lineTo(x, y)
     }
     ctx.stroke()
+  })
+
+  // Street-name labels drawn over the schematic, so a traced line is still identifiable.
+  streets.forEach((s, i) => {
+    if (s.points.length < 2 || !s.name) return
+    const [mx, my] = project(s.points[Math.floor(s.points.length / 2)])
+    ctx.font = '600 11px system-ui, -apple-system, sans-serif'
+    ctx.textBaseline = 'middle'
+    const textW = Math.min(ctx.measureText(s.name).width, width - 16)
+    const boxW = textW + 8
+    const boxH = 16
+    let bx = mx - boxW / 2
+    bx = Math.max(3, Math.min(bx, width - boxW - 3))
+    const by = Math.max(3, Math.min(my - boxH / 2, height - boxH - 3))
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillRect(bx, by, boxW, boxH)
+    ctx.fillStyle = STREET_COLORS[i % STREET_COLORS.length]
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(bx, by, boxW, boxH)
+    ctx.clip()
+    ctx.textAlign = 'center'
+    ctx.fillText(s.name, bx + boxW / 2, by + boxH / 2 + 0.5)
+    ctx.restore()
   })
 
   ctx.strokeStyle = '#d8d3c8'

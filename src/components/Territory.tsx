@@ -4,6 +4,9 @@ import { db, type Territory, type TerritoryCompletion, type TerritoryStreet } fr
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import { renderStreetsImage } from '../territoryImage'
+import { smoothStroke } from '../strokeSmooth'
+import { captureTraceSnapshot } from '../mapSnapshot'
+import type { Map as LeafletMap } from 'leaflet'
 
 function newStreetId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -76,13 +79,19 @@ function TerritoryDrawLayer({
   streets,
   drawing,
   onStrokeComplete,
+  onMap,
 }: {
   streets: TerritoryStreet[]
   drawing: boolean
   onStrokeComplete: (points: { lat: number; lng: number }[]) => void
+  onMap?: (map: LeafletMap) => void
 }) {
   const map = useMap()
   const [liveStroke, setLiveStroke] = useState<{ lat: number; lng: number }[]>([])
+
+  // Hand the live Leaflet map instance up so the parent can capture a real snapshot of the
+  // tiles under a finished trace.
+  useEffect(() => { onMap?.(map) }, [map, onMap])
 
   useEffect(() => {
     if (!drawing) return
@@ -169,6 +178,7 @@ export function TerritoryDrawModal({
   const [pendingStroke, setPendingStroke] = useState<{ lat: number; lng: number }[] | null>(null)
   const [streetName, setStreetName] = useState('')
   const [lookingUpName, setLookingUpName] = useState(false)
+  const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null)
   // Tracks whether the user has typed into the name field since the current trace was
   // finished, so a slow reverse-geocode response can't clobber an edit they've already made.
   const nameEditedRef = useRef(false)
@@ -194,7 +204,11 @@ export function TerritoryDrawModal({
   async function savePendingStreet(name: string) {
     if (!pendingStroke) return
     const stroke = pendingStroke
-    const street: TerritoryStreet = { id: newStreetId(), name, points: stroke, done: false }
+    // Capture a real snapshot of the map tiles under this trace (with the line + name drawn
+    // on top) while the map is still showing this area. Best-effort — on any failure the
+    // schematic renderer is used instead.
+    const snapshot = mapInstance ? (await captureTraceSnapshot(mapInstance, stroke, name)) ?? undefined : undefined
+    const street: TerritoryStreet = { id: newStreetId(), name, points: stroke, done: false, snapshot }
     await db.territories.update(territory.id, { streets: [...territory.streets, street] })
     setPendingStroke(null)
     // Back to the neutral "Draw Street" button rather than silently staying in
@@ -236,8 +250,14 @@ export function TerritoryDrawModal({
                 url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
                 subdomains="abcd"
                 maxZoom={20}
+                crossOrigin="anonymous"
               />
-              <TerritoryDrawLayer streets={territory.streets} drawing={drawing} onStrokeComplete={setPendingStroke} />
+              <TerritoryDrawLayer
+                streets={territory.streets}
+                drawing={drawing}
+                onStrokeComplete={(pts) => setPendingStroke(smoothStroke(pts))}
+                onMap={setMapInstance}
+              />
             </MapContainer>
           </div>
 
@@ -301,6 +321,7 @@ export function TerritoryControls({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [groupNaming, setGroupNaming] = useState(false)
   const [groupName, setGroupName] = useState('')
+  const [viewStreet, setViewStreet] = useState<TerritoryStreet | null>(null)
 
   function toggleSelected(streetId: string) {
     setSelected((prev) => {
@@ -351,6 +372,13 @@ export function TerritoryControls({
     await db.territories.update(territory.id, { streets })
   }
 
+  async function setStreetAssignee(streetId: string, name: string) {
+    if (!territory) return
+    const trimmed = name.trim() || undefined
+    const streets = territory.streets.map((s) => (s.id === streetId ? { ...s, assignedTo: trimmed } : s))
+    await db.territories.update(territory.id, { streets })
+  }
+
   async function removeStreet(streetId: string) {
     if (!territory) return
     const streets = territory.streets.filter((s) => s.id !== streetId)
@@ -396,16 +424,29 @@ export function TerritoryControls({
       {territory.streets.length > 0 ? (
         <ul className="list" style={{ marginTop: 10 }}>
           {territory.streets.map((s) => (
-            <li key={s.id} className="list-item">
-              <label className="checkbox-row" style={{ flex: 1, minWidth: 0 }}>
-                <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
-                <span style={{ textDecoration: s.done ? 'line-through' : undefined }}>{s.name}</span>
-              </label>
-              <div className="row" style={{ gap: 6 }}>
-                <button className={s.done ? '' : 'secondary'} onClick={() => toggleStreetDone(s.id)}>
-                  {s.done ? '✓ Finished' : 'Mark Finished'}
-                </button>
-                <button className="icon-btn" title="Remove street" onClick={() => removeStreet(s.id)}>×</button>
+            <li key={s.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+              <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+                <label className="checkbox-row" style={{ flex: 1, minWidth: 0 }}>
+                  <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
+                  <span style={{ textDecoration: s.done ? 'line-through' : undefined }}>{s.name}</span>
+                </label>
+                <div className="row" style={{ gap: 6 }}>
+                  <button className={s.done ? 'small' : 'secondary small'} onClick={() => toggleStreetDone(s.id)}>
+                    {s.done ? '✓ Finished' : 'Mark Finished'}
+                  </button>
+                  <button className="icon-btn" title="Remove street" onClick={() => removeStreet(s.id)}>×</button>
+                </div>
+              </div>
+              <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                <input
+                  className="assign-input"
+                  placeholder="Assign to…"
+                  defaultValue={s.assignedTo ?? ''}
+                  onBlur={(e) => setStreetAssignee(s.id, e.target.value)}
+                />
+                {s.snapshot && (
+                  <button className="icon-btn" title="View traced map" onClick={() => setViewStreet(s)}>🗺️</button>
+                )}
               </div>
             </li>
           ))}
@@ -431,6 +472,8 @@ export function TerritoryControls({
       {drawOpen && (
         <TerritoryDrawModal territory={territory} initialCenter={initialCenter} onClose={() => setDrawOpen(false)} />
       )}
+
+      {viewStreet && <StreetSnapshotModal street={viewStreet} onClose={() => setViewStreet(null)} />}
 
       <ConfirmDialog
         open={confirmComplete}
@@ -472,5 +515,29 @@ export function TerritoryControls({
         </ModalPortal>
       )}
     </div>
+  )
+}
+
+/** Shows a single traced street's real map snapshot (the picture captured over the tiles at
+    draw time), falling back to the schematic renderer when no snapshot was captured. Shared
+    by the draft checklist and the grouped-territory detail. */
+export function StreetSnapshotModal({ street, onClose }: { street: TerritoryStreet; onClose: () => void }) {
+  const img = street.snapshot ?? renderStreetsImage([{ points: street.points, name: street.name }], { width: 360, height: 260 })
+  return (
+    <ModalPortal>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-toolbar">
+            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+          </div>
+          <h3 style={{ marginTop: 0 }}>{street.name}</h3>
+          <img src={img} alt={`Map of ${street.name}`} style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)' }} />
+          {!street.snapshot && (
+            <p className="muted" style={{ fontSize: 12 }}>Schematic view — a real map snapshot wasn't captured for this street.</p>
+          )}
+          {street.assignedTo && <p className="muted" style={{ margin: '4px 0 0' }}>👤 Assigned to {street.assignedTo}</p>}
+        </div>
+      </div>
+    </ModalPortal>
   )
 }

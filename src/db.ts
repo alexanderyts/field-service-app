@@ -172,6 +172,13 @@ export interface TerritoryStreet {
   name: string
   points: { lat: number; lng: number }[]
   done: boolean
+  /** Free-text name of whoever this specific street was handed to — independent of any
+      territory-level assignment, so each street in a group can go to a different person. */
+  assignedTo?: string
+  /** A JPEG data URL: a real snapshot of the map tiles under this trace, captured at draw
+      time with the traced line + street name drawn on top. Absent if capture failed (the
+      schematic renderer is used instead). */
+  snapshot?: string
 }
 
 /** A hand-traced, disposable group of streets someone is working door to door — not the

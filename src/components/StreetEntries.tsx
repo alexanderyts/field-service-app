@@ -422,8 +422,13 @@ function HouseNumberPad({ onSubmit, onClose }: { onSubmit: (houses: PadHouse[]) 
             {keys.map((ch) => (
               <button key={ch} className="numpad-key" onClick={() => setValue((v) => v + ch)}>{ch}</button>
             ))}
+          </div>
+
+          {/* Enter (green) bottom-left, backspace bottom-right — same on both the number and
+              letter pads, so the two most-used keys are always in a predictable spot. */}
+          <div className="numpad-actions">
+            <button className="numpad-key numpad-key-enter" title="Add house" onClick={handleEnter} disabled={!value.trim()}>✓ Enter</button>
             <button className="numpad-key numpad-key-back" title="Backspace" onClick={() => setValue((v) => v.slice(0, -1))}>⌫</button>
-            <button className="numpad-key numpad-key-enter" title="Add house" onClick={handleEnter} disabled={!value.trim()}>✓</button>
           </div>
 
           <div className="numpad-house-meta">
