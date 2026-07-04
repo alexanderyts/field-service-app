@@ -3,11 +3,14 @@
 //
 // This is informational boilerplate, not legal advice.
 
-export const DEVELOPER_NAME = 'Alexander'
+export const DEVELOPER_NAME = 'Alex Yianitsas'
+/** Name shown in the copyright notice. Attributed to the product/brand "Meleo"; legal
+    ownership still rests with the developer (a © notice is branding, not a title deed). */
+export const COPYRIGHT_HOLDER = 'Meleo'
 /** Public contact/legal address — shown in the privacy policy and Legal section. Not the
     PayPal tip destination; see tips.ts for that (kept on the developer's personal account). */
 export const DEVELOPER_EMAIL = 'meleoapp@gmail.com'
-export const COPYRIGHT_LINE = `© 2026 ${DEVELOPER_NAME}. All rights reserved.`
+export const COPYRIGHT_LINE = `© 2026 ${COPYRIGHT_HOLDER}. All rights reserved.`
 
 /** Non-affiliation disclaimer. Shown prominently in both the first-launch gate and More tab. */
 export const NOT_AFFILIATED =

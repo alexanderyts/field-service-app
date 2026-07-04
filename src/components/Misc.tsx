@@ -7,7 +7,7 @@ import { readMeleoFile } from '../share'
 import { InstallCard } from './InstallPrompt'
 import { tipServices, type TipKind } from '../tips'
 import { APP_VERSION } from '../version'
-import { COPYRIGHT_SUMMARY, NOT_AFFILIATED } from '../legal'
+import { COPYRIGHT_SUMMARY, NOT_AFFILIATED, DEVELOPER_NAME, DEVELOPER_EMAIL } from '../legal'
 import { getProfileName, saveProfileName } from '../profile'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
 import {
@@ -61,6 +61,37 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
   const [tipMenu, setTipMenu] = useState<TipKind | null>(null)
   const oneTimeTips = tipServices('oneTime')
   const monthlyTips = tipServices('monthly')
+
+  // Share the web app link
+  const [shareMsg, setShareMsg] = useState<string | null>(null)
+  // Build from this deployment's own origin + base path so the link always
+  // points at wherever this exact build is hosted (GH Pages, Netlify, …).
+  const appUrl = new URL(import.meta.env.BASE_URL, window.location.origin).href
+  async function shareApp() {
+    setShareMsg(null)
+    const shareData = {
+      title: 'Meleo',
+      text: 'Meleo — a free field service companion. No sign-up, works right in your browser:',
+      url: appUrl,
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.canShare?.(shareData)) {
+        await navigator.share(shareData)
+        return // OS share sheet handled it
+      }
+      await navigator.clipboard.writeText(appUrl)
+      setShareMsg('Link copied to your clipboard.')
+    } catch (err) {
+      // AbortError = user closed the share sheet; not a failure worth surfacing.
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      try {
+        await navigator.clipboard.writeText(appUrl)
+        setShareMsg('Link copied to your clipboard.')
+      } catch {
+        setShareMsg(appUrl) // last resort: show it so they can copy by hand
+      }
+    }
+  }
 
   // Backup & restore
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -214,6 +245,20 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
 
       {/* ── Add to Home Screen ──────────────────────────────── */}
       <InstallCard />
+
+      {/* ── Share the app ───────────────────────────────────── */}
+      <div className="card">
+        <strong>📣 Share Meleo</strong>
+        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
+          Know someone who'd find this handy? Send them the link — it opens right in their browser,
+          no sign-up or install required, and their data stays on their own device.
+        </p>
+        <div className="row">
+          <button onClick={shareApp}>Share the App Link</button>
+          <a className="link-button secondary" href={appUrl} target="_blank" rel="noreferrer">Open in Browser</a>
+        </div>
+        {shareMsg && <p className="muted" style={{ fontSize: 12, margin: '8px 0 0', color: 'var(--accent)', wordBreak: 'break-all' }}>{shareMsg}</p>}
+      </div>
 
       {/* ── 2. Theme ────────────────────────────────────────── */}
       <div className="card">
@@ -474,6 +519,14 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
               <div>
                 <strong>Copyright.</strong>
                 <p>{COPYRIGHT_SUMMARY}</p>
+              </div>
+            </div>
+
+            <div className="misc-privacy-item">
+              <span className="misc-privacy-icon">👋</span>
+              <div>
+                <strong>Developer.</strong>
+                <p>Made by {DEVELOPER_NAME}. Questions or feedback? <a href={`mailto:${DEVELOPER_EMAIL}`}>{DEVELOPER_EMAIL}</a></p>
               </div>
             </div>
 

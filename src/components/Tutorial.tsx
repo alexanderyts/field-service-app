@@ -87,7 +87,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   {
     icon: '🙏',
     title: 'Thank you',
-    body: "Thanks for giving this app a try — I hope it makes tracking your ministry a little easier!\n\n— Alexander",
+    body: "Thanks for giving this app a try — I hope it makes tracking your ministry a little easier!\n\n— Alex",
   },
 ]
 
