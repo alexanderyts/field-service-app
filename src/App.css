@@ -519,6 +519,16 @@
   text-shadow: var(--title-shadow);
 }
 
+/* Small uppercase group label used to organize the More tab's cards into sections. */
+.misc-section-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 20px 4px 2px;
+}
+
 .view > h2 {
   font-size: 27px;
   font-weight: 700;

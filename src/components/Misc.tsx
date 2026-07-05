@@ -196,7 +196,10 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
     <div className="view">
       <h2 className="applet-title">More</h2>
 
-      {/* ── 1. Tips ─────────────────────────────────────────── */}
+      {/* ═══ Support & share ═══════════════════════════════════ */}
+      <div className="misc-section-title" style={{ marginTop: 6 }}>Support &amp; share</div>
+
+      {/* Tips */}
       <div className="card misc-donate">
         <div className="misc-donate-header">
           <span className="misc-donate-emoji">☕</span>
@@ -243,9 +246,6 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         </p>
       </div>
 
-      {/* ── Add to Home Screen ──────────────────────────────── */}
-      <InstallCard />
-
       {/* ── Share the app ───────────────────────────────────── */}
       <div className="card">
         <strong>📣 Share Meleo</strong>
@@ -279,7 +279,13 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         </a>
       </div>
 
-      {/* ── 2. Theme ────────────────────────────────────────── */}
+      {/* ═══ Personalize ═══════════════════════════════════════ */}
+      <div className="misc-section-title">Personalize</div>
+
+      {/* Add to Home Screen */}
+      <InstallCard />
+
+      {/* Theme */}
       <div className="card">
         <strong>Theme</strong>
         <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
@@ -427,7 +433,10 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         )}
       </div>
 
-      {/* ── Backup & Restore ────────────────────────────────── */}
+      {/* ═══ Your data ═════════════════════════════════════════ */}
+      <div className="misc-section-title">Your data</div>
+
+      {/* Backup & Restore */}
       <div className="card">
         <strong>💾 Backup &amp; Restore</strong>
         <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
@@ -479,7 +488,10 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         />
       </div>
 
-      {/* ── 4. Guided tour ──────────────────────────────────── */}
+      {/* ═══ Help & about ══════════════════════════════════════ */}
+      <div className="misc-section-title">Help &amp; about</div>
+
+      {/* Guided tour */}
       <div className="card">
         <strong>Guided Tour</strong>
         <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
