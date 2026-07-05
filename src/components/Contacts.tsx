@@ -55,6 +55,10 @@ export default function Contacts({
 }) {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const appointments = useLiveQuery(() => db.appointments.toArray(), []) ?? []
+  // Counts shown on the segmented control so each list's size reads at a glance. Territories
+  // counts only the *grouped* (durable) ones — the active draft isn't a "created" territory.
+  const streetCount = useLiveQuery(() => db.streetEntries.count(), []) ?? 0
+  const territoryCount = useLiveQuery(() => db.territories.filter((t) => !!t.grouped).count(), []) ?? 0
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [filterStatus, setFilterStatus] = useState<ContactStatus | 'all'>('all')
   const [search, setSearch] = useState('')
@@ -153,9 +157,9 @@ export default function Contacts({
       {/* People vs. Streets — contacts are individual householders; streets track the
           house numbers worked on a road (and are auto-created from temporary territories). */}
       <div className="segmented">
-        <button className={view === 'people' ? 'active' : ''} onClick={() => setView('people')}>People</button>
-        <button className={view === 'streets' ? 'active' : ''} onClick={() => setView('streets')}>Streets</button>
-        <button className={view === 'territories' ? 'active' : ''} onClick={() => setView('territories')}>Territories</button>
+        <button className={view === 'people' ? 'active' : ''} onClick={() => setView('people')}>People{people.length > 0 ? ` (${people.length})` : ''}</button>
+        <button className={view === 'streets' ? 'active' : ''} onClick={() => setView('streets')}>Streets{streetCount > 0 ? ` (${streetCount})` : ''}</button>
+        <button className={view === 'territories' ? 'active' : ''} onClick={() => setView('territories')}>Territories{territoryCount > 0 ? ` (${territoryCount})` : ''}</button>
       </div>
 
       {view === 'people' ? (

@@ -18,21 +18,41 @@ export interface TipService {
   monthly?: string
 }
 
+// NOTE: the non-PayPal links below point at each service's main page for now — replace them with
+// the developer's specific handles when ready (e.g. https://ko-fi.com/<username>,
+// https://buymeacoffee.com/<username>, https://cash.app/$<cashtag>, https://venmo.com/u/<username>).
 export const TIP_SERVICES: TipService[] = [
   {
     id: 'paypal',
     label: 'PayPal',
     emoji: '🅿️',
     oneTime: `https://www.paypal.com/send?recipient=${encodeURIComponent(PAYPAL_EMAIL)}`,
-    // monthly: 'https://www.paypal.com/…',  // add a PayPal subscription/recurring link here
   },
-
-  // ── Add more once you have the handles (uncomment + fill in the username/link) ──
-  // { id: 'venmo',   label: 'Venmo',            emoji: '💸', oneTime: 'https://venmo.com/u/<username>' },
-  // { id: 'cashapp', label: 'Cash App',         emoji: '💵', oneTime: 'https://cash.app/$<cashtag>' },
-  // { id: 'kofi',    label: 'Ko-fi',            emoji: '☕', oneTime: 'https://ko-fi.com/<username>', monthly: 'https://ko-fi.com/<username>/tiers' },
-  // { id: 'bmac',    label: 'Buy Me a Coffee',  emoji: '🧋', oneTime: 'https://buymeacoffee.com/<username>', monthly: 'https://buymeacoffee.com/<username>/membership' },
-  // { id: 'github',  label: 'GitHub Sponsors',  emoji: '💖', oneTime: 'https://github.com/sponsors/<username>', monthly: 'https://github.com/sponsors/<username>' },
+  {
+    id: 'kofi',
+    label: 'Ko-fi',
+    emoji: '☕',
+    oneTime: 'https://ko-fi.com/',
+    monthly: 'https://ko-fi.com/',
+  },
+  {
+    id: 'bmac',
+    label: 'Buy Me a Coffee',
+    emoji: '🧋',
+    monthly: 'https://www.buymeacoffee.com/',
+  },
+  {
+    id: 'cashapp',
+    label: 'Cash App',
+    emoji: '💵',
+    oneTime: 'https://cash.app/',
+  },
+  {
+    id: 'venmo',
+    label: 'Venmo',
+    emoji: '💸',
+    oneTime: 'https://venmo.com/',
+  },
 ]
 
 export type TipKind = 'oneTime' | 'monthly'

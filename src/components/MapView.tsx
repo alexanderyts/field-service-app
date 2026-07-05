@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useState } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type ContactStatus, type Person } from '../db'
 import { STATUS_LABELS } from '../contactStatus'
 import { useCurrentLocation } from '../useGeolocation'
-import { TerritoryControls, TerritoryStreetsOverlay } from './Territory'
+import { TerritoryManager, TerritoryStreetsOverlay } from './Territory'
 
 const meIcon = L.divIcon({
   className: 'me-marker',
@@ -59,6 +59,19 @@ function RecenterButton({ target }: { target: { lat: number; lng: number } | nul
   useEffect(() => {
     if (target) map.setView([target.lat, target.lng], 16)
   }, [target, map])
+  return null
+}
+
+// Reports the map's live center whenever the user pans/zooms, so "Draw Custom Territory" can
+// open the drawing map on wherever they're currently looking (e.g. a town they panned to) rather
+// than snapping back to their GPS location.
+function MapViewTracker({ onChange }: { onChange: (c: { lat: number; lng: number }) => void }) {
+  useMapEvents({
+    moveend(e) {
+      const c = e.target.getCenter()
+      onChange({ lat: c.lat, lng: c.lng })
+    },
+  })
   return null
 }
 
@@ -117,10 +130,12 @@ export default function MapView({
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const { getLocation, loading, error } = useCurrentLocation()
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null)
-  // Bumped by the top "Draw Custom Territory" button so the tools are reachable without
-  // scrolling past the (touch-capturing) map to the controls below. TerritoryControls opens
-  // the draw modal whenever this changes.
+  // Bumped by the single territory button. TerritoryManager opens the draw tool (no draft yet)
+  // or the manage modal (draft with streets) whenever this changes.
   const [drawSignal, setDrawSignal] = useState(0)
+  // The map's current center, updated as the user pans/zooms — used so drawing starts on the
+  // area they're viewing, not their GPS location.
+  const [mapView, setMapView] = useState<{ lat: number; lng: number } | null>(null)
 
   const territories = useLiveQuery(() => db.territories.toArray(), []) ?? []
   const streetEntries = useLiveQuery(() => db.streetEntries.toArray(), []) ?? []
@@ -170,10 +185,12 @@ export default function MapView({
         </div>
       )}
 
-      {/* Reachable without scrolling past the map (which captures touch-drags) — opens the
-          same Custom-Territory draw tool the controls below the map offer. */}
+      {/* Single custom-territory entry point: draws a new one, or (once streets exist) opens the
+          manage modal. Reachable without scrolling past the (touch-capturing) map. */}
       <button className="secondary map-draw-btn" onClick={() => setDrawSignal((n) => n + 1)}>
-        ✏️ Draw Custom Territory
+        {activeTerritory && activeTerritory.streets.length > 0
+          ? `🗺️ Manage Custom Territory (${activeTerritory.streets.length})`
+          : '✏️ Draw Custom Territory'}
       </button>
 
       {/* The map itself is the main thing this tab is for, so it stays right up top,
@@ -194,6 +211,7 @@ export default function MapView({
           />
           <RecenterButton target={me} />
           <FocusOnMount target={focusLocation ?? null} />
+          <MapViewTracker onChange={setMapView} />
           {me && (
             <Marker position={[me.lat, me.lng]} icon={meIcon}>
               <Popup>You are here</Popup>
@@ -213,10 +231,10 @@ export default function MapView({
         <MapCompass />
       </div>
 
-      {/* Drawing happens in its own modal (see Territory.tsx) with its own map instance,
-          not this page's map — that keeps it fully isolated from this page's normal
-          scroll, so panning/zooming there can never fight the page scrolling underneath. */}
-      <TerritoryControls territory={activeTerritory} initialCenter={center} pendingDraw={pendingDraw} onDrawConsumed={onDrawConsumed} drawSignal={drawSignal} />
+      {/* Territory drawing + management both live in their own modals (see Territory.tsx) with
+          their own map instances — fully isolated from this page's scroll. Renders no inline UI;
+          the button above is the only entry point. Drawing starts on the map's current view. */}
+      <TerritoryManager territory={activeTerritory} initialCenter={mapView ?? center} pendingDraw={pendingDraw} onDrawConsumed={onDrawConsumed} drawSignal={drawSignal} />
     </div>
   )
 }

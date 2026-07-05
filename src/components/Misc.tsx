@@ -204,17 +204,16 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         <div className="misc-donate-header">
           <span className="misc-donate-emoji">☕</span>
           <div>
-            <h4 style={{ margin: 0, lineHeight: 1.4 }}>Enjoying the app? Buy me a coffee at the next break :D</h4>
+            <h4 style={{ margin: 0, lineHeight: 1.4 }}>Enjoying the app? Buy me a coffee at the next break 😊</h4>
           </div>
         </div>
 
         <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
-          This app is 100% free — every feature, every update, forever. No ads, no paywalls, no
-          subscriptions required.
+          Meleo is free — no paywalled features, subscriptions, or fees. The goal is to keep it that way.
         </p>
         <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
-          If it's saved you time or made your day a little easier, a tip is a nice way to say thanks —
-          but never expected. It just helps keep the lights on and the updates coming.
+          If you found the app helpful, a tip is a nice way to say thanks — but it is never expected.
+          It helps keep the lights on, and hopefully the updates coming.
         </p>
 
         <div className="tip-actions">
@@ -225,9 +224,9 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
           ) : null}
 
           {monthlyTips.length === 1 ? (
-            <a className="link-button secondary tip-btn" href={monthlyTips[0].monthly} target="_blank" rel="noreferrer">Monthly Support</a>
+            <a className="link-button secondary tip-btn" href={monthlyTips[0].monthly} target="_blank" rel="noreferrer">Recurring Tip</a>
           ) : monthlyTips.length > 1 ? (
-            <button className="secondary tip-btn" onClick={() => setTipMenu((m) => (m === 'monthly' ? null : 'monthly'))}>Monthly Support</button>
+            <button className="secondary tip-btn" onClick={() => setTipMenu((m) => (m === 'monthly' ? null : 'monthly'))}>Recurring Tip</button>
           ) : null}
         </div>
 
@@ -242,7 +241,8 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         )}
 
         <p className="muted" style={{ fontSize: 12, margin: 0, textAlign: 'center', lineHeight: 1.5 }}>
-          Totally optional. Only if you'd like.
+          Totally optional, and never expected — Meleo stays completely free either way. Tips go
+          straight to the developer to help cover hosting and keep the improvements coming.
         </p>
       </div>
 

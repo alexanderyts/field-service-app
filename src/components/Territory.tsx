@@ -313,11 +313,11 @@ export function TerritoryDrawModal({
   )
 }
 
-/** Renders inline on the main Territory Map view: the "create" button when there's no
-    active temporary territory, or (once one exists) its street checklist plus a button
-    to reopen the drawing modal — the map itself never sits in this normally-scrolling
-    page, only inside TerritoryDrawModal. */
-export function TerritoryControls({
+/** Owns the whole custom-territory workflow as modals — nothing renders inline on the Map page.
+    The Map tab's single territory button drives it via `drawSignal`: with no streets yet it opens
+    the drawing modal; once streets exist it opens the manage modal (street checklist + draw more +
+    group + complete + discard). The map itself only ever lives inside the draw/mini-map modals. */
+export function TerritoryManager({
   territory,
   initialCenter,
   pendingDraw,
@@ -326,14 +326,15 @@ export function TerritoryControls({
 }: {
   territory: Territory | undefined
   initialCenter: { lat: number; lng: number }
-  /** Set by "New Custom Territory" from the Ministry chooser — opens the drawing tool
-      (creating a draft first if none is active), then calls onDrawConsumed so it fires once. */
+  /** Set by "New Custom Territory" from the Ministry chooser — creates a draft (if none) and jumps
+      straight into drawing, then calls onDrawConsumed so it fires once. */
   pendingDraw?: boolean
   onDrawConsumed?: () => void
-  /** Incremented by the Map tab's top "Draw Custom Territory" button — each change opens the
-      drawing tool (unlike the one-shot pendingDraw, this can fire repeatedly on the Map tab). */
+  /** Incremented by the Map tab's territory button — opens the manage modal when the draft already
+      has streets, or creates a draft and opens the drawing tool when it doesn't. Repeatable. */
   drawSignal?: number
 }) {
+  const [manageOpen, setManageOpen] = useState(false)
   const [drawOpen, setDrawOpen] = useState(false)
   const [editStreetId, setEditStreetId] = useState<string | null>(null)
   const [confirmComplete, setConfirmComplete] = useState(false)
@@ -345,24 +346,29 @@ export function TerritoryControls({
   const [shareStreet, setShareStreet] = useState<TerritoryStreet | null>(null)
   const [confirmSend, setConfirmSend] = useState<TerritoryStreet | null>(null)
 
-  // Respond to the Ministry chooser's "New Custom Territory" (the Map tab mounts fresh on the
-  // switch, so this fires on mount): open the drawing tool, creating a draft if none exists,
-  // then clear the flag so it's consumed exactly once.
+  // Ministry chooser's "New Custom Territory" (the Map tab mounts fresh on the switch, so this
+  // fires on mount): create a draft if none exists and open the drawing tool, then consume once.
   const drawHandled = useRef(false)
   useEffect(() => {
     if (!pendingDraw || drawHandled.current) return
     drawHandled.current = true
     onDrawConsumed?.()
     createTerritory() // idempotent — reuses the active draft if there already is one
+    setDrawOpen(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingDraw])
 
-  // The Map tab's top button bumps drawSignal to open the draw tool on demand (repeatable).
+  // The Map tab's territory button: manage if the draft already has streets, otherwise draw.
   const lastDrawSignal = useRef(0)
   useEffect(() => {
     if (!drawSignal || drawSignal === lastDrawSignal.current) return
     lastDrawSignal.current = drawSignal
-    createTerritory()
+    if (territory && territory.streets.length > 0) {
+      setManageOpen(true)
+    } else {
+      createTerritory()
+      setDrawOpen(true)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawSignal])
 
@@ -431,8 +437,8 @@ export function TerritoryControls({
   }
 
   async function createTerritory() {
-    // Reuse the active draft if one already exists (guards against creating a duplicate when
-    // called from the chooser before the live query has resolved the current territory).
+    // Ensure a draft exists (reuse the active one — guards against a duplicate when called before
+    // the live query has resolved). Callers decide which modal to open afterward.
     const existing = (await db.territories.toArray()).find((t) => !t.completed && !t.grouped)
     if (!existing) {
       const record: Omit<Territory, 'id'> = {
@@ -443,7 +449,6 @@ export function TerritoryControls({
       }
       await db.territories.add(record as Territory)
     }
-    setDrawOpen(true)
   }
 
   async function toggleStreetDone(streetId: string) {
@@ -482,70 +487,75 @@ export function TerritoryControls({
     await db.territories.delete(territory.id)
   }
 
-  if (!territory) {
-    return (
-      <button className="secondary" onClick={createTerritory}>
-        📍 Create Custom Territory
-      </button>
-    )
-  }
-
-  const allDone = territory.streets.length > 0 && territory.streets.every((s) => s.done)
+  const allDone = !!territory && territory.streets.length > 0 && territory.streets.every((s) => s.done)
 
   return (
-    <div className="card">
-      <div className="goal-row">
-        <h4 style={{ margin: 0 }}>{territory.name}</h4>
-        <button className="icon-btn" title="Discard territory" onClick={() => setConfirmDiscard(true)}>🗑</button>
-      </div>
-
-      <button onClick={() => setDrawOpen(true)}>🗺️ Open Map to Draw Streets</button>
-
-      {territory.streets.length > 0 ? (
-        <ul className="draft-street-list">
-          {territory.streets.map((s) => (
-            <li key={s.id} className="draft-street-row">
-              <label className="checkbox-row draft-street-name">
-                <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
-                <span style={{ textDecoration: s.done ? 'line-through' : undefined }}>{s.name}</span>
-                {s.assignedTo && <span className="badge">👤 {s.assignedTo}</span>}
-              </label>
-              <div className="draft-street-actions">
-                <button className="secondary small" onClick={() => toggleStreetDone(s.id)}>{s.done ? '✓ Done' : 'Mark done'}</button>
-                <button className="secondary small" onClick={() => sendStreetToMinistry(s)}>📥 Send to Ministry</button>
-                <button className="secondary small" onClick={() => { setEditStreetId(s.id); setDrawOpen(true) }}>✏️ Edit trace</button>
-                <button className="secondary small" onClick={() => setViewStreet(s)}>🗺️ Map</button>
-                <button className="secondary small" onClick={() => setShareStreet(s)}>↗ Share</button>
-                <button className="secondary small" onClick={() => removeStreet(s.id)}>🗑 Remove</button>
+    <>
+      {/* Manage modal — the whole street workspace, opened by the Map tab's territory button once a
+          draft has streets. Everything the old below-map card offered lives here. */}
+      {territory && manageOpen && (
+        <ModalPortal>
+          <div className="modal-backdrop" onClick={() => setManageOpen(false)}>
+            <div className="modal manage-territory-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-toolbar">
+                <button className="icon-btn close-x" onClick={() => setManageOpen(false)} title="Close">×</button>
               </div>
-              <input
-                className="assign-input"
-                placeholder="Assign to…"
-                defaultValue={s.assignedTo ?? ''}
-                onBlur={(e) => setStreetAssignee(s.id, e.target.value)}
-              />
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>No streets traced yet — open the map to start drawing.</p>
+              <div className="goal-row">
+                <h3 style={{ margin: 0 }}>{territory.name}</h3>
+                <button className="icon-btn" title="Discard territory" onClick={() => setConfirmDiscard(true)}>🗑</button>
+              </div>
+
+              <button onClick={() => setDrawOpen(true)}>🗺️ Draw Streets</button>
+
+              {territory.streets.length > 0 ? (
+                <ul className="draft-street-list">
+                  {territory.streets.map((s) => (
+                    <li key={s.id} className="draft-street-row">
+                      <label className="checkbox-row draft-street-name">
+                        <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)} />
+                        <span style={{ textDecoration: s.done ? 'line-through' : undefined }}>{s.name}</span>
+                        {s.assignedTo && <span className="badge">👤 {s.assignedTo}</span>}
+                      </label>
+                      <div className="draft-street-actions">
+                        <button className="secondary small" onClick={() => toggleStreetDone(s.id)}>{s.done ? '✓ Done' : 'Mark done'}</button>
+                        <button className="secondary small" onClick={() => sendStreetToMinistry(s)}>📥 Send to Ministry</button>
+                        <button className="secondary small" onClick={() => { setEditStreetId(s.id); setDrawOpen(true) }}>✏️ Edit trace</button>
+                        <button className="secondary small" onClick={() => setViewStreet(s)}>🗺️ Map</button>
+                        <button className="secondary small" onClick={() => setShareStreet(s)}>↗ Share</button>
+                        <button className="secondary small" onClick={() => removeStreet(s.id)}>🗑 Remove</button>
+                      </div>
+                      <input
+                        className="assign-input"
+                        placeholder="Assign to…"
+                        defaultValue={s.assignedTo ?? ''}
+                        onBlur={(e) => setStreetAssignee(s.id, e.target.value)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>No streets traced yet — tap Draw Streets to start.</p>
+              )}
+
+              {selected.size > 0 && (
+                <button className="secondary" onClick={() => setGroupNaming(true)}>
+                  📦 Group {selected.size} Selected Street{selected.size === 1 ? '' : 's'} into a Territory
+                </button>
+              )}
+
+              <button
+                className={allDone ? '' : 'secondary'}
+                onClick={() => setConfirmComplete(true)}
+                disabled={territory.streets.length === 0}
+              >
+                Complete Territory
+              </button>
+            </div>
+          </div>
+        </ModalPortal>
       )}
 
-      {selected.size > 0 && (
-        <button className="secondary" onClick={() => setGroupNaming(true)}>
-          📦 Group {selected.size} Selected Street{selected.size === 1 ? '' : 's'} into a Territory
-        </button>
-      )}
-
-      <button
-        className={allDone ? '' : 'secondary'}
-        onClick={() => setConfirmComplete(true)}
-        disabled={territory.streets.length === 0}
-      >
-        Complete Territory
-      </button>
-
-      {drawOpen && (
+      {territory && drawOpen && (
         <TerritoryDrawModal
           territory={territory}
           initialCenter={initialCenter}
@@ -615,7 +625,7 @@ export function TerritoryControls({
           </div>
         </ModalPortal>
       )}
-    </div>
+    </>
   )
 }
 

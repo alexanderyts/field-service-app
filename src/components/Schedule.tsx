@@ -1187,9 +1187,9 @@ function ScheduleMain({
     await db.timeLogs.add({ date: d.getTime(), minutes: totalMin, category, note } as TimeLog)
   }
 
-  // Logs a scheduled day's planned blocks as real time entries (one per block, by category)
-  // so a day someone actually worked as planned counts toward their report without re-typing
-  // it. Reached from the day modal's "Submit Scheduled Time".
+  // Logs a scheduled day's planned blocks as real time entries (one per block, by category), then
+  // clears that date's scheduled blocks via a date-override so the same time can't be submitted
+  // twice — the recurring weekly pattern (other weeks) is untouched. "Submit all remaining."
   async function submitScheduledTime(date: Date, blocks: DayScheduleBlock[]) {
     const d = new Date(date)
     d.setHours(12, 0, 0, 0)
@@ -1197,6 +1197,32 @@ function ScheduleMain({
       const min = b.end - b.start
       if (min > 0) await db.timeLogs.add({ date: d.getTime(), minutes: min, category: b.category } as TimeLog)
     }
+    if (blocks.length > 0) {
+      await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(prefs.dateOverrides ?? {}), [fmtLocalDate(date)]: [] } })
+    }
+  }
+
+  // Submit ONE scheduled block: log it, then remove just that block from that date (a date-override
+  // holding the remaining blocks). It can't be submitted again and "moves off" the day; the recurring
+  // weekly pattern stays intact. The day's ring then reads it as filled (logged) + the rest hollow.
+  async function submitScheduledBlock(date: Date, blockIndex: number) {
+    const dayBlocks = blocksForDate(prefs, date)
+    const b = dayBlocks[blockIndex]
+    if (!b) return
+    const d = new Date(date)
+    d.setHours(12, 0, 0, 0)
+    const min = b.end - b.start
+    if (min > 0) await db.timeLogs.add({ date: d.getTime(), minutes: min, category: b.category } as TimeLog)
+    const remaining = dayBlocks.filter((_, i) => i !== blockIndex)
+    await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(prefs.dateOverrides ?? {}), [fmtLocalDate(date)]: remaining } })
+  }
+
+  // Remove ONE scheduled block from a date without logging it (date-override with the rest).
+  async function deleteScheduledBlock(date: Date, blockIndex: number) {
+    const dayBlocks = blocksForDate(prefs, date)
+    if (!dayBlocks[blockIndex]) return
+    const remaining = dayBlocks.filter((_, i) => i !== blockIndex)
+    await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(prefs.dateOverrides ?? {}), [fmtLocalDate(date)]: remaining } })
   }
 
   // Clears one day completely — deletes that date's logged time entries AND hides its
@@ -1731,6 +1757,8 @@ function ScheduleMain({
             onClearAllDays={clearAllSuggestedDays}
             onLogTime={quickLogTime}
             onSubmitScheduled={submitScheduledTime}
+            onSubmitBlock={submitScheduledBlock}
+            onDeleteBlock={deleteScheduledBlock}
             onClearWeek={(weekStart) => clearWeekSchedule(prefs, weekStart)}
             onSeeWeeklyView={() => changeView('week')}
           />
@@ -1839,6 +1867,8 @@ function ScheduleMain({
           onClearAllDays={clearAllSuggestedDays}
           onLogTime={(h, m, category, otherNote, originEl) => quickLogTime(dayModalFor, h, m, category, otherNote, originEl)}
           onSubmitScheduled={() => submitScheduledTime(dayModalFor, blocksForDate(prefs, dayModalFor))}
+          onSubmitBlock={(i) => submitScheduledBlock(dayModalFor, i)}
+          onDeleteBlock={(i) => deleteScheduledBlock(dayModalFor, i)}
           onClose={closeDayModalSmoothly}
           closing={dayModalClosing}
           initialStep={dayModalStep}
@@ -2129,6 +2159,8 @@ function DayActionModal({
   onClearAllDays,
   onLogTime,
   onSubmitScheduled,
+  onSubmitBlock,
+  onDeleteBlock,
   onClose,
   closing,
   initialStep = 'menu',
@@ -2146,6 +2178,8 @@ function DayActionModal({
   onClearAllDays: () => void
   onLogTime: (hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
   onSubmitScheduled: () => void
+  onSubmitBlock: (blockIndex: number) => void
+  onDeleteBlock: (blockIndex: number) => void
   onClose: () => void
   closing: boolean
   initialStep?: 'menu' | 'logTime'
@@ -2262,14 +2296,28 @@ function DayActionModal({
               {isSuggestedDay && scheduledTotalMin > 0 && (
                 <div className="highlight-box">
                   <strong>Scheduled for this day</strong>
+                  <p className="muted" style={{ margin: '3px 0 8px', fontSize: 13 }}>
+                    Submit each as you do it — that logs the time and clears it from here.
+                  </p>
                   {currentBlocks.map((b, i) => (
-                    <p key={i} className="muted" style={{ margin: '3px 0 0', fontSize: 13 }}>
-                      {CATEGORY_LABELS[b.category]} · {fmtTime(b.start)}–{fmtTime(b.end)} · {fmtDuration(b.end - b.start)}
-                    </p>
+                    <div key={i} className="sched-submit-row">
+                      <div className="sched-submit-info">
+                        <i className="sched-submit-dot" style={{ background: `var(--cat-${b.category})` }} />
+                        <span className="sched-submit-cat">{CATEGORY_LABELS[b.category]}</span>
+                        <span className="muted">{fmtTime(b.start)}–{fmtTime(b.end)} · {fmtDuration(b.end - b.start)}</span>
+                      </div>
+                      <div className="sched-submit-actions">
+                        <button className="small" onClick={() => onSubmitBlock(i)}>Submit</button>
+                        <button className="secondary small" onClick={() => setStep('window')}>Edit</button>
+                        <button className="secondary small" onClick={() => onDeleteBlock(i)}>Delete</button>
+                      </div>
+                    </div>
                   ))}
-                  <button style={{ marginTop: 8 }} onClick={() => setConfirmSubmitScheduled(true)}>
-                    Submit Scheduled Time ({fmtDuration(scheduledTotalMin)})
-                  </button>
+                  {currentBlocks.length > 1 && (
+                    <button className="secondary" style={{ marginTop: 8 }} onClick={() => setConfirmSubmitScheduled(true)}>
+                      Submit all remaining ({fmtDuration(scheduledTotalMin)})
+                    </button>
+                  )}
                 </div>
               )}
               <button className="secondary" onClick={() => setStep('window')}>
@@ -2508,6 +2556,8 @@ function ScheduleCalendarView({
   onClearAllDays,
   onLogTime,
   onSubmitScheduled,
+  onSubmitBlock,
+  onDeleteBlock,
   onClearWeek,
   onSeeWeeklyView,
 }: {
@@ -2526,6 +2576,8 @@ function ScheduleCalendarView({
   onClearAllDays: () => void
   onLogTime: (date: Date, hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
   onSubmitScheduled: (date: Date, blocks: DayScheduleBlock[]) => void
+  onSubmitBlock: (date: Date, blockIndex: number) => void
+  onDeleteBlock: (date: Date, blockIndex: number) => void
   onClearWeek: (weekStart: Date) => void
   onSeeWeeklyView: () => void
 }) {
@@ -2615,9 +2667,6 @@ function ScheduleCalendarView({
   const loggedCatsInMonth = CATEGORY_ORDER.filter((c) =>
     Array.from(loggedByDay.keys()).some((day) => predominantCategory(day) === c)
   )
-  // Colour key for the legend — every category that appears this month (scheduled or logged),
-  // since the rings colour by category and the reader needs the colour→category mapping once.
-  const catsInMonth = CATEGORY_ORDER.filter((c) => suggestedCatsInMonth.includes(c) || loggedCatsInMonth.includes(c))
   const monthHasToday = viewYear === today.getFullYear() && viewMonth === today.getMonth()
 
   // Week-row summaries, one per 7-cell chunk — computed from the REAL calendar week each
@@ -2724,25 +2773,37 @@ function ScheduleCalendarView({
         {/* Contextual legend — each entry only appears when something on the calendar
             above actually uses it, and every swatch is drawn with the exact same style
             as the cells it explains. */}
-        <div className="legend">
-          {monthHasToday && (
-            <span><i className="cal-sw" style={{ outline: '2px solid var(--accent)', outlineOffset: -2 }} /> Today</span>
+        {/* Two-row legend: a Scheduled row (hollow ring + lightly-shaded category swatches) and a
+            Logged row (filled ring + solid swatches), each listing exactly the categories present
+            this month. The green ring around today's date already signifies the current day, so no
+            "Today" key is needed. */}
+        <div className="cal-legend">
+          {weeklyGoalMin > 0 && suggestedCatsInMonth.length > 0 && (
+            <div className="cal-legend-row">
+              <span className="cal-legend-lead"><RingSwatch color="var(--accent)" /> Scheduled:</span>
+              {suggestedCatsInMonth.map((cat) => (
+                <span key={`s-${cat}`} className="cal-legend-cat">
+                  <i className="cal-cat-sw" style={{ background: `color-mix(in srgb, var(--cat-${cat}) 30%, var(--surface))`, borderColor: `var(--cat-${cat})` }} /> {CATEGORY_LABELS[cat]}
+                </span>
+              ))}
+            </div>
           )}
-          {/* When there's a goal, the ring's band shape carries scheduled-vs-logged (a hollow
-              swatch and a filled one), and the colored dots below map each colour to a category. */}
-          {weeklyGoalMin > 0 && (
-            <>
-              <span><RingSwatch color="var(--accent)" /> Scheduled</span>
-              <span><RingSwatch color="var(--accent)" logged /> Logged</span>
-            </>
+          {weeklyGoalMin > 0 && loggedCatsInMonth.length > 0 && (
+            <div className="cal-legend-row">
+              <span className="cal-legend-lead"><RingSwatch color="var(--accent)" logged /> Logged:</span>
+              {loggedCatsInMonth.map((cat) => (
+                <span key={`l-${cat}`} className="cal-legend-cat">
+                  <i className="cal-cat-sw" style={{ background: `var(--cat-${cat})`, borderColor: `var(--cat-${cat})` }} /> {CATEGORY_LABELS[cat]}
+                </span>
+              ))}
+            </div>
           )}
-          {catsInMonth.map((cat) => (
-            <span key={`c-${cat}`}>
-              <i className="cal-sw" style={{ background: `var(--cat-${cat})`, borderRadius: '50%' }} /> {CATEGORY_LABELS[cat]}
-            </span>
-          ))}
-          {weeklyGoalMin > 0 && <span><i className="cal-sw" style={{ background: 'color-mix(in srgb, var(--accent) 16%, var(--surface))' }} /> ✓ Weekly goal met</span>}
-          {monthAppts.length > 0 && <span><i className="sw appt" /> Return visit</span>}
+          {(weeklyGoalMin > 0 || monthAppts.length > 0) && (
+            <div className="legend cal-legend-extra">
+              {weeklyGoalMin > 0 && <span><i className="cal-sw" style={{ background: 'color-mix(in srgb, var(--accent) 16%, var(--surface))' }} /> ✓ Weekly goal met</span>}
+              {monthAppts.length > 0 && <span><i className="sw appt" /> Return visit</span>}
+            </div>
+          )}
         </div>
 
         {/* No standalone "Return Visits This Month" list — it made the calendar taller than the
@@ -2766,6 +2827,8 @@ function ScheduleCalendarView({
         onClearAllDays={handleClearAllDays}
         onLogTime={handleLogTime}
         onSubmitScheduled={() => { if (tapDate) onSubmitScheduled(tapDate, blocksForDate(prefs, tapDate)) }}
+        onSubmitBlock={(i) => { if (tapDate) onSubmitBlock(tapDate, i) }}
+        onDeleteBlock={(i) => { if (tapDate) onDeleteBlock(tapDate, i) }}
         onClose={closeTapModal}
         closing={tapLeaving}
       />
