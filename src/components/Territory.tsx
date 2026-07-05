@@ -389,7 +389,11 @@ export function TerritoryManager({
     if (!territory || selected.size === 0 || !groupName.trim()) return
     const toMove = territory.streets.filter((s) => selected.has(s.id))
     const remaining = territory.streets.filter((s) => !selected.has(s.id))
-    await db.transaction('rw', db.territories, db.streetEntries, async () => {
+    // Grouping puts the streets ONLY into the new territory (Ministry → Territories); it no longer
+    // also mirrors them into Ministry → Streets, so there's no duplicate. To have a street in
+    // Streets, send it there explicitly with "Send to Ministry". One transaction so a checked
+    // street is never briefly missing from both records if something goes wrong mid-way.
+    await db.transaction('rw', db.territories, async () => {
       await db.territories.add({
         name: groupName.trim(),
         createdAt: Date.now(),
@@ -398,15 +402,6 @@ export function TerritoryManager({
         streets: toMove,
       } as Territory)
       await db.territories.update(territory.id, { streets: remaining })
-      // Mirror each grouped street into Ministry → Streets (houses only, no points — the
-      // grouped territory itself renders the lines on the map, so a points-carrying mirror
-      // would double-draw them). Skips names that already exist.
-      const existingNames = new Set((await db.streetEntries.toArray()).map((e) => e.name.trim().toLowerCase()))
-      for (const s of toMove) {
-        if (existingNames.has(s.name.trim().toLowerCase())) continue
-        existingNames.add(s.name.trim().toLowerCase())
-        await db.streetEntries.add({ name: s.name, houses: [], assignedTo: s.assignedTo, createdAt: Date.now() })
-      }
     })
     setSelected(new Set())
     setGroupName('')
@@ -610,8 +605,8 @@ export function TerritoryManager({
             <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
               <h3>Name this territory</h3>
               <p className="muted" style={{ marginTop: -6 }}>
-                {selected.size} street{selected.size === 1 ? '' : 's'} will move into it, and it'll show up under
-                Ministry → Territories.
+                {selected.size} street{selected.size === 1 ? '' : 's'} will move into it under Ministry → Territories
+                only — not duplicated into Streets. Use "Send to Ministry" on a street if you want it there too.
               </p>
               <label className="field">
                 <span className="field-label">Territory name</span>

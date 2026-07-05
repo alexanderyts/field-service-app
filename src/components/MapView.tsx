@@ -88,6 +88,16 @@ function FocusOnMount({ target }: { target: { lat: number; lng: number } | null 
   return null
 }
 
+// Flies the map to a place-search result (a fresh {lat,lng} object each search, so the effect
+// re-runs even for a repeated query). Zooms in to street level if currently zoomed further out.
+function FlyTo({ target }: { target: { lat: number; lng: number } | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (target) map.flyTo([target.lat, target.lng], Math.max(map.getZoom(), 15), { duration: 0.8 })
+  }, [target, map])
+  return null
+}
+
 function ContactPin({ person, onGoToContact }: { person: Person; onGoToContact?: (id: number) => void }) {
   return (
     <Marker position={[person.lat!, person.lng!]} icon={contactIcons[person.status]}>
@@ -136,6 +146,30 @@ export default function MapView({
   // The map's current center, updated as the user pans/zooms — used so drawing starts on the
   // area they're viewing, not their GPS location.
   const [mapView, setMapView] = useState<{ lat: number; lng: number } | null>(null)
+  // Base map style — street (CARTO Voyager) or satellite (Esri imagery + street-label overlay).
+  const [baseLayer, setBaseLayer] = useState<'street' | 'satellite'>('street')
+  // Place / address search that flies the map to a result.
+  const [search, setSearch] = useState('')
+  const [searchTarget, setSearchTarget] = useState<{ lat: number; lng: number } | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [searchErr, setSearchErr] = useState<string | null>(null)
+  async function doSearch() {
+    const q = search.trim()
+    if (!q) return
+    setSearching(true)
+    setSearchErr(null)
+    try {
+      // Same free Nominatim service the app already uses for reverse geocoding, /search endpoint.
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`)
+      const data = await res.json()
+      if (data?.[0]) setSearchTarget({ lat: +data[0].lat, lng: +data[0].lon })
+      else setSearchErr('No place found — try a fuller address.')
+    } catch {
+      setSearchErr('Search failed — check your connection.')
+    } finally {
+      setSearching(false)
+    }
+  }
 
   const territories = useLiveQuery(() => db.territories.toArray(), []) ?? []
   const streetEntries = useLiveQuery(() => db.streetEntries.toArray(), []) ?? []
@@ -185,6 +219,20 @@ export default function MapView({
         </div>
       )}
 
+      {/* Jump the map to any place or address (Nominatim search) — handy for planning a territory
+          somewhere other than where you're standing. */}
+      <div className="map-search-row">
+        <input
+          className="map-search-input"
+          placeholder="Search a place or address…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') doSearch() }}
+        />
+        <button className="secondary" onClick={doSearch} disabled={searching}>{searching ? '…' : '🔍 Search'}</button>
+      </div>
+      {searchErr && <p className="error" style={{ margin: '4px 0 0' }}>{searchErr}</p>}
+
       {/* Single custom-territory entry point: draws a new one, or (once streets exist) opens the
           manage modal. Reachable without scrolling past the (touch-capturing) map. */}
       <button className="secondary map-draw-btn" onClick={() => setDrawSignal((n) => n + 1)}>
@@ -203,14 +251,35 @@ export default function MapView({
             pins) clears the floating tab bar instead of hiding under it, while staying a
             comfortable size on tall and short screens alike. */}
         <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: 'clamp(300px, calc(100dvh - 410px), 520px)', width: '100%' }}>
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-            subdomains="abcd"
-            maxZoom={20}
-          />
+          {baseLayer === 'street' ? (
+            <TileLayer
+              key="street"
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+              subdomains="abcd"
+              maxZoom={20}
+            />
+          ) : (
+            <>
+              {/* Esri World Imagery (free, keyless) + a transparent street-label overlay so names
+                  still read over the satellite view — i.e. a hybrid. */}
+              <TileLayer
+                key="satellite"
+                attribution='Imagery &copy; <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics'
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                maxZoom={19}
+              />
+              <TileLayer
+                key="satellite-labels"
+                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
+                subdomains="abcd"
+                maxZoom={20}
+              />
+            </>
+          )}
           <RecenterButton target={me} />
           <FocusOnMount target={focusLocation ?? null} />
+          <FlyTo target={searchTarget} />
           <MapViewTracker onChange={setMapView} />
           {me && (
             <Marker position={[me.lat, me.lng]} icon={meIcon}>
@@ -229,6 +298,13 @@ export default function MapView({
           <TerritoryStreetsOverlay streets={sentStreets} />
         </MapContainer>
         <MapCompass />
+        <button
+          className="map-layer-toggle"
+          onClick={() => setBaseLayer((l) => (l === 'street' ? 'satellite' : 'street'))}
+          title={baseLayer === 'street' ? 'Switch to satellite' : 'Switch to street map'}
+        >
+          {baseLayer === 'street' ? '🛰️ Satellite' : '🗺️ Street'}
+        </button>
       </div>
 
       {/* Territory drawing + management both live in their own modals (see Territory.tsx) with

@@ -890,6 +890,36 @@ button.small {
   filter: drop-shadow(var(--shadow-sm));
 }
 
+/* Place / address search above the map. */
+.map-search-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.map-search-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Street ↔ satellite toggle overlaid on the map — top-left, below the zoom control, so it clears
+   the compass (top-right), the attribution (bottom), and the floating tab bar that overlaps the
+   map's bottom edge. */
+.map-layer-toggle {
+  position: absolute;
+  left: 10px;
+  top: 82px;
+  z-index: 500;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
 .me-dot {
   width: 14px;
   height: 14px;
