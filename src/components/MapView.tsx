@@ -250,7 +250,7 @@ export default function MapView({
         {/* Height adapts to the viewport so the map bottom (attribution + any bottom-edge
             pins) clears the floating tab bar instead of hiding under it, while staying a
             comfortable size on tall and short screens alike. */}
-        <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: 'clamp(300px, calc(100dvh - 410px), 520px)', width: '100%' }}>
+        <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: 'clamp(200px, calc(100dvh - 520px), 620px)', width: '100%' }}>
           {baseLayer === 'street' ? (
             <TileLayer
               key="street"
