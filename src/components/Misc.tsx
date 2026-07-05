@@ -260,6 +260,25 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         {shareMsg && <p className="muted" style={{ fontSize: 12, margin: '8px 0 0', color: 'var(--accent)', wordBreak: 'break-all' }}>{shareMsg}</p>}
       </div>
 
+      {/* ── Feedback & Suggestions ──────────────────────────── */}
+      <div className="card">
+        <strong>💬 Feedback &amp; Suggestions</strong>
+        <p style={{ fontSize: 14, lineHeight: 1.6, margin: '6px 0 0' }}>
+          Have an idea, a feature request, a bug to report, or need a hand with something? I'd genuinely
+          love to hear it.
+        </p>
+        <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, margin: '8px 0 12px' }}>
+          Meleo is a solo project, so I can't promise I'll be able to build everything — but every note
+          helps me make the app better, and I read them all.
+        </p>
+        <a
+          className="link-button"
+          href="mailto:meleoapp@gmail.com?subject=Meleo%20feedback"
+        >
+          ✉️ meleoapp@gmail.com
+        </a>
+      </div>
+
       {/* ── 2. Theme ────────────────────────────────────────── */}
       <div className="card">
         <strong>Theme</strong>

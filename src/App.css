@@ -3038,28 +3038,125 @@ button.small {
 .tutorial-hole {
   position: fixed;
   border-radius: 14px;
-  box-shadow: 0 0 0 9999px rgba(15, 20, 18, 0.45);
+  box-shadow: 0 0 0 9999px rgba(15, 20, 18, 0.5);
   border: 2px solid var(--accent);
-  transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+  /* Smoothly glide the spotlight from one tab to the next. */
+  transition:
+    top 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    left 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+/* A gentle breathing ring that draws the eye to the highlighted tab. Transform +
+   opacity only, so it rides the compositor and stays perfectly smooth. */
+.tutorial-hole::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 14px;
+  border: 2px solid var(--accent);
+  animation: tutorialPulse 1.9s ease-out infinite;
+}
+
+@keyframes tutorialPulse {
+  0% { transform: scale(1); opacity: 0.85; }
+  70% { opacity: 0; }
+  100% { transform: scale(1.14); opacity: 0; }
+}
+
+/* A flex wrapper that centers the card in the readable middle of the screen. Its
+   bottom padding reserves the tab-bar zone (which every step spotlights) so the card
+   sits comfortably centered yet can never overlap the bar; top padding clears the
+   header. pointer-events pass through the padding to the dim/spotlight below. */
+.tutorial-card-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 2001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(64px + env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom));
   pointer-events: none;
 }
 
 .tutorial-card {
-  position: fixed;
-  top: 72px;
-  left: 16px;
-  right: 16px;
-  z-index: 2001;
+  position: relative;
+  pointer-events: auto;
+  width: 100%;
+  /* Portalled to <body>, so it already inherits Satoshi — set it explicitly so the tour is
+     guaranteed to render in the app's typeface regardless of where the portal lands. */
+  font-family: 'Satoshi', -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
   background: var(--surface);
   border-radius: 18px;
   padding: 20px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
   max-width: 400px;
-  margin: 0 auto;
-  /* Guarantees the card can never grow tall enough to reach down and cover the tab
-     bar (which every step highlights) — long step text scrolls inside instead. */
-  max-height: calc(100vh - 188px - env(safe-area-inset-bottom));
+  /* Long step text scrolls inside rather than pushing the card past the padded band. */
+  max-height: 100%;
   overflow-y: auto;
+  animation: tutorialCardIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes tutorialCardIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* A framed, real in-app snapshot of the feature being described. Cropped to the top of the
+   captured screen by default (each screen leads with its key content); map shots hold center. */
+.tutorial-shot {
+  display: block;
+  width: 100%;
+  height: 232px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  /* Negative spread keeps the shadow strictly below the frame so it never hazes up
+     onto the title text above it. */
+  box-shadow: 0 14px 22px -10px rgba(0, 0, 0, 0.22);
+  background: var(--surface-2);
+  margin: 12px 0 4px;
+}
+
+/* The minute-bank pill is a tiny UI chip that doesn't screenshot cleanly in isolation, so it's
+   rendered live (real component styles) and shown a touch larger, centered on a soft panel. */
+.tutorial-shot-live {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 104px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  margin: 12px 0 4px;
+}
+.tutorial-shot-live .minute-bank-pill {
+  animation: none;          /* show it settled, not mid pop-in */
+  transform: scale(1.4);
+  cursor: default;
+}
+
+/* Sign-off line on the closing card — set apart from the body with real space and a warm
+   accent so "— Alex" reads as a signature, not a stray trailing line. */
+.tutorial-signoff {
+  margin: 16px 0 2px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+}
+
+/* Cross-fade the icon/title/body on each step (keyed remount in Tutorial.tsx). */
+.tutorial-step {
+  animation: tutorialStepIn 0.26s ease both;
+}
+
+@keyframes tutorialStepIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .tutorial-dots {
