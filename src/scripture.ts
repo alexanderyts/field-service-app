@@ -1,5 +1,6 @@
 // Normalizes a typed-in scripture reference to "Book Chapter:Verse" form,
-// expanding common abbreviations (e.g. "jn 3:16" -> "John 3:16", "1 cor 13 4-7" -> "1 Corinthians 13:4-7").
+// expanding common abbreviations (e.g. "jn 3:16" -> "John 3:16", "1 cor 13:4-7" -> "1 Corinthians 13:4-7").
+// A chapter:verse colon is required — "1 cor 13 4-7" (space before the verses) isn't recognized.
 // Multiple references separated by , or ; are each normalized independently.
 
 const BOOKS: [string, string[]][] = [
