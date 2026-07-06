@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, resolveStreetEntry, type TerritoryStreet } from '../db'
+import { db, resolveStreetEntry, commonLocationLabel, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import { StreetDetail, ensureStreetEntry, type ContactPrefill } from './StreetEntries'
@@ -58,6 +58,7 @@ export default function Territories({
               <strong>{t.name}</strong>
               <span className="badge">{t.streets.length} street{t.streets.length === 1 ? '' : 's'}</span>
               <SharedBadge sharedWith={t.sharedWith} receivedFrom={t.receivedFrom} />
+              {commonLocationLabel(t.streets) && <div className="muted">📍 {commonLocationLabel(t.streets)}</div>}
               {t.assignedTo && <div className="muted">👤 Assigned to {t.assignedTo}</div>}
             </div>
           </li>
@@ -124,7 +125,7 @@ function TerritoryDetail({
       territories (and any street without an entry yet) self-heal on open. */
   async function openManage(street: TerritoryStreet) {
     if (!territory) return
-    const id = await ensureStreetEntry(street)
+    const id = await ensureStreetEntry(street, { city: street.city, state: street.state, zip: street.zip })
     if (street.entryId !== id) {
       const streets = territory.streets.map((s) => (s.id === street.id ? { ...s, entryId: id } : s))
       await db.territories.update(territory.id, { streets })
@@ -152,6 +153,7 @@ function TerritoryDetail({
           </div>
           <p className="muted contact-line">
             {territory.streets.length} street{territory.streets.length === 1 ? '' : 's'}
+            {commonLocationLabel(territory.streets) ? ` · 📍 ${commonLocationLabel(territory.streets)}` : ''}
             {' '}<SharedBadge sharedWith={territory.sharedWith} receivedFrom={territory.receivedFrom} />
           </p>
 

@@ -237,6 +237,9 @@ export async function importSharedPayload(payload: SharePayload): Promise<void> 
     if (entryId == null) {
       entryId = (await db.streetEntries.add({
         name: s.name,
+        city: s.city,
+        state: s.state,
+        zip: s.zip,
         houses: [],
         points: s.points,
         createdAt: Date.now(),

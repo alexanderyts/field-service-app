@@ -182,6 +182,12 @@ export interface TerritoryStreet {
   name: string
   points: { lat: number; lng: number }[]
   done: boolean
+  /** Reverse-geocoded location of the trace, captured once at draw time (from the same lookup that
+      suggests the street name) so grouping/sending/importing can seed the backing StreetEntry's
+      address without extra geocode calls, and a territory can show where it is. */
+  city?: string
+  state?: string
+  zip?: string
   /** The backing StreetEntry (Ministry → Streets) that holds this street's house numbers, notes,
       and share state — so a street is managed identically whether it's standalone or in a territory.
       Set when the group/import/manage flow creates or links the entry. Missing on rows that predate
@@ -190,6 +196,24 @@ export interface TerritoryStreet {
   /** Free-text name of whoever this specific street was handed to — independent of any
       territory-level assignment, so each street in a group can go to a different person. */
   assignedTo?: string
+}
+
+/** A short "City, ST" (or just "City") label for a set of streets — the most common city among
+    them — used to show where a territory or street grouping sits. Undefined when no street has a
+    city on file yet. */
+export function commonLocationLabel(items: { city?: string; state?: string }[]): string | undefined {
+  const counts = new Map<string, number>()
+  for (const it of items) {
+    const city = it.city?.trim()
+    if (!city) continue
+    const st = it.state?.trim()
+    const key = st ? `${city}, ${st}` : city
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  let best: string | undefined
+  let bestN = 0
+  for (const [k, n] of counts) if (n > bestN) { best = k; bestN = n }
+  return best
 }
 
 /** The StreetEntry that backs a territory street, or undefined if none exists yet. Prefers the

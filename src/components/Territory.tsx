@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
-import { db, type Territory, type TerritoryCompletion, type TerritoryStreet } from '../db'
+import { db, commonLocationLabel, type Territory, type TerritoryCompletion, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import ShareModal from './ShareModal'
@@ -44,11 +44,6 @@ async function reverseGeocodeAddress(lat: number, lng: number): Promise<ReverseA
   } catch {
     return null
   }
-}
-
-async function reverseGeocodeStreet(lat: number, lng: number): Promise<string | null> {
-  const addr = await reverseGeocodeAddress(lat, lng)
-  return addr?.road ?? null
 }
 
 /** Renders inside any <MapContainer>: just the saved street traces, colored by
@@ -192,16 +187,21 @@ export function TerritoryDrawModal({
   // Tracks whether the user has typed into the name field since the current trace was
   // finished, so a slow reverse-geocode response can't clobber an edit they've already made.
   const nameEditedRef = useRef(false)
+  // Full reverse-geocoded address of the current trace (name + city/state/zip), captured once here
+  // so saving the street can stamp its location without another lookup.
+  const pendingAddrRef = useRef<{ city?: string; state?: string; zip?: string } | null>(null)
 
   useEffect(() => {
     if (!pendingStroke) return
     setStreetName(`Street ${territory.streets.length + 1}`)
     nameEditedRef.current = false
+    pendingAddrRef.current = null
     setLookingUpName(true)
     const mid = pendingStroke[Math.floor(pendingStroke.length / 2)]
-    reverseGeocodeStreet(mid.lat, mid.lng).then((name) => {
+    reverseGeocodeAddress(mid.lat, mid.lng).then((addr) => {
       setLookingUpName(false)
-      if (name && !nameEditedRef.current) setStreetName(name)
+      pendingAddrRef.current = addr ? { city: addr.city, state: addr.state, zip: addr.zip } : null
+      if (addr?.road && !nameEditedRef.current) setStreetName(addr.road)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingStroke])
@@ -209,7 +209,11 @@ export function TerritoryDrawModal({
   async function savePendingStreet(name: string) {
     if (!pendingStroke) return
     const stroke = pendingStroke
-    const street: TerritoryStreet = { id: newStreetId(), name, points: stroke, done: false }
+    const addr = pendingAddrRef.current
+    const street: TerritoryStreet = {
+      id: newStreetId(), name, points: stroke, done: false,
+      city: addr?.city, state: addr?.state, zip: addr?.zip,
+    }
     await db.territories.update(territory.id, { streets: [...territory.streets, street] })
     setPendingStroke(null)
     // Back to the neutral "Draw Street" button rather than auto-arming the next trace. The
@@ -401,7 +405,7 @@ export function TerritoryManager({
     // since ensureStreetEntry writes its own table.
     const movedWithEntries: TerritoryStreet[] = []
     for (const s of toMove) {
-      const entryId = await ensureStreetEntry(s)
+      const entryId = await ensureStreetEntry(s, { city: s.city, state: s.state, zip: s.zip })
       movedWithEntries.push({ ...s, entryId })
     }
     // One transaction so a checked street is never briefly missing from both records if something
@@ -422,18 +426,22 @@ export function TerritoryManager({
   }
 
   /** Sends a single traced street to Ministry → Streets as a standalone entry (carrying its
-      trace `points`, so it keeps showing on the map), and removes it from this draft list.
-      Duplicate names prompt first (unless already confirmed). */
+      trace `points`, so it keeps showing on the map), and removes it from this draft list. Reuses
+      the location captured at draw time; only geocodes as a fallback for streets that lack one. */
   async function sendStreetToMinistry(street: TerritoryStreet) {
     if (!territory) return
     setConfirmSend(null)
-    const mid = street.points[Math.floor(street.points.length / 2)]
-    const addr = mid ? await reverseGeocodeAddress(mid.lat, mid.lng) : null
+    let { city, state, zip } = street
+    if (!city && !state && !zip) {
+      const mid = street.points[Math.floor(street.points.length / 2)]
+      const addr = mid ? await reverseGeocodeAddress(mid.lat, mid.lng) : null
+      city = addr?.city; state = addr?.state; zip = addr?.zip
+    }
     await db.streetEntries.add({
       name: street.name,
-      city: addr?.city,
-      state: addr?.state,
-      zip: addr?.zip,
+      city,
+      state,
+      zip,
       houses: [],
       points: street.points,
       assignedTo: street.assignedTo,
@@ -510,6 +518,9 @@ export function TerritoryManager({
                 <h3 style={{ margin: 0 }}>{territory.name}</h3>
                 <button className="icon-btn" title="Discard territory" onClick={() => setConfirmDiscard(true)}>🗑</button>
               </div>
+              {commonLocationLabel(territory.streets) && (
+                <p className="muted" style={{ margin: '2px 0 0' }}>📍 {commonLocationLabel(territory.streets)}</p>
+              )}
 
               <button onClick={() => setDrawOpen(true)}>🗺️ Draw Streets</button>
 
