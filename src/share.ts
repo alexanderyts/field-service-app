@@ -1,4 +1,4 @@
-import { db, type Call, type Person, type StreetEntry, type Territory, type TerritoryStreet } from './db'
+import { db, uniqueStreetName, type Call, type Person, type StreetEntry, type Territory, type TerritoryStreet } from './db'
 
 // Cross-device sharing of a single contact / street / territory. The payload is compressed
 // (pako, lazy-loaded) and base64url-encoded, then carried in a deep-link URL *hash* — the
@@ -225,18 +225,21 @@ export async function importSharedPayload(payload: SharePayload): Promise<void> 
   }
 
   const data = payload.data as TerritoryPayload
-  // Back each imported street with a real StreetEntry (reusing one that already matches by name,
-  // otherwise created carrying the trace points) and link it via entryId — so imported territory
-  // streets are managed identically to standalone ones and show up in the Streets list.
-  const entries = await db.streetEntries.toArray()
-  const byName = new Map(entries.map((e) => [e.name.trim().toLowerCase(), e.id]))
+  // Back each imported street with its own new StreetEntry (carrying the trace points), linked via
+  // entryId — so imported territory streets are managed identically to standalone ones and show up
+  // in the Streets list. Same-named streets stay distinct (a new one gets a "(2)"/"(3)" suffix);
+  // the only streets that share an entry are ones that pointed at the SAME sender entry, deduped
+  // via `bySenderEntry` so a genuinely-single shared street isn't split in two.
+  const existingNames = (await db.streetEntries.toArray()).map((e) => e.name)
+  const bySenderEntry = new Map<number, number>()
   const streets: TerritoryStreet[] = []
   for (const s of data.streets) {
-    const key = s.name.trim().toLowerCase()
-    let entryId = byName.get(key)
+    let entryId = s.entryId != null ? bySenderEntry.get(s.entryId) : undefined
     if (entryId == null) {
+      const name = uniqueStreetName(s.name, existingNames)
+      existingNames.push(name)
       entryId = (await db.streetEntries.add({
-        name: s.name,
+        name,
         city: s.city,
         state: s.state,
         zip: s.zip,
@@ -244,7 +247,7 @@ export async function importSharedPayload(payload: SharePayload): Promise<void> 
         points: s.points,
         createdAt: Date.now(),
       })) as number
-      byName.set(key, entryId)
+      if (s.entryId != null) bySenderEntry.set(s.entryId, entryId)
     }
     streets.push({ ...s, entryId })
   }

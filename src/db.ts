@@ -198,6 +198,19 @@ export interface TerritoryStreet {
   assignedTo?: string
 }
 
+/** A display name for a new street entry that won't collide with an existing one: the base name
+    if it's free, otherwise "base (2)", "base (3)", … (case-insensitive). Keeps two traces of the
+    same road — e.g. separate sections of one long street — as distinct, individually-manageable
+    entries you can tell apart and hand to different people, rather than silently merging them. */
+export function uniqueStreetName(base: string, existingNames: string[]): string {
+  const trimmed = base.trim()
+  const taken = new Set(existingNames.map((n) => n.trim().toLowerCase()))
+  if (!taken.has(trimmed.toLowerCase())) return trimmed
+  let n = 2
+  while (taken.has(`${trimmed} (${n})`.toLowerCase())) n++
+  return `${trimmed} (${n})`
+}
+
 /** A short "City, ST" (or just "City") label for a set of streets — the most common city among
     them — used to show where a territory or street grouping sits. Undefined when no street has a
     city on file yet. */

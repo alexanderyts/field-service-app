@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, compareHouseNumbers, resolveStreetEntry, type StreetEntry, type StreetHouse, type HouseStatus } from '../db'
+import { db, compareHouseNumbers, uniqueStreetName, type StreetEntry, type StreetHouse, type HouseStatus } from '../db'
 import { expandState } from '../usStates'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
@@ -43,21 +43,23 @@ export interface ContactPrefill {
   zip?: string
 }
 
-/** Returns the id of the StreetEntry backing a territory street, creating one if none exists
-    yet (linking by entryId, then by name). This is what makes a street managed identically
-    whether it's standalone or inside a territory — the group/import/manage flows all funnel a
-    street through here so it always has a real StreetEntry behind it. `extra` optionally seeds
-    the city/state/zip (callers that already have a reverse-geocode result pass it; bulk callers
-    skip it to avoid hammering Nominatim). */
+/** Returns the id of the StreetEntry backing a territory street, creating one if this street
+    isn't already linked to one. This is what makes a street managed identically whether it's
+    standalone or inside a territory — the group/import/manage flows all funnel a street through
+    here so it always has a real StreetEntry behind it. Reuse is by the explicit `entryId` link
+    only, never by name: two traces of the same road are kept as separate entries (a new one gets
+    a "(2)"/"(3)" suffix so you can tell them apart). `extra` optionally seeds the city/state/zip. */
 export async function ensureStreetEntry(
   street: { entryId?: number; name: string; points?: { lat: number; lng: number }[]; assignedTo?: string },
   extra?: { city?: string; state?: string; zip?: string }
 ): Promise<number> {
   const entries = await db.streetEntries.toArray()
-  const existing = resolveStreetEntry(street, entries)
-  if (existing) return existing.id
+  if (street.entryId != null) {
+    const linked = entries.find((e) => e.id === street.entryId)
+    if (linked) return linked.id
+  }
   return (await db.streetEntries.add({
-    name: street.name,
+    name: uniqueStreetName(street.name, entries.map((e) => e.name)),
     city: extra?.city,
     state: extra?.state,
     zip: extra?.zip,
