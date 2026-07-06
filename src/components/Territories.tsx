@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type TerritoryStreet } from '../db'
+import { db, resolveStreetEntry, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
-import { StreetDetail } from './StreetEntries'
+import { StreetDetail, ensureStreetEntry, type ContactPrefill } from './StreetEntries'
 import { StreetSnapshotModal, TerritoryMiniMap } from './Territory'
 import ShareModal from './ShareModal'
 import { SharedBadge, SharedWarning } from './SharedBits'
@@ -15,7 +15,13 @@ import { buildTerritoryPayload } from '../share'
  * entry: name, assignment, a combined schematic map image, and its streets (each linking
  * to the matching Ministry-tab StreetEntry for house numbers).
  */
-export default function Territories({ onGoToMap }: { onGoToMap?: (lat: number, lng: number) => void }) {
+export default function Territories({
+  onGoToMap,
+  onCreateContact,
+}: {
+  onGoToMap?: (lat: number, lng: number) => void
+  onCreateContact?: (prefill: ContactPrefill) => void
+}) {
   const territories = useLiveQuery(() => db.territories.toArray(), []) ?? []
   const grouped = territories.filter((t) => t.grouped).sort((a, b) => b.createdAt - a.createdAt)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -75,7 +81,7 @@ export default function Territories({ onGoToMap }: { onGoToMap?: (lat: number, l
       />
 
       {selectedId != null && !editMode && (
-        <TerritoryDetail territoryId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />
+        <TerritoryDetail territoryId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} onCreateContact={onCreateContact} />
       )}
     </>
   )
@@ -85,10 +91,12 @@ function TerritoryDetail({
   territoryId,
   onClose,
   onGoToMap,
+  onCreateContact,
 }: {
   territoryId: number
   onClose: () => void
   onGoToMap?: (lat: number, lng: number) => void
+  onCreateContact?: (prefill: ContactPrefill) => void
 }) {
   const territory = useLiveQuery(() => db.territories.get(territoryId), [territoryId])
   const streetEntries = useLiveQuery(() => db.streetEntries.toArray(), []) ?? []
@@ -107,8 +115,21 @@ function TerritoryDetail({
 
   if (!territory) return null
 
-  function entryFor(streetName: string) {
-    return streetEntries.find((e) => e.name.trim().toLowerCase() === streetName.trim().toLowerCase())
+  function entryFor(street: TerritoryStreet) {
+    return resolveStreetEntry(street, streetEntries)
+  }
+
+  /** Open the full street manager (house numbers, notes, share, create-contact) for a territory
+      street — creating and linking its backing StreetEntry the first time, so legacy grouped
+      territories (and any street without an entry yet) self-heal on open. */
+  async function openManage(street: TerritoryStreet) {
+    if (!territory) return
+    const id = await ensureStreetEntry(street)
+    if (street.entryId !== id) {
+      const streets = territory.streets.map((s) => (s.id === street.id ? { ...s, entryId: id } : s))
+      await db.territories.update(territory.id, { streets })
+    }
+    setOpenStreetEntryId(id)
   }
 
   async function deleteTerritory() {
@@ -148,13 +169,13 @@ function TerritoryDetail({
 
           <ul className="list" style={{ marginTop: 10 }}>
             {territory.streets.map((s) => {
-              const entry = entryFor(s.name)
+              const entry = entryFor(s)
               const mid = s.points[Math.floor(s.points.length / 2)]
               return (
                 <li key={s.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
                   <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
                     <div>
-                      <strong>{s.name}</strong>
+                      <strong>{entry?.name ?? s.name}</strong>
                       {entry && (
                         <span className="badge">{entry.houses.length} house{entry.houses.length === 1 ? '' : 's'}</span>
                       )}
@@ -163,11 +184,9 @@ function TerritoryDetail({
                       {s.points.length >= 2 && (
                         <button className="icon-btn" title="View traced map" onClick={() => setViewStreet(s)}>🗺️</button>
                       )}
-                      {entry && (
-                        <button className="secondary small" onClick={() => setOpenStreetEntryId(entry.id)}>
-                          Houses
-                        </button>
-                      )}
+                      <button className="secondary small" onClick={() => openManage(s)}>
+                        Manage
+                      </button>
                       {onGoToMap && mid && (
                         <button className="secondary small" onClick={() => { onGoToMap(mid.lat, mid.lng); onClose() }}>
                           Map
@@ -223,7 +242,7 @@ function TerritoryDetail({
         )}
 
         {openStreetEntryId != null && (
-          <StreetDetail entryId={openStreetEntryId} onClose={() => setOpenStreetEntryId(null)} onGoToMap={onGoToMap} />
+          <StreetDetail entryId={openStreetEntryId} onClose={() => setOpenStreetEntryId(null)} onGoToMap={onGoToMap} onCreateContact={onCreateContact} />
         )}
 
         {viewStreet && <StreetSnapshotModal street={viewStreet} onClose={() => setViewStreet(null)} />}

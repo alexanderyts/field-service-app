@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, compareHouseNumbers, type StreetEntry, type StreetHouse, type HouseStatus } from '../db'
+import { db, compareHouseNumbers, resolveStreetEntry, type StreetEntry, type StreetHouse, type HouseStatus } from '../db'
 import { expandState } from '../usStates'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
@@ -34,26 +34,80 @@ function houseId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+/** Seed values for a new People-tab contact created from a street/house — just the address
+    fields; the contact form fills the rest. */
+export interface ContactPrefill {
+  street?: string
+  city?: string
+  state?: string
+  zip?: string
+}
+
+/** Returns the id of the StreetEntry backing a territory street, creating one if none exists
+    yet (linking by entryId, then by name). This is what makes a street managed identically
+    whether it's standalone or inside a territory — the group/import/manage flows all funnel a
+    street through here so it always has a real StreetEntry behind it. `extra` optionally seeds
+    the city/state/zip (callers that already have a reverse-geocode result pass it; bulk callers
+    skip it to avoid hammering Nominatim). */
+export async function ensureStreetEntry(
+  street: { entryId?: number; name: string; points?: { lat: number; lng: number }[]; assignedTo?: string },
+  extra?: { city?: string; state?: string; zip?: string }
+): Promise<number> {
+  const entries = await db.streetEntries.toArray()
+  const existing = resolveStreetEntry(street, entries)
+  if (existing) return existing.id
+  return (await db.streetEntries.add({
+    name: street.name,
+    city: extra?.city,
+    state: extra?.state,
+    zip: extra?.zip,
+    houses: [],
+    points: street.points,
+    assignedTo: street.assignedTo,
+    createdAt: Date.now(),
+  })) as number
+}
+
 /**
  * The Ministry tab's "Streets" view — a searchable list of street entries, each holding the
  * house numbers worked on that road. Rendered beside the contacts list; the shared "+ New
  * Entry" chooser drives whether the new-street form is open via `showNewForm`.
  */
+type StreetFilter = 'all' | 'standalone' | 'territory'
+
 export default function StreetEntries({
   showNewForm,
   onCloseNewForm,
   onGoToMap,
+  onCreateContact,
 }: {
   showNewForm: boolean
   onCloseNewForm: () => void
   onGoToMap?: (lat: number, lng: number) => void
+  onCreateContact?: (prefill: ContactPrefill) => void
 }) {
   const entries = useLiveQuery(() => db.streetEntries.toArray(), []) ?? []
+  const groupedTerritories = useLiveQuery(() => db.territories.filter((t) => !!t.grouped).toArray(), []) ?? []
   const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<StreetFilter>('all')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [confirmBulk, setConfirmBulk] = useState(false)
+
+  // Which territory (if any) each street belongs to — keyed by both the backing entryId and the
+  // street name (name is the legacy fallback link). Powers the list badge and the filter.
+  const territoryByEntryId = new Map<number, string>()
+  const territoryByName = new Map<string, string>()
+  for (const t of groupedTerritories) {
+    for (const s of t.streets) {
+      if (s.entryId != null) territoryByEntryId.set(s.entryId, t.name)
+      territoryByName.set(s.name.trim().toLowerCase(), t.name)
+    }
+  }
+  function territoryFor(e: StreetEntry): string | undefined {
+    return territoryByEntryId.get(e.id) ?? territoryByName.get(e.name.trim().toLowerCase())
+  }
 
   function toggleSelect(id: number) {
     setSelectedIds((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -71,7 +125,14 @@ export default function StreetEntries({
       (e.city ?? '').toLowerCase().includes(q) ||
       (e.zip ?? '').includes(q)
     )
+    .filter((e) => {
+      if (filter === 'all') return true
+      const inTerritory = territoryFor(e) != null
+      return filter === 'territory' ? inTerritory : !inTerritory
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
+
+  const anyInTerritory = entries.some((e) => territoryFor(e) != null)
 
   return (
     <>
@@ -81,6 +142,14 @@ export default function StreetEntries({
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
+
+      {anyInTerritory && (
+        <div className="segmented">
+          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All</button>
+          <button className={filter === 'standalone' ? 'active' : ''} onClick={() => setFilter('standalone')}>Standalone</button>
+          <button className={filter === 'territory' ? 'active' : ''} onClick={() => setFilter('territory')}>In a territory</button>
+        </div>
+      )}
 
       {showNewForm && (
         <StreetEntryForm
@@ -112,6 +181,7 @@ export default function StreetEntries({
               <div>
                 <strong>{e.name}</strong>
                 <span className="badge">{e.houses.length} house{e.houses.length === 1 ? '' : 's'}</span>
+                {territoryFor(e) && <span className="badge">🗺 {territoryFor(e)}</span>}
                 <SharedBadge sharedWith={e.sharedWith} receivedFrom={e.receivedFrom} />
                 <div className="muted">{address || 'No city/zip'}</div>
               </div>
@@ -136,7 +206,9 @@ export default function StreetEntries({
         onCancel={() => setConfirmBulk(false)}
       />
 
-      {selectedId != null && !editMode && <StreetDetail entryId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
+      {selectedId != null && !editMode && (
+        <StreetDetail entryId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} onCreateContact={onCreateContact} />
+      )}
     </>
   )
 }
@@ -157,6 +229,7 @@ function StreetEntryForm({
   const [state, setState] = useState(existing?.state ?? '')
   const [zip, setZip] = useState(existing?.zip ?? '')
   const [assignedTo, setAssignedTo] = useState(existing?.assignedTo ?? '')
+  const [notes, setNotes] = useState(existing?.notes ?? '')
   const [error, setError] = useState(false)
   const [dupConfirm, setDupConfirm] = useState(false)
 
@@ -168,6 +241,7 @@ function StreetEntryForm({
       state: expandState(state) || undefined,
       zip: zip.trim() || undefined,
       assignedTo: assignedTo.trim() || undefined,
+      notes: notes.trim() || undefined,
     }
     if (existing) {
       await db.streetEntries.update(existing.id, record)
@@ -213,6 +287,10 @@ function StreetEntryForm({
             <span className="field-label">Assigned to (optional)</span>
             <input value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} placeholder="e.g. John Smith" />
           </label>
+          <label className="field">
+            <span className="field-label">Notes (optional)</span>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything worth remembering about this street…" />
+          </label>
           {error && <p className="error">Please enter a street name.</p>}
           <div className="row">
             <button onClick={() => save()}>{existing ? 'Save Changes' : 'Save Street'}</button>
@@ -239,10 +317,12 @@ export function StreetDetail({
   entryId,
   onClose,
   onGoToMap,
+  onCreateContact,
 }: {
   entryId: number
   onClose: () => void
   onGoToMap?: (lat: number, lng: number) => void
+  onCreateContact?: (prefill: ContactPrefill) => void
 }) {
   const entry = useLiveQuery(() => db.streetEntries.get(entryId), [entryId])
   const [showEdit, setShowEdit] = useState(false)
@@ -313,11 +393,20 @@ export function StreetDetail({
             {' '}<SharedBadge sharedWith={entry.sharedWith} receivedFrom={entry.receivedFrom} />
           </p>
           {entry.assignedTo && <p className="muted contact-line">👤 Assigned to {entry.assignedTo}</p>}
+          {entry.notes && <p className="muted contact-line">{entry.notes}</p>}
 
           <SharedWarning sharedWith={entry.sharedWith} />
 
           <div className="row">
             <button onClick={() => setShowPad(true)}>＋ Add House</button>
+            {onCreateContact && (
+              <button
+                className="secondary"
+                onClick={() => { onCreateContact({ street: entry.name, city: entry.city, state: entry.state, zip: entry.zip }); onClose() }}
+              >
+                👤 New Contact
+              </button>
+            )}
             <button className="secondary" onClick={() => setShowShare(true)}>↗ Share</button>
             {traceMidpoint && onGoToMap && (
               <button className="secondary" onClick={() => { onGoToMap(traceMidpoint.lat, traceMidpoint.lng); onClose() }}>
@@ -340,6 +429,15 @@ export function StreetDetail({
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
+                  {onCreateContact && (
+                    <button
+                      className="icon-btn"
+                      title="Create a contact for this house"
+                      onClick={() => { onCreateContact({ street: `${h.number} ${entry.name}`, city: entry.city, state: entry.state, zip: entry.zip }); onClose() }}
+                    >
+                      👤
+                    </button>
+                  )}
                   <button className="icon-btn" title="Remove house" onClick={() => removeHouse(h.id)}>×</button>
                 </div>
                 <input

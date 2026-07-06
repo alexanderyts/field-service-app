@@ -1,4 +1,4 @@
-import { db, type Call, type Person, type StreetEntry, type Territory } from './db'
+import { db, type Call, type Person, type StreetEntry, type Territory, type TerritoryStreet } from './db'
 
 // Cross-device sharing of a single contact / street / territory. The payload is compressed
 // (pako, lazy-loaded) and base64url-encoded, then carried in a deep-link URL *hash* — the
@@ -225,19 +225,32 @@ export async function importSharedPayload(payload: SharePayload): Promise<void> 
   }
 
   const data = payload.data as TerritoryPayload
+  // Back each imported street with a real StreetEntry (reusing one that already matches by name,
+  // otherwise created carrying the trace points) and link it via entryId — so imported territory
+  // streets are managed identically to standalone ones and show up in the Streets list.
+  const entries = await db.streetEntries.toArray()
+  const byName = new Map(entries.map((e) => [e.name.trim().toLowerCase(), e.id]))
+  const streets: TerritoryStreet[] = []
+  for (const s of data.streets) {
+    const key = s.name.trim().toLowerCase()
+    let entryId = byName.get(key)
+    if (entryId == null) {
+      entryId = (await db.streetEntries.add({
+        name: s.name,
+        houses: [],
+        points: s.points,
+        createdAt: Date.now(),
+      })) as number
+      byName.set(key, entryId)
+    }
+    streets.push({ ...s, entryId })
+  }
   await db.territories.add({
     ...data,
+    streets,
     createdAt: Date.now(),
     completed: false,
     grouped: true,
     receivedFrom,
   } as Territory)
-  // Empty street mirrors so each street's "Houses" button in the territory detail resolves
-  // to a real StreetEntry (the draw-flow makes these too). Skip names that already exist.
-  const existingNames = new Set((await db.streetEntries.toArray()).map((e) => e.name.trim().toLowerCase()))
-  for (const s of data.streets) {
-    if (existingNames.has(s.name.trim().toLowerCase())) continue
-    existingNames.add(s.name.trim().toLowerCase())
-    await db.streetEntries.add({ name: s.name, houses: [], createdAt: Date.now() })
-  }
 }

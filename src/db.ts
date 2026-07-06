@@ -163,6 +163,9 @@ export interface StreetEntry {
   zip?: string
   houses: StreetHouse[]
   createdAt: number
+  /** Free-text notes about the whole street — anything worth remembering that isn't tied to a
+      single house number (e.g. "spoke to the older couple mid-block, wants a return visit"). */
+  notes?: string
   /** Free-text name of whoever this individual street was handed to — not a Person FK,
       just a lightweight note (matches how territory assignment works too). */
   assignedTo?: string
@@ -179,9 +182,29 @@ export interface TerritoryStreet {
   name: string
   points: { lat: number; lng: number }[]
   done: boolean
+  /** The backing StreetEntry (Ministry → Streets) that holds this street's house numbers, notes,
+      and share state — so a street is managed identically whether it's standalone or in a territory.
+      Set when the group/import/manage flow creates or links the entry. Missing on rows that predate
+      this field; resolveStreetEntry falls back to matching by name there. */
+  entryId?: number
   /** Free-text name of whoever this specific street was handed to — independent of any
       territory-level assignment, so each street in a group can go to a different person. */
   assignedTo?: string
+}
+
+/** The StreetEntry that backs a territory street, or undefined if none exists yet. Prefers the
+    explicit entryId link; falls back to a case-insensitive name match for legacy rows (the app
+    linked streets by name before entryId existed). */
+export function resolveStreetEntry(
+  street: Pick<TerritoryStreet, 'entryId' | 'name'>,
+  entries: StreetEntry[]
+): StreetEntry | undefined {
+  if (street.entryId != null) {
+    const byId = entries.find((e) => e.id === street.entryId)
+    if (byId) return byId
+  }
+  const key = street.name.trim().toLowerCase()
+  return entries.find((e) => e.name.trim().toLowerCase() === key)
 }
 
 /** A hand-traced, disposable group of streets someone is working door to door — not the

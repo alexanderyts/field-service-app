@@ -7,7 +7,7 @@ import { analyzeScripture, formatScripture } from '../scripture'
 import { expandState } from '../usStates'
 import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
-import StreetEntries from './StreetEntries'
+import StreetEntries, { type ContactPrefill } from './StreetEntries'
 import Territories from './Territories'
 import ShareModal from './ShareModal'
 import { SharedBadge, SharedWarning } from './SharedBits'
@@ -65,6 +65,7 @@ export default function Contacts({
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [view, setView] = useState<MinistryView>('people')
+  const [contactPrefill, setContactPrefill] = useState<ContactPrefill | null>(null)
   const [showChooser, setShowChooser] = useState(false)
   const [streetFormOpen, setStreetFormOpen] = useState(false)
   const [editMode, setEditMode] = useState(false)
@@ -87,6 +88,14 @@ export default function Contacts({
       if (appts.length) await db.appointments.bulkDelete(appts.map((a) => a.id))
     }
     setSelectedIds(new Set()); setEditMode(false); setConfirmBulk(false)
+  }
+
+  // Open the new-contact form on the People view, pre-filled from a street/house (from the
+  // Streets list or a street inside a territory).
+  function handleCreateContact(prefill: ContactPrefill) {
+    setContactPrefill(prefill)
+    setView('people')
+    setShowNew(true)
   }
 
   async function handleImportFile(file: File | undefined) {
@@ -192,7 +201,12 @@ export default function Contacts({
             </label>
           </div>
 
-          {showNew && <ContactForm onClose={() => setShowNew(false)} />}
+          {showNew && (
+            <ContactForm
+              prefill={contactPrefill ?? undefined}
+              onClose={() => { setShowNew(false); setContactPrefill(null) }}
+            />
+          )}
 
           {sorted.length > 0 && (
             <div className="list-edit-bar">
@@ -245,9 +259,9 @@ export default function Contacts({
           {selectedId != null && !editMode && <ContactDetail personId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
         </>
       ) : view === 'streets' ? (
-        <StreetEntries showNewForm={streetFormOpen} onCloseNewForm={() => setStreetFormOpen(false)} onGoToMap={onGoToMap} />
+        <StreetEntries showNewForm={streetFormOpen} onCloseNewForm={() => setStreetFormOpen(false)} onGoToMap={onGoToMap} onCreateContact={handleCreateContact} />
       ) : (
-        <Territories onGoToMap={onGoToMap} />
+        <Territories onGoToMap={onGoToMap} onCreateContact={handleCreateContact} />
       )}
 
       {showChooser && (
@@ -362,14 +376,14 @@ async function searchAddress(query: string): Promise<AddressSuggestion[]> {
 const REQUIRED_FIELDS = ['name'] as const
 type RequiredField = (typeof REQUIRED_FIELDS)[number]
 
-function ContactForm({ onClose, existing }: { onClose: () => void; existing?: Person }) {
+function ContactForm({ onClose, existing, prefill }: { onClose: () => void; existing?: Person; prefill?: ContactPrefill }) {
   const [name, setName] = useState(existing?.name ?? '')
-  const [street, setStreet] = useState(existing?.street ?? '')
+  const [street, setStreet] = useState(existing?.street ?? prefill?.street ?? '')
   const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([])
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false)
-  const [city, setCity] = useState(existing?.city ?? '')
-  const [state, setState] = useState(existing?.state ?? '')
-  const [zip, setZip] = useState(existing?.zip ?? '')
+  const [city, setCity] = useState(existing?.city ?? prefill?.city ?? '')
+  const [state, setState] = useState(existing?.state ?? prefill?.state ?? '')
+  const [zip, setZip] = useState(existing?.zip ?? prefill?.zip ?? '')
   const [phone, setPhone] = useState(existing?.phone ?? '')
   const [status, setStatus] = useState<ContactStatus>(existing?.status ?? 'interested')
   const [notes, setNotes] = useState(existing?.notes ?? '')

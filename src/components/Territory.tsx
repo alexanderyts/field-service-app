@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import { db, type Territory, type TerritoryCompletion, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import ShareModal from './ShareModal'
+import { ensureStreetEntry } from './StreetEntries'
 import { STREET_COLORS } from '../territoryImage'
 import { fetchRoadsNear, snapPathToRoads, type LatLng } from '../roadSnap'
 import { buildTracedStreetPayload } from '../share'
@@ -345,6 +347,10 @@ export function TerritoryManager({
   const [viewStreet, setViewStreet] = useState<TerritoryStreet | null>(null)
   const [shareStreet, setShareStreet] = useState<TerritoryStreet | null>(null)
   const [confirmSend, setConfirmSend] = useState<TerritoryStreet | null>(null)
+  const streetEntries = useLiveQuery(() => db.streetEntries.toArray(), []) ?? []
+  const sendDup = confirmSend
+    ? streetEntries.some((e) => e.name.trim().toLowerCase() === confirmSend.name.trim().toLowerCase())
+    : false
 
   // Ministry chooser's "New Custom Territory" (the Map tab mounts fresh on the switch, so this
   // fires on mount): create a draft if none exists and open the drawing tool, then consume once.
@@ -389,17 +395,24 @@ export function TerritoryManager({
     if (!territory || selected.size === 0 || !groupName.trim()) return
     const toMove = territory.streets.filter((s) => selected.has(s.id))
     const remaining = territory.streets.filter((s) => !selected.has(s.id))
-    // Grouping puts the streets ONLY into the new territory (Ministry → Territories); it no longer
-    // also mirrors them into Ministry → Streets, so there's no duplicate. To have a street in
-    // Streets, send it there explicitly with "Send to Ministry". One transaction so a checked
-    // street is never briefly missing from both records if something goes wrong mid-way.
+    // Each grouped street is backed by a real Ministry → Streets entry (created/linked here) so it's
+    // managed identically whether opened from the territory or the Streets list — and the Streets
+    // list can tag it with this territory. Entries are created before the territories transaction
+    // since ensureStreetEntry writes its own table.
+    const movedWithEntries: TerritoryStreet[] = []
+    for (const s of toMove) {
+      const entryId = await ensureStreetEntry(s)
+      movedWithEntries.push({ ...s, entryId })
+    }
+    // One transaction so a checked street is never briefly missing from both records if something
+    // goes wrong mid-way.
     await db.transaction('rw', db.territories, async () => {
       await db.territories.add({
         name: groupName.trim(),
         createdAt: Date.now(),
         completed: false,
         grouped: true,
-        streets: toMove,
+        streets: movedWithEntries,
       } as Territory)
       await db.territories.update(territory.id, { streets: remaining })
     })
@@ -411,10 +424,8 @@ export function TerritoryManager({
   /** Sends a single traced street to Ministry → Streets as a standalone entry (carrying its
       trace `points`, so it keeps showing on the map), and removes it from this draft list.
       Duplicate names prompt first (unless already confirmed). */
-  async function sendStreetToMinistry(street: TerritoryStreet, confirmed = false) {
+  async function sendStreetToMinistry(street: TerritoryStreet) {
     if (!territory) return
-    const dup = (await db.streetEntries.toArray()).some((e) => e.name.trim().toLowerCase() === street.name.trim().toLowerCase())
-    if (dup && !confirmed) { setConfirmSend(street); return }
     setConfirmSend(null)
     const mid = street.points[Math.floor(street.points.length / 2)]
     const addr = mid ? await reverseGeocodeAddress(mid.lat, mid.lng) : null
@@ -513,7 +524,7 @@ export function TerritoryManager({
                       </label>
                       <div className="draft-street-actions">
                         <button className="secondary small" onClick={() => toggleStreetDone(s.id)}>{s.done ? '✓ Done' : 'Mark done'}</button>
-                        <button className="secondary small" onClick={() => sendStreetToMinistry(s)}>📥 Send to Ministry</button>
+                        <button className="secondary small" onClick={() => setConfirmSend(s)}>📥 Send to Ministry</button>
                         <button className="secondary small" onClick={() => { setEditStreetId(s.id); setDrawOpen(true) }}>✏️ Edit trace</button>
                         <button className="secondary small" onClick={() => setViewStreet(s)}>🗺️ Map</button>
                         <button className="secondary small" onClick={() => setShareStreet(s)}>↗ Share</button>
@@ -572,12 +583,14 @@ export function TerritoryManager({
 
       <ConfirmDialog
         open={confirmSend != null}
-        title="A street with this name already exists"
-        message={confirmSend ? `"${confirmSend.name}" is already in Ministry → Streets. Send this one anyway (a second entry)?` : ''}
-        confirmLabel="Send anyway"
+        title="Send this street to Ministry → Streets?"
+        message={confirmSend
+          ? `"${confirmSend.name}" will move to the Streets list under the Ministry tab, where you can add house numbers and notes, create contacts, and share it. It's removed from this custom territory.${sendDup ? ' Note: a street with this name is already in Streets — this adds a second entry.' : ''}`
+          : ''}
+        confirmLabel="Send to Streets"
         cancelLabel="Cancel"
         tone="primary"
-        onConfirm={() => { if (confirmSend) sendStreetToMinistry(confirmSend, true) }}
+        onConfirm={() => { if (confirmSend) sendStreetToMinistry(confirmSend) }}
         onCancel={() => setConfirmSend(null)}
       />
 
@@ -603,10 +616,11 @@ export function TerritoryManager({
         <ModalPortal>
           <div className="modal-backdrop" onClick={() => setGroupNaming(false)}>
             <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
-              <h3>Name this territory</h3>
+              <h3>Group into a territory</h3>
               <p className="muted" style={{ marginTop: -6 }}>
-                {selected.size} street{selected.size === 1 ? '' : 's'} will move into it under Ministry → Territories
-                only — not duplicated into Streets. Use "Send to Ministry" on a street if you want it there too.
+                This creates a territory under the Ministry tab → Territories, where you can manage it. The
+                {selected.size === 1 ? ' selected street' : ` ${selected.size} selected streets`} also become
+                manageable entries under Streets, each tagged with this territory. Confirm to continue, or cancel.
               </p>
               <label className="field">
                 <span className="field-label">Territory name</span>
