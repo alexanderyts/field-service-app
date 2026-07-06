@@ -51,18 +51,21 @@ export default function Territories({
       )}
 
       <ul className="list">
-        {grouped.map((t) => (
-          <li key={t.id} className="list-item clickable" onClick={() => (editMode ? toggleSelect(t.id) : setSelectedId(t.id))}>
-            {editMode && <input type="checkbox" checked={selectedIds.has(t.id)} readOnly style={{ marginRight: 10, flexShrink: 0 }} />}
-            <div>
-              <strong>{t.name}</strong>
-              <span className="badge">{t.streets.length} street{t.streets.length === 1 ? '' : 's'}</span>
-              <SharedBadge sharedWith={t.sharedWith} receivedFrom={t.receivedFrom} />
-              {commonLocationLabel(t.streets) && <div className="muted">📍 {commonLocationLabel(t.streets)}</div>}
-              {t.assignedTo && <div className="muted">👤 Assigned to {t.assignedTo}</div>}
-            </div>
-          </li>
-        ))}
+        {grouped.map((t) => {
+          const location = commonLocationLabel(t.streets)
+          return (
+            <li key={t.id} className="list-item clickable" onClick={() => (editMode ? toggleSelect(t.id) : setSelectedId(t.id))}>
+              {editMode && <input type="checkbox" checked={selectedIds.has(t.id)} readOnly style={{ marginRight: 10, flexShrink: 0 }} />}
+              <div>
+                <strong>{t.name}</strong>
+                <span className="badge">{t.streets.length} street{t.streets.length === 1 ? '' : 's'}</span>
+                <SharedBadge sharedWith={t.sharedWith} receivedFrom={t.receivedFrom} />
+                {location && <div className="muted">📍 {location}</div>}
+                {t.assignedTo && <div className="muted">👤 Assigned to {t.assignedTo}</div>}
+              </div>
+            </li>
+          )
+        })}
         {grouped.length === 0 && (
           <p className="muted">
             No territories yet — trace streets on the Map tab, then check some and "Group Selected into a Territory."
@@ -116,6 +119,8 @@ function TerritoryDetail({
 
   if (!territory) return null
 
+  const territoryLocation = commonLocationLabel(territory.streets)
+
   function entryFor(street: TerritoryStreet) {
     return resolveStreetEntry(street, streetEntries)
   }
@@ -153,7 +158,7 @@ function TerritoryDetail({
           </div>
           <p className="muted contact-line">
             {territory.streets.length} street{territory.streets.length === 1 ? '' : 's'}
-            {commonLocationLabel(territory.streets) ? ` · 📍 ${commonLocationLabel(territory.streets)}` : ''}
+            {territoryLocation ? ` · 📍 ${territoryLocation}` : ''}
             {' '}<SharedBadge sharedWith={territory.sharedWith} receivedFrom={territory.receivedFrom} />
           </p>
 

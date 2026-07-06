@@ -177,9 +177,14 @@ export default function MapView({
   // "graduated" into a durable Ministry-tab entry and is no longer a draw target.
   const activeTerritory = territories.find((t) => !t.completed && !t.grouped)
   // Streets sent to Ministry keep their trace `points`, so they still render on the map even
-  // after leaving the draft custom-territory list.
+  // after leaving the draft custom-territory list. Streets that belong to a territory are already
+  // drawn by that territory's own overlay below (via TerritoryStreet.points), so exclude their
+  // backing entries here — otherwise a grouped street's line is drawn twice, and the second
+  // (always-orange) pass would paint over its real done/not-done color.
+  const territoryEntryIds = new Set<number>()
+  for (const t of territories) for (const s of t.streets) if (s.entryId != null) territoryEntryIds.add(s.entryId)
   const sentStreets = streetEntries
-    .filter((e) => e.points && e.points.length >= 2)
+    .filter((e) => e.points && e.points.length >= 2 && !territoryEntryIds.has(e.id))
     .map((e) => ({ id: `se-${e.id}`, name: e.name, points: e.points!, done: false }))
 
   useEffect(() => {
