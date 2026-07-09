@@ -367,6 +367,9 @@ A change is "done" when:
   and the commit/PR says how it was verified.
 - **Findings are tracked in [AUDIT.md](AUDIT.md):** a finding closes only with *named proof* (a test,
   a fixing commit, or a manual-verification note). The human owns waivers and closure.
+- **Versioning (semver `MAJOR.MINOR.PATCH`):** MINOR = new feature, PATCH = fix/polish, MAJOR reserved
+  for the first public release / breaking changes. When cutting a version, update [CHANGELOG.md](CHANGELOG.md),
+  `src/version.ts` (`APP_VERSION`), and `package.json` together.
 
 ---
 
