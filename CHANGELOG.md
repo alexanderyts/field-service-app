@@ -65,7 +65,6 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.9.0 — Territories & QR sharing · 2026-07-03
 - Temporary-territory tooling: grouping, assignment, and a Ministry-tab view
 - QR / deep-link peer-to-peer sharing for contacts, streets, and territories
-- (Uploaded assets)
 
 ## 0.9.1 — Fixes & Schedule refinements · 2026-07-03
 - Fix DST drift in the auxiliary-pioneering week counter
