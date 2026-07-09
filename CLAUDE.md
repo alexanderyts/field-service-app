@@ -349,7 +349,24 @@ E:\Field Service App\dev-server.cmd   # Sets nodejs PATH, runs npm run dev
 ```
 
 Run: `npm run dev` (port 5173) · Build: `npm run build` (`tsc -b && vite build`) ·
-Pages build: `npm run build:pages` · Lint: `npm run lint` (oxlint)
+Pages build: `npm run build:pages` · Lint: `npm run lint` (oxlint) · Test: `npm test` (Vitest)
+
+---
+
+## Working Conventions (Definition of Done)
+
+A change is "done" when:
+- **Green gates:** `npm run build` (tsc **strict** + vite), `npm run lint`, and `npm test` all pass —
+  the same three the CI runs before every deploy (`.github/workflows/deploy-pages.yml`).
+- **Pure logic is tested:** new pure functions (math, parsing, sorting, formatting) get a Vitest
+  test next to them (`*.test.ts`). UI/DB glue isn't required to be tested.
+- **Docs aren't allowed to drift:** if a change touches the schema, tabs, architecture, or a
+  localStorage key, update **this CLAUDE.md in the same commit**. Doc drift is treated as a
+  workflow failure, not a later cleanup.
+- **Behavior is verified for runtime changes** (drive the flow / screenshot, not just typecheck),
+  and the commit/PR says how it was verified.
+- **Findings are tracked in [AUDIT.md](AUDIT.md):** a finding closes only with *named proof* (a test,
+  a fixing commit, or a manual-verification note). The human owns waivers and closure.
 
 ---
 
