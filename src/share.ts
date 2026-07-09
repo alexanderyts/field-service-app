@@ -32,6 +32,37 @@ export interface SharePayload {
 // file fallback instead. (qrcode's own "data too big" throw is a second backstop.)
 export const MAX_QR_URL_LEN = 1200
 
+// Import is the app's one untrusted-input boundary: a scanned link or a picked .meleo file
+// comes from outside this device. These caps + shape checks keep a malformed or hostile
+// payload from wedging the import — a huge encoded blob (real shares are single-digit KB), a
+// pathologically large list, or an object shaped nothing like what the writer expects.
+const MAX_ENCODED_LEN = 256 * 1024
+const MAX_LIST = 2000
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+
+/** Rejects a decoded payload whose data isn't shaped like the kind it claims to be, so
+    importSharedPayload only ever spreads the expected fields into the local database. */
+function assertValidPayload(p: SharePayload): void {
+  const bad = () => { throw new Error('This share is malformed and was not imported.') }
+  const d = p.data as Record<string, unknown>
+  if (!isObject(d)) bad()
+  const okList = (v: unknown) => v == null || (Array.isArray(v) && v.length <= MAX_LIST)
+  if (p.kind === 'contact') {
+    const person = (d as { person?: unknown }).person
+    if (!isObject(person) || typeof person.name !== 'string') bad()
+    if (!okList((d as { calls?: unknown }).calls)) bad()
+  } else if (p.kind === 'street') {
+    if (typeof d.name !== 'string' || !okList(d.houses)) bad()
+  } else if (p.kind === 'territory') {
+    if (typeof d.name !== 'string' || !Array.isArray(d.streets) || d.streets.length > MAX_LIST) bad()
+  } else {
+    bad()
+  }
+}
+
 function toBase64Url(bytes: Uint8Array): string {
   let bin = ''
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
@@ -61,6 +92,9 @@ export async function encodeSharePayload(payload: SharePayload): Promise<string>
 }
 
 export async function decodeSharePayload(encoded: string): Promise<SharePayload> {
+  if (typeof encoded !== 'string' || encoded.length > MAX_ENCODED_LEN) {
+    throw new Error('This share is too large or malformed to import.')
+  }
   const mode = encoded[0]
   const body = fromBase64Url(encoded.slice(1))
   let json: string
@@ -72,6 +106,7 @@ export async function decodeSharePayload(encoded: string): Promise<SharePayload>
   }
   const parsed = JSON.parse(json) as SharePayload
   if (parsed?.v !== 1 || !parsed.kind || !parsed.data) throw new Error('Not a valid Meleo share.')
+  assertValidPayload(parsed)
   return parsed
 }
 
@@ -91,6 +126,7 @@ export function parseImportHash(hash: string): string | null {
 /** Reads a picked `.meleo` file (the size-fallback transport) back to its encoded payload
     string — the same string a QR carries, so both feed one import path. */
 export async function readMeleoFile(file: File): Promise<string> {
+  if (file.size > MAX_ENCODED_LEN) throw new Error('This file is too large to be a Meleo share.')
   const text = (await file.text()).trim()
   if (!text) throw new Error('Empty file.')
   return text
