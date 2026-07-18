@@ -305,14 +305,33 @@ function weekSuggestedMinutesExcluding(prefs: SchedulePrefs, date: Date, exclude
     taken to a whole week; reusable from either view since it takes `prefs` explicitly. */
 async function clearWeekSchedule(prefs: SchedulePrefs, weekStartDate: Date) {
   const weekStart = startOfWeek(weekStartDate).getTime()
-  const nextOverrides = { ...(prefs.dateOverrides ?? {}) }
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart + i * 24 * 60 * 60 * 1000)
-    if (blocksForDate(prefs, d).length > 0) {
-      nextOverrides[fmtLocalDate(d)] = []
+  await mutateSchedulePrefs(prefs.id, (current) => {
+    const nextOverrides = { ...(current.dateOverrides ?? {}) }
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart + i * 24 * 60 * 60 * 1000)
+      if (blocksForDate(current, d).length > 0) {
+        nextOverrides[fmtLocalDate(d)] = []
+      }
     }
-  }
-  await db.schedulePrefs.update(prefs.id, { dateOverrides: nextOverrides })
+    return { dateOverrides: nextOverrides }
+  })
+}
+
+/** Serializes every schedule-plan write: re-reads the prefs row inside a transaction and
+    computes its patch from that fresh copy rather than from a possibly-stale useLiveQuery
+    render snapshot. A mutation fired before a prior one's snapshot re-propagates would
+    otherwise clobber the earlier write or resurrect a just-removed block (F012). Returning
+    null from `mutate` skips the write (e.g. the target block is already gone). */
+async function mutateSchedulePrefs(
+  prefsId: number,
+  mutate: (current: SchedulePrefs) => Partial<SchedulePrefs> | null
+) {
+  await db.transaction('rw', db.schedulePrefs, async () => {
+    const current = await db.schedulePrefs.get(prefsId)
+    if (!current) return
+    const patch = mutate(current)
+    if (patch) await db.schedulePrefs.update(prefsId, patch)
+  })
 }
 
 /** A tappable (i) icon that reveals a short explanation on demand. On touch, `onBlur`
@@ -1091,20 +1110,20 @@ function ScheduleMain({
   function saveDayBlocks(date: Date, blocks: DayScheduleBlock[], repeatWeekly: boolean) {
     const day = date.getDay()
     const dateKey = fmtLocalDate(date)
-    if (repeatWeekly) {
-      const nextDaysOut = prefs.daysOut.includes(day) ? prefs.daysOut : [...prefs.daysOut, day].sort()
-      // Storing only { blocks } intentionally drops any legacy start/end/credit fields
-      // for this day — blocks are the authoritative shape from here on. Any one-off
-      // override for this exact date is also cleared so it can't shadow the new plan.
-      const nextSchedule = { ...(prefs.daySchedule ?? {}), [day]: { blocks } }
-      const nextOverrides = { ...(prefs.dateOverrides ?? {}) }
-      delete nextOverrides[dateKey]
-      db.schedulePrefs.update(prefs.id, { daysOut: nextDaysOut, daySchedule: nextSchedule, dateOverrides: nextOverrides })
-    } else {
+    void mutateSchedulePrefs(prefs.id, (current) => {
+      if (repeatWeekly) {
+        const nextDaysOut = current.daysOut.includes(day) ? current.daysOut : [...current.daysOut, day].sort()
+        // Storing only { blocks } intentionally drops any legacy start/end/credit fields
+        // for this day — blocks are the authoritative shape from here on. Any one-off
+        // override for this exact date is also cleared so it can't shadow the new plan.
+        const nextSchedule = { ...(current.daySchedule ?? {}), [day]: { blocks } }
+        const nextOverrides = { ...(current.dateOverrides ?? {}) }
+        delete nextOverrides[dateKey]
+        return { daysOut: nextDaysOut, daySchedule: nextSchedule, dateOverrides: nextOverrides }
+      }
       // "Just this day" — the weekly pattern is left completely untouched.
-      const nextOverrides = { ...(prefs.dateOverrides ?? {}), [dateKey]: blocks }
-      db.schedulePrefs.update(prefs.id, { dateOverrides: nextOverrides })
-    }
+      return { dateOverrides: { ...(current.dateOverrides ?? {}), [dateKey]: blocks } }
+    })
     closeDayModalSmoothly()
   }
 
@@ -1112,12 +1131,13 @@ function ScheduleMain({
   // (or the whole week's) suggested schedule without going all the way back to Redo Survey.
   function removeDaySchedule(date: Date) {
     const day = date.getDay()
-    const nextDaysOut = prefs.daysOut.filter((d) => d !== day)
-    const nextSchedule = { ...(prefs.daySchedule ?? {}) }
-    delete nextSchedule[day]
-    const nextOverrides = { ...(prefs.dateOverrides ?? {}) }
-    delete nextOverrides[fmtLocalDate(date)]
-    db.schedulePrefs.update(prefs.id, { daysOut: nextDaysOut, daySchedule: nextSchedule, dateOverrides: nextOverrides })
+    void mutateSchedulePrefs(prefs.id, (current) => {
+      const nextSchedule = { ...(current.daySchedule ?? {}) }
+      delete nextSchedule[day]
+      const nextOverrides = { ...(current.dateOverrides ?? {}) }
+      delete nextOverrides[fmtLocalDate(date)]
+      return { daysOut: current.daysOut.filter((d) => d !== day), daySchedule: nextSchedule, dateOverrides: nextOverrides }
+    })
     closeDayModalSmoothly()
   }
 
@@ -1190,39 +1210,49 @@ function ScheduleMain({
   // Logs a scheduled day's planned blocks as real time entries (one per block, by category), then
   // clears that date's scheduled blocks via a date-override so the same time can't be submitted
   // twice — the recurring weekly pattern (other weeks) is untouched. "Submit all remaining."
-  async function submitScheduledTime(date: Date, blocks: DayScheduleBlock[]) {
-    const d = new Date(date)
-    d.setHours(12, 0, 0, 0)
-    for (const b of blocks) {
-      const min = b.end - b.start
-      if (min > 0) await db.timeLogs.add({ date: d.getTime(), minutes: min, category: b.category } as TimeLog)
-    }
-    if (blocks.length > 0) {
-      await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(prefs.dateOverrides ?? {}), [fmtLocalDate(date)]: [] } })
-    }
+  async function submitScheduledTime(date: Date) {
+    await db.transaction('rw', db.timeLogs, db.schedulePrefs, async () => {
+      const current = await db.schedulePrefs.get(prefs.id)
+      if (!current) return
+      const blocks = blocksForDate(current, date)
+      if (blocks.length === 0) return
+      const d = new Date(date)
+      d.setHours(12, 0, 0, 0)
+      for (const b of blocks) {
+        const min = b.end - b.start
+        if (min > 0) await db.timeLogs.add({ date: d.getTime(), minutes: min, category: b.category } as TimeLog)
+      }
+      await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(current.dateOverrides ?? {}), [fmtLocalDate(date)]: [] } })
+    })
   }
 
   // Submit ONE scheduled block: log it, then remove just that block from that date (a date-override
   // holding the remaining blocks). It can't be submitted again and "moves off" the day; the recurring
   // weekly pattern stays intact. The day's ring then reads it as filled (logged) + the rest hollow.
   async function submitScheduledBlock(date: Date, blockIndex: number) {
-    const dayBlocks = blocksForDate(prefs, date)
-    const b = dayBlocks[blockIndex]
-    if (!b) return
-    const d = new Date(date)
-    d.setHours(12, 0, 0, 0)
-    const min = b.end - b.start
-    if (min > 0) await db.timeLogs.add({ date: d.getTime(), minutes: min, category: b.category } as TimeLog)
-    const remaining = dayBlocks.filter((_, i) => i !== blockIndex)
-    await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(prefs.dateOverrides ?? {}), [fmtLocalDate(date)]: remaining } })
+    await db.transaction('rw', db.timeLogs, db.schedulePrefs, async () => {
+      const current = await db.schedulePrefs.get(prefs.id)
+      if (!current) return
+      const dayBlocks = blocksForDate(current, date)
+      const b = dayBlocks[blockIndex]
+      if (!b) return
+      const d = new Date(date)
+      d.setHours(12, 0, 0, 0)
+      const min = b.end - b.start
+      if (min > 0) await db.timeLogs.add({ date: d.getTime(), minutes: min, category: b.category } as TimeLog)
+      const remaining = dayBlocks.filter((_, i) => i !== blockIndex)
+      await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(current.dateOverrides ?? {}), [fmtLocalDate(date)]: remaining } })
+    })
   }
 
   // Remove ONE scheduled block from a date without logging it (date-override with the rest).
   async function deleteScheduledBlock(date: Date, blockIndex: number) {
-    const dayBlocks = blocksForDate(prefs, date)
-    if (!dayBlocks[blockIndex]) return
-    const remaining = dayBlocks.filter((_, i) => i !== blockIndex)
-    await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(prefs.dateOverrides ?? {}), [fmtLocalDate(date)]: remaining } })
+    await mutateSchedulePrefs(prefs.id, (current) => {
+      const dayBlocks = blocksForDate(current, date)
+      if (!dayBlocks[blockIndex]) return null
+      const remaining = dayBlocks.filter((_, i) => i !== blockIndex)
+      return { dateOverrides: { ...(current.dateOverrides ?? {}), [fmtLocalDate(date)]: remaining } }
+    })
   }
 
   // Clears one day completely — deletes that date's logged time entries AND hides its
@@ -1232,11 +1262,13 @@ function ScheduleMain({
   async function clearDay(date: Date) {
     const dayStart = new Date(date); dayStart.setHours(0, 0, 0, 0)
     const dayEnd = new Date(date); dayEnd.setHours(23, 59, 59, 999)
-    const ids = logs.filter((l) => l.date >= dayStart.getTime() && l.date <= dayEnd.getTime()).map((l) => l.id)
-    if (ids.length) await db.timeLogs.bulkDelete(ids)
-    if (blocksForDate(prefs, date).length > 0) {
-      await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(prefs.dateOverrides ?? {}), [fmtLocalDate(date)]: [] } })
-    }
+    await db.transaction('rw', db.timeLogs, db.schedulePrefs, async () => {
+      const current = await db.schedulePrefs.get(prefs.id)
+      await db.timeLogs.where('date').between(dayStart.getTime(), dayEnd.getTime(), true, true).delete()
+      if (current && blocksForDate(current, date).length > 0) {
+        await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(current.dateOverrides ?? {}), [fmtLocalDate(date)]: [] } })
+      }
+    })
   }
 
   async function bankQuickLogMinutes(
@@ -1251,18 +1283,23 @@ function ScheduleMain({
     let bank = before + m
     const autoHour = bank >= 60
     if (autoHour) bank -= 60
-    saveMinuteBank(bank)
-    // Keep the modal open through the gather (so the field's glow is visible), then close it
-    // once the ball has launched from the field's captured position.
-    await collectAndFlyToMinuteBank(minutesFieldEl)
-    closeDayModalSmoothly()
-    await animateBankValue(before, bank, 480, setDisplayedBank)
+    // Persist EVERYTHING before any animation runs (F011). The animations below take ~1.1s,
+    // and if the OS freezes/kills the backgrounded PWA in that window the logged time and the
+    // decremented bank must already be durable. Order: write the DB rows, then the localStorage
+    // bank (so a crash between them over-retains minutes rather than losing a logged hour),
+    // then animate purely cosmetically off the already-committed values.
     if (autoHour) {
       const d = new Date(date)
       d.setHours(12, 0, 0, 0)
       await db.timeLogs.add({ date: d.getTime(), minutes: 60, category, note: 'Added from minute bank' } as TimeLog)
     }
     if (h > 0) await saveQuickLog(date, h * 60, category, otherNote)
+    saveMinuteBank(bank)
+    // Keep the modal open through the gather (so the field's glow is visible), then close it
+    // once the ball has launched from the field's captured position.
+    await collectAndFlyToMinuteBank(minutesFieldEl)
+    closeDayModalSmoothly()
+    await animateBankValue(before, bank, 480, setDisplayedBank)
   }
 
   function quickLogTime(
@@ -1866,7 +1903,7 @@ function ScheduleMain({
           onRemoveDay={() => removeDaySchedule(dayModalFor)}
           onClearAllDays={clearAllSuggestedDays}
           onLogTime={(h, m, category, otherNote, originEl) => quickLogTime(dayModalFor, h, m, category, otherNote, originEl)}
-          onSubmitScheduled={() => submitScheduledTime(dayModalFor, blocksForDate(prefs, dayModalFor))}
+          onSubmitScheduled={() => submitScheduledTime(dayModalFor)}
           onSubmitBlock={(i) => submitScheduledBlock(dayModalFor, i)}
           onDeleteBlock={(i) => deleteScheduledBlock(dayModalFor, i)}
           onClose={closeDayModalSmoothly}

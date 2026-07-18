@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.16.0`.** History runs from the initial scaffold forward.
+**Current version: `0.16.1`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -116,6 +116,10 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - Harden share import (the one untrusted-input boundary): size caps + per-kind shape validation + tests
 - Enable TypeScript `strict` mode (0 errors); add `npm run lint` to the CI gate
 - Adopt an audit register (`AUDIT.md`) + a Definition of Done (from SavePoint's model)
+
+## 0.16.1 — Schedule write-path hardening · 2026-07-18
+- Fix silent time loss in the minute bank: quick-logged time and the banked-hour roll-over now persist to the DB *before* the ~1.1s fly-to-pill animation, so a backgrounded/killed PWA can no longer drop the write (F011)
+- Fix stale-snapshot schedule writes: every `dateOverrides`/`daySchedule` mutation now re-reads the prefs row inside a Dexie transaction instead of spreading a possibly-stale `useLiveQuery` snapshot, preventing double-logged time and resurrected/dropped scheduled blocks (F012)
 
 ---
 
