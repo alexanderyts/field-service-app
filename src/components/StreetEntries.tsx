@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, compareHouseNumbers, uniqueStreetName, type StreetEntry, type StreetHouse, type HouseStatus } from '../db'
 import { expandState } from '../usStates'
@@ -315,6 +315,26 @@ function StreetEntryForm({
   )
 }
 
+/** House note field that batches typing into local state and only writes to the DB on blur,
+    so fast typing can't drop characters against the lagging useLiveQuery value and each
+    keystroke isn't a separate read-modify-write on houses[] (F-A4). Re-syncs from the
+    incoming value only while not focused (e.g. an import updates the row underneath). */
+function HouseNoteInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [local, setLocal] = useState(value)
+  const focused = useRef(false)
+  useEffect(() => { if (!focused.current) setLocal(value) }, [value])
+  return (
+    <input
+      className="house-note"
+      placeholder="Note (optional)"
+      value={local}
+      onFocus={() => { focused.current = true }}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => { focused.current = false; if (local !== value) onCommit(local) }}
+    />
+  )
+}
+
 export function StreetDetail({
   entryId,
   onClose,
@@ -349,28 +369,40 @@ export function StreetDetail({
   const address = [entry.city, entry.state, entry.zip].filter(Boolean).join(', ')
   const sortedHouses = [...entry.houses].sort((a, b) => compareHouseNumbers(a.number, b.number))
 
+  // Every houses[] mutation re-reads the row inside a transaction and rebuilds from that fresh
+  // copy — never from the useLiveQuery snapshot, which lags a keystroke or two behind. Two edits
+  // fired close together (a status change on one house, a note on another) would otherwise both
+  // build from the same stale array and silently clobber each other (F-A4).
   async function addHouses(newHouses: PadHouse[]) {
-    if (!entry) return
-    const existingNums = new Set(entry.houses.map((h) => h.number.toLowerCase()))
-    const additions: StreetHouse[] = []
-    for (const h of newHouses) {
-      const trimmed = h.number.trim()
-      if (!trimmed || existingNums.has(trimmed.toLowerCase())) continue
-      existingNums.add(trimmed.toLowerCase())
-      additions.push({ id: houseId(), number: trimmed, status: h.status, note: h.note })
-    }
-    if (additions.length) await db.streetEntries.update(entry.id, { houses: [...entry.houses, ...additions] })
+    await db.transaction('rw', db.streetEntries, async () => {
+      const row = await db.streetEntries.get(entryId)
+      if (!row) return
+      const existingNums = new Set(row.houses.map((h) => h.number.toLowerCase()))
+      const additions: StreetHouse[] = []
+      for (const h of newHouses) {
+        const trimmed = h.number.trim()
+        if (!trimmed || existingNums.has(trimmed.toLowerCase())) continue
+        existingNums.add(trimmed.toLowerCase())
+        additions.push({ id: houseId(), number: trimmed, status: h.status, note: h.note })
+      }
+      if (additions.length) await db.streetEntries.update(entryId, { houses: [...row.houses, ...additions] })
+    })
   }
 
   async function updateHouse(id: string, patch: Partial<StreetHouse>) {
-    if (!entry) return
-    const houses = entry.houses.map((h) => (h.id === id ? { ...h, ...patch } : h))
-    await db.streetEntries.update(entry.id, { houses })
+    await db.transaction('rw', db.streetEntries, async () => {
+      const row = await db.streetEntries.get(entryId)
+      if (!row) return
+      await db.streetEntries.update(entryId, { houses: row.houses.map((h) => (h.id === id ? { ...h, ...patch } : h)) })
+    })
   }
 
   async function removeHouse(id: string) {
-    if (!entry) return
-    await db.streetEntries.update(entry.id, { houses: entry.houses.filter((h) => h.id !== id) })
+    await db.transaction('rw', db.streetEntries, async () => {
+      const row = await db.streetEntries.get(entryId)
+      if (!row) return
+      await db.streetEntries.update(entryId, { houses: row.houses.filter((h) => h.id !== id) })
+    })
   }
 
   async function deleteEntry() {
@@ -442,11 +474,9 @@ export function StreetDetail({
                   )}
                   <button className="icon-btn" title="Remove house" onClick={() => removeHouse(h.id)}>×</button>
                 </div>
-                <input
-                  className="house-note"
-                  placeholder="Note (optional)"
+                <HouseNoteInput
                   value={h.note ?? ''}
-                  onChange={(e) => updateHouse(h.id, { note: e.target.value || undefined })}
+                  onCommit={(v) => updateHouse(h.id, { note: v || undefined })}
                 />
               </li>
             ))}

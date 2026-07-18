@@ -509,13 +509,15 @@ function ContactForm({ onClose, existing, prefill }: { onClose: () => void; exis
     }
 
     if (existing) {
-      // hasAddress false means the address was cleared — drop the stale coords along with it
-      // rather than leaving a ghost pin pointing at the old, no-longer-listed address.
-      await db.people.update(existing.id, {
-        ...record,
-        lat: hasAddress ? resolvedCoords?.lat : undefined,
-        lng: hasAddress ? resolvedCoords?.lng : undefined,
-      })
+      // Coords: clearing the address drops the pin; a fresh/successful geocode moves it; but a
+      // FAILED geocode (offline, rate-limited, or an address OSM can't resolve) must keep the
+      // existing pin rather than wiping an accurate coordinate to undefined (F-A3).
+      const coordUpdate = !hasAddress
+        ? { lat: undefined, lng: undefined }
+        : resolvedCoords
+          ? { lat: resolvedCoords.lat, lng: resolvedCoords.lng }
+          : { lat: existing.lat, lng: existing.lng }
+      await db.people.update(existing.id, { ...record, ...coordUpdate })
       onClose()
       return
     }
