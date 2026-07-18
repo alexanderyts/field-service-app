@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.16.2`.** History runs from the initial scaffold forward.
+**Current version: `0.17.0`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -124,6 +124,11 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.16.2 — Contact & street write-path hardening · 2026-07-18
 - Fix a wiped map pin: editing a contact while a geocode fails (offline / rate-limited / unresolvable address) no longer overwrites the existing coordinate — coords change only when the address is cleared or a geocode succeeds (F013)
 - Fix clobbered house edits: house status/note/add/remove now re-read the street row inside a Dexie transaction, and the house-note field batches typing locally and flushes on blur, so concurrent edits no longer overwrite each other and fast typing can't drop characters (F014)
+
+## 0.17.0 — Ministry & Credit time types · 2026-07-18
+- Collapse the seven time categories to two — **Ministry** and **Credit** — when logging time. Selecting Credit reveals an optional *type* (quick-picks LDC/HLC/Convention/Assembly/Bethel plus free text), saved to the new `TimeLog.creditType`
+- Existing entries are untouched and keep counting correctly: every legacy category (LDC, HLC, …) already counted as credit, so no data migration is needed; editing a legacy entry gently rewrites it to Credit + type
+- Only ministry minutes use the minute bank now; credit is always logged whole, so banked minutes can no longer be misclassified as ministry near the 55h cap (F015)
 
 ---
 

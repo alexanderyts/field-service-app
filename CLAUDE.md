@@ -46,7 +46,7 @@ src/
   scripture.ts         # Scripture reference formatter + autocorrect
   usStates.ts          # State name/abbreviation expansion
   contactStatus.ts     # ContactStatus labels + display order
-  categories.ts        # TimeCategory labels/emoji/order
+  categories.ts        # TimeCategory labels/emoji/order + CREDIT_TYPE_QUICKPICKS
   useGeolocation.ts    # GPS hook wrapping navigator.geolocation
   timeStats.ts         # Credit-hour cap (55h/mo), monthly/yearly + service-year helpers
   goalSegments.ts      # Day goal-ring arc math for the Schedule calendar
@@ -142,9 +142,15 @@ Call { id, personId, date, notHome?, notes?, scriptures?,
 
 **`timeLogs`** — time tracking entries
 ```ts
-TimeLog { id, date, minutes, category: TimeCategory, note? }
-TimeCategory = 'ministry' | 'ldc' | 'hlc' | 'convention' | 'assembly' | 'bethel' | 'other'
+TimeLog { id, date, minutes, category: TimeCategory, note?, creditType? }
+TimeCategory = 'ministry' | 'credit'   // canonical, logged by the UI today
+             | 'ldc' | 'hlc' | 'convention' | 'assembly' | 'bethel' | 'other'   // legacy, still counted as credit
 ```
+
+> The UI logs only **`ministry`** and **`credit`** (with an optional free-text `creditType` sub-label — LDC,
+> HLC, etc.). The other values are **legacy**: rows logged before the collapse still carry them, and every one
+> counts as credit (`isCredit`), so old data totals correctly with no migration. `creditType` is optional +
+> non-indexed → no Dexie bump. Editing a legacy row in `EditLogModal` gently rewrites it to `credit` + `creditType`.
 
 **`appointments`** — return visits / scheduled follow-ups
 ```ts
@@ -240,7 +246,10 @@ Convention `fieldservice_*`. `backup.ts` exports every `fieldservice_*` key **ex
 
 ## Time Tracking Logic (`timeStats.ts`)
 
-- **Credit categories:** everything except `'ministry'` — `isCredit(cat) = cat !== 'ministry'`
+- **Credit categories:** everything except `'ministry'` — `isCredit(cat) = cat !== 'ministry'` (so the
+  canonical `'credit'` and every legacy value all count as credit). Only **ministry** minutes go through the
+  minute bank; **credit is always logged whole** (leftover minutes included), so the bank can't misattribute
+  credit as ministry on roll-over.
 - **Monthly cap:** `CREDIT_CAP_HOURS = 55`. Ministry always applies in full; credit tops it up but the
   combined ministry+credit applied to the yearly goal is capped at 55h/mo. `total` stays uncapped for display.
 - `monthTotals(logs)` → `{ ministry, credit, total, creditUsed, applied }`
@@ -291,10 +300,13 @@ brand/category/tag hues are brightened per dark theme for contrast.
 ### Schedule → Add Time
 - **Date** opens a custom `CalendarPicker`; **Hours/Minutes** open a custom `NumPad` (no native
   `type="date"`/`type="number"` here — intentional for mobile UX).
-- **Round-up dialog** when minutes > 30; leftover minutes go to the **minute bank**
-  (`fieldservice_minute_bank`) which auto-adds a 1-hour ministry entry at 60, with a fly-to-pill animation.
-- Category **pills** (not a dropdown). Per-day planning uses `DayScheduleBlock`s; goal rings via
-  `goalSegments.ts`.
+- **Round-up dialog** when minutes > 30 (**ministry only**); leftover ministry minutes go to the **minute
+  bank** (`fieldservice_minute_bank`) which auto-adds a 1-hour ministry entry at 60, with a fly-to-pill
+  animation. Credit skips the bank/round-up entirely and is logged whole.
+- Category **pills** (not a dropdown): **Ministry** and **Credit** (Credit only shown when the count-credit-hours
+  setting is on). Selecting **Credit** reveals an optional **type** control — `CREDIT_TYPE_QUICKPICKS` chips
+  (LDC/HLC/Convention/Assembly/Bethel) plus free text — saved to `TimeLog.creditType`. Per-day planning uses
+  `DayScheduleBlock`s; goal rings via `goalSegments.ts`.
 
 ### Reports
 - Does NOT auto-run — shows a "Ready when you are" screen with a Run button; cards animate in with a

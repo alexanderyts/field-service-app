@@ -8,6 +8,7 @@ import { InstallCard } from './InstallPrompt'
 import { tipServices, type TipKind } from '../tips'
 import { APP_VERSION } from '../version'
 import { COPYRIGHT_SUMMARY, NOT_AFFILIATED, DEVELOPER_NAME, DEVELOPER_EMAIL } from '../legal'
+import { CREDIT_TYPE_QUICKPICKS } from '../categories'
 import { getProfileName, saveProfileName } from '../profile'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
 import {
@@ -20,15 +21,6 @@ import {
   setNotifyLeadMinutes,
   type NotifyLeadMinutes,
 } from '../notifications'
-
-const CREDIT_CAT_LABELS: Record<string, string> = {
-  ldc: 'LDC (Construction)',
-  hlc: 'HLC',
-  convention: 'Convention',
-  assembly: 'Assembly',
-  bethel: 'Bethel',
-  other: 'Other',
-}
 
 export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTutorial: () => void; onImportEncoded?: (encoded: string) => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -351,14 +343,14 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
               <div>
                 <strong>Count credit hours</strong>
                 <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
-                  Adds LDC, HLC, Convention, Assembly, Bethel, and Other categories when logging time.
+                  Adds a Credit category alongside Ministry when logging time, with an optional type.
                 </p>
               </div>
             </label>
             {creditEnabled && (
               <div className="cat-pills" style={{ marginTop: 2 }}>
-                {Object.entries(CREDIT_CAT_LABELS).map(([k, v]) => (
-                  <span key={k} className="chip" style={{ fontSize: 12, padding: '5px 12px' }}>{v}</span>
+                {CREDIT_TYPE_QUICKPICKS.map((t) => (
+                  <span key={t} className="chip" style={{ fontSize: 12, padding: '5px 12px' }}>{t}</span>
                 ))}
               </div>
             )}

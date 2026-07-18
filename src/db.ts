@@ -61,7 +61,13 @@ export interface Call {
   lng?: number
 }
 
-export type TimeCategory = 'ministry' | 'ldc' | 'hlc' | 'convention' | 'assembly' | 'bethel' | 'other'
+/** `ministry` and `credit` are the two canonical categories the UI logs against today
+    (`credit` carries an optional free-text `creditType` sub-label — LDC, HLC, etc.). The
+    remaining values are LEGACY: rows logged before the collapse still carry `ldc`/`hlc`/…,
+    and every one of them counts as credit (see `isCredit` in `timeStats.ts`), so old data
+    keeps totalling correctly without a migration. Kept in the union so their labels/colors
+    still resolve when rendering historical entries. */
+export type TimeCategory = 'ministry' | 'credit' | 'ldc' | 'hlc' | 'convention' | 'assembly' | 'bethel' | 'other'
 
 /** One suggested (planned) window of time on a weekly-schedule day — minutes since
     midnight, typed by ministry category so a morning of ministry and an afternoon of
@@ -78,6 +84,9 @@ export interface TimeLog {
   minutes: number
   category: TimeCategory
   note?: string
+  /** Optional free-text sub-label for `category: 'credit'` (e.g. "LDC", "Convention").
+      Non-indexed and optional, so it needs no Dexie version bump. */
+  creditType?: string
 }
 
 export interface Appointment {

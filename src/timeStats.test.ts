@@ -18,7 +18,8 @@ function log(hours: number, category: TimeCategory, date = 0): TimeLog {
 describe('isCredit', () => {
   it('treats everything except ministry as credit', () => {
     expect(isCredit('ministry')).toBe(false)
-    for (const c of ['ldc', 'hlc', 'convention', 'assembly', 'bethel', 'other'] as TimeCategory[]) {
+    // 'credit' is the canonical credit category; the rest are legacy values still counted as credit.
+    for (const c of ['credit', 'ldc', 'hlc', 'convention', 'assembly', 'bethel', 'other'] as TimeCategory[]) {
       expect(isCredit(c)).toBe(true)
     }
   })

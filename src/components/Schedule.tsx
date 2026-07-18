@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Appointment, type DayScheduleBlock, type SchedulePrefs, type TimeCategory, type TimeLog } from '../db'
-import { CATEGORY_LABELS, CATEGORY_ORDER } from '../categories'
+import { CATEGORY_LABELS, CATEGORY_ORDER, CREDIT_TYPE_QUICKPICKS } from '../categories'
 import { animateBankValue, collectAndFlyToMinuteBank } from '../minuteBankFly'
 import {
   effectiveMonthlyGoalMin,
@@ -1199,12 +1199,12 @@ function ScheduleMain({
     { date: Date; hours: number; minutes: number; category: TimeCategory; otherNote: string; originEl?: HTMLElement } | null
   >(null)
 
-  async function saveQuickLog(date: Date, totalMin: number, category: TimeCategory, otherNote: string) {
+  async function saveQuickLog(date: Date, totalMin: number, category: TimeCategory, typeNote: string) {
     if (totalMin <= 0) return
     const d = new Date(date)
     d.setHours(12, 0, 0, 0)
-    const note = category === 'other' && otherNote.trim() ? otherNote.trim() : undefined
-    await db.timeLogs.add({ date: d.getTime(), minutes: totalMin, category, note } as TimeLog)
+    const creditType = category === 'credit' && typeNote.trim() ? typeNote.trim() : undefined
+    await db.timeLogs.add({ date: d.getTime(), minutes: totalMin, category, creditType } as TimeLog)
   }
 
   // Logs a scheduled day's planned blocks as real time entries (one per block, by category), then
@@ -1311,6 +1311,14 @@ function ScheduleMain({
     originEl?: HTMLElement
   ) {
     if (h === 0 && m === 0) return
+    // Only ministry minutes ever go through the minute bank (F-A6). The bank is a single
+    // ministry scalar, so routing credit minutes through it would silently reclassify them
+    // as ministry on roll-over. Credit is always logged whole (leftover minutes included).
+    if (category !== 'ministry') {
+      saveQuickLog(date, h * 60 + m, category, otherNote)
+      closeDayModalSmoothly()
+      return
+    }
     if (m === 0) {
       saveQuickLog(date, h * 60, category, otherNote)
       closeDayModalSmoothly()
@@ -1854,6 +1862,7 @@ function ScheduleMain({
                 <div className="visit-info">
                   <span className={`cat-dot ${isCredit(l.category) ? 'credit' : 'ministry'}`} />
                   <strong>{fmtDuration(l.minutes)}</strong> · {CATEGORY_LABELS[l.category]}
+                  {l.creditType ? ` · ${l.creditType}` : ''}
                   {l.note ? ` — ${l.note}` : ''}
                   <div className="muted">
                     {new Date(l.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
@@ -1968,7 +1977,13 @@ function EditLogModal({ log, onClose }: { log: TimeLog; onClose: () => void }) {
   const [dateStr, setDateStr] = useState(() => fmtLocalDate(new Date(log.date)))
   const [hours, setHours] = useState(String(Math.floor(log.minutes / 60)))
   const [minutes, setMinutes] = useState(String(log.minutes % 60))
-  const [category, setCategory] = useState<TimeCategory>(log.category)
+  // Editing collapses to the two canonical categories. A legacy row (ldc/hlc/…) opens as
+  // Credit with its old label seeded into the type field, so saving gently migrates it to
+  // category:'credit' + creditType without losing what it was.
+  const [category, setCategory] = useState<TimeCategory>(log.category === 'ministry' ? 'ministry' : 'credit')
+  const [creditType, setCreditType] = useState(
+    log.creditType ?? (log.category === 'ministry' || log.category === 'credit' ? '' : CATEGORY_LABELS[log.category])
+  )
   const [note, setNote] = useState(log.note ?? '')
 
   const totalMin = (parseInt(hours, 10) || 0) * 60 + (parseInt(minutes, 10) || 0)
@@ -1983,6 +1998,7 @@ function EditLogModal({ log, onClose }: { log: TimeLog; onClose: () => void }) {
       date: nd.getTime(),
       minutes: totalMin,
       category,
+      creditType: category === 'credit' && creditType.trim() ? creditType.trim() : undefined,
       note: note.trim() || undefined,
     })
     onClose()
@@ -2013,11 +2029,20 @@ function EditLogModal({ log, onClose }: { log: TimeLog; onClose: () => void }) {
           <label className="field">
             <span className="field-label">Category</span>
             <select value={category} onChange={(e) => setCategory(e.target.value as TimeCategory)}>
-              {CATEGORY_ORDER.map((c) => (
+              {(['ministry', 'credit'] as const).map((c) => (
                 <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
               ))}
             </select>
           </label>
+          {category === 'credit' && (
+            <label className="field">
+              <span className="field-label">Type of credit (optional)</span>
+              <input value={creditType} onChange={(e) => setCreditType(e.target.value)} placeholder="e.g. LDC, Bethel…" list="edit-credit-types" />
+              <datalist id="edit-credit-types">
+                {CREDIT_TYPE_QUICKPICKS.map((t) => <option key={t} value={t} />)}
+              </datalist>
+            </label>
+          )}
           <label className="field">
             <span className="field-label">Note (optional)</span>
             <input value={note} onChange={(e) => setNote(e.target.value)} />
@@ -2248,9 +2273,7 @@ function DayActionModal({
   const minutesBtnRef = useRef<HTMLButtonElement>(null)
 
   const creditEnabled = localStorage.getItem('fieldservice_credit_hours') === 'yes'
-  const availableCats: TimeCategory[] = creditEnabled
-    ? ['ministry', 'ldc', 'hlc', 'convention', 'assembly', 'bethel', 'other']
-    : ['ministry', 'other']
+  const availableCats: TimeCategory[] = creditEnabled ? ['ministry', 'credit'] : ['ministry']
   const effectiveCategory = availableCats.includes(category) ? category : 'ministry'
 
   function blockDuration(b: EditableBlock): number {
@@ -2473,10 +2496,22 @@ function DayActionModal({
                   ))}
                 </div>
               </div>
-              {effectiveCategory === 'other' && (
+              {effectiveCategory === 'credit' && (
                 <label className="field">
-                  <span className="field-label">Type of ministry</span>
-                  <input value={otherNote} onChange={(e) => setOtherNote(e.target.value)} placeholder="e.g. Letter writing, Cart witnessing…" />
+                  <span className="field-label">Type of credit (optional)</span>
+                  <div className="cat-pills" style={{ marginBottom: 8 }}>
+                    {CREDIT_TYPE_QUICKPICKS.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        className={`chip${otherNote.trim() === t ? ' active' : ''}`}
+                        onClick={() => setOtherNote((prev) => (prev.trim() === t ? '' : t))}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <input value={otherNote} onChange={(e) => setOtherNote(e.target.value)} placeholder="e.g. LDC, Bethel, Cart witnessing…" />
                 </label>
               )}
               <button

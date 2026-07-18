@@ -47,6 +47,9 @@
      for the Schedule weekly calendar. Kept apart from --visit's violet so return-visit
      tick marks in the same view never get confused with a logged category. */
   --cat-ministry: #2f6f5e;
+  /* Credit's swatch tracks the themed --credit accent. Custom properties resolve lazily at
+     the use site, so this one declaration in :root picks up each theme's --credit override. */
+  --cat-credit: var(--credit);
   --cat-ldc: #b5651d;
   --cat-hlc: #2b6cb0;
   --cat-convention: #b23a6b;
