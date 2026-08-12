@@ -116,7 +116,12 @@ export default function Reports() {
 
   // Service year (Sept–Aug), not the calendar year
   const reportServiceYear = serviceYearLabel(targetDate)
-  const monthTerritoriesCompleted = territoryCompletions.filter((t) => inMonth(t.completedAt)).length
+  // Named, newest first — a bare count is unverifiable, and this figure gets copied onto a
+  // real report, so it has to be possible to see what was counted.
+  const monthCompletions = territoryCompletions
+    .filter((t) => inMonth(t.completedAt))
+    .sort((a, b) => b.completedAt - a.completedAt)
+  const monthTerritoriesCompleted = monthCompletions.length
   const yearTerritoriesCompleted = territoryCompletions.filter(
     (t) => serviceYearLabel(new Date(t.completedAt)) === reportServiceYear
   ).length
@@ -157,7 +162,12 @@ export default function Reports() {
     if (atHomeCalls) body += `Conversations: ${atHomeCalls}\n`
     if (notHomeCalls) body += `Not at Home: ${notHomeCalls}\n`
     if (scripturesShared) body += `Scriptures Shared: ${scripturesShared}\n`
-    if (monthTerritoriesCompleted) body += `Custom Territories Completed: ${monthTerritoriesCompleted} this month, ${yearTerritoriesCompleted} this service year\n`
+    if (monthTerritoriesCompleted) {
+      body += `Custom Territories Completed: ${monthTerritoriesCompleted} this month, ${yearTerritoriesCompleted} this service year\n`
+      for (const t of monthCompletions) {
+        body += `  ${t.name} — ${new Date(t.completedAt).toLocaleDateString()}\n`
+      }
+    }
     if (yearGoalMin) body += `\nYearly Goal Progress: ${fmtDuration(yearAppliedMin)} of ${fmtDuration(yearGoalMin)} (${yearPct}%)\n`
     const subject = `Meleo Report — ${monthLabel}`
     window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
@@ -337,6 +347,20 @@ export default function Reports() {
         <div className="card">
           <h4 style={{ marginBottom: 8 }}>Custom Territories</h4>
           <p>🗺️ {monthTerritoriesCompleted} completed this month</p>
+          {monthCompletions.length > 0 && (
+            <ul className="report-territory-list">
+              {monthCompletions.map((t) => (
+                <li key={t.id}>
+                  <span className="report-territory-name">{t.name}</span>
+                  <span className="muted">
+                    {new Date(t.completedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    {' · '}
+                    {t.streetCount} street{t.streetCount !== 1 ? 's' : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           <p className="muted">{yearTerritoriesCompleted} completed this service year ({serviceYearRangeLabel(reportServiceYear)})</p>
         </div>
       )}

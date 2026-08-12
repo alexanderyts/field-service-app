@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.18.0`.** History runs from the initial scaffold forward.
+**Current version: `0.18.1`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -143,6 +143,9 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **You can now complete a grouped territory.** "Complete Territory" only existed on the Map's scratch draft, so the real territories in Ministry → Territories — the ones you actually work through — could never be finished or counted. Completing one records it in Reports and clears the grouping (F026)
 - **Mark a territory's streets finished as you go.** Grouped territories had no way to tick a street off, so a territory could never read as fully worked. Finished streets show struck through
 - Completing a territory never destroys what you learned working it: every street stays in Ministry → Streets with its house numbers, statuses and notes. "Delete Territory" stays separate, for one created by mistake
+
+## 0.18.1 — Reports names the territories it counted · 2026-08-12
+- **"2 completed this month" now says *which* two.** The Custom Territories card showed a bare number with no way to check it from inside the app — so a count that looked wrong couldn't be confirmed or disputed. It now lists each completed territory by name, with the date and street count, and the emailed report carries the same list
 
 ---
 
