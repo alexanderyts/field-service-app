@@ -3573,8 +3573,8 @@ button.small {
 /* ── Backup card: permanence copy + last-backup signal ─────────────────── */
 
 .backup-copy {
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
   margin: 0;
 }
 
@@ -3583,19 +3583,19 @@ button.small {
 .backup-status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: var(--space-4);
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 9px 12px;
+  padding: var(--space-5) var(--space-6);
 }
 
 .backup-status-dot {
-  width: 8px;
-  height: 8px;
+  width: var(--space-4);
+  height: var(--space-4);
   border-radius: 50%;
   background: var(--accent);
   flex-shrink: 0;

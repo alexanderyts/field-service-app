@@ -53,6 +53,46 @@
   --cat-assembly: #9a8b2b;
   --cat-bethel: #4a4e9e;
   --cat-other: #8a8478;
+  /* ── Spacing, type and motion scales ──────────────────────────────────────
+     These are NOT a new design language — every value below was measured from
+     what App.css already uses most, so adopting a token is a rename rather than
+     a redesign. Existing one-off values are converged onto them only in CSS that
+     gets touched for another reason; a repo-wide sweep needs a visual-regression
+     check this project doesn't have yet.
+
+     Measured frequencies (App.css): 8px×47, 6px×37, 10px×33, 12px×19, 4px×15,
+     14px×15 — a 2px step up to 16px. 20px/24px exist but are rare, so they stay
+     one-offs rather than earning a step. */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+
+  /* 13px is this app's body size (26 uses), hence --fs-base sitting mid-scale. */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 15px;
+  --fs-xl: 20px;
+  --fs-2xl: 27px;
+
+  --lh-tight: 1.2;
+  --lh-base: 1.5;
+  --lh-relaxed: 1.6;
+
+  /* Durations and curves already in use — --ease-standard is the cubic-bezier
+     App.css reaches for most (8 uses); --ease-emphasized is its snappier sibling. */
+  --dur-fast: 0.18s;
+  --dur: 0.26s;
+  --dur-slow: 0.4s;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+
   --shadow-sm: 0 1px 2px rgba(33, 30, 26, 0.06);
   --shadow-md: 0 8px 24px rgba(33, 30, 26, 0.08);
   /* Subtle white "lift" under big headings — light themes only; dark mode zeroes it
