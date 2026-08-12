@@ -2,7 +2,12 @@
 // pioneer activity (Rankin County, MS) so the UI can be previewed as it would
 // look after real-world use. Not part of the shipped app; only reachable from
 // the dev-gated button in Misc.tsx.
-import { db, type Person, type Call, type TimeLog, type Appointment, type ContactStatus, type TimeCategory } from './db'
+import {
+  db,
+  type Person, type Call, type TimeLog, type Appointment, type ContactStatus, type TimeCategory,
+  type StreetEntry, type StreetHouse, type HouseStatus, type Territory, type TerritoryStreet,
+  type TerritoryCompletion,
+} from './db'
 import { serviceYearBounds, serviceYearlyApplied } from './timeStats'
 import { wipeAllData } from './backup'
 import { setCreditHoursEnabled } from './settings'
@@ -161,6 +166,112 @@ const LDC_NOTES = [
 
 // Pioneer's chosen service days: Mon, Tue, Wed, Thu, Sat
 const DAYS_OUT = [1, 2, 3, 4, 6]
+
+const HOUSE_NOTES = [
+  'Dog in the yard — friendly', 'Works nights, try afternoons', 'Wants the next tract',
+  'Elderly couple, hard of hearing', 'Spoke briefly, take a magazine', 'Gate usually locked',
+  'New family, just moved in', 'Asked us to come back Saturday',
+]
+
+/** A short run of points along a road, so a seeded street draws as a real line on the map
+    rather than a dot. Straight segments are fine — these never go through road-snapping. */
+function traceAlong(lat: number, lng: number, bearing: 'ns' | 'ew', length = 0.006, steps = 5) {
+  return Array.from({ length: steps }, (_, i) => {
+    const t = (i / (steps - 1)) * length
+    return bearing === 'ns' ? { lat: lat + t, lng: lng + t / 8 } : { lat: lat + t / 8, lng: lng + t }
+  })
+}
+
+function buildHouses(rng: () => number, count: number): StreetHouse[] {
+  const start = randInt(rng, 100, 400)
+  const statuses: (HouseStatus | undefined)[] = [undefined, undefined, 'not-home', undefined, 'no-trespassing', 'other']
+  return Array.from({ length: count }, (_, i) => {
+    const status = pick(rng, statuses)
+    return {
+      id: `h${start + i * 2}-${i}`,
+      // A letter suffix every so often, so the walk-order sort has something to prove.
+      number: rng() < 0.15 ? `${start + i * 2}A` : `${start + i * 2}`,
+      status,
+      note: rng() < 0.35 ? pick(rng, HOUSE_NOTES) : undefined,
+    }
+  })
+}
+
+/**
+ * Streets and territories for previewing the Ministry and Map tabs — and, more usefully, for
+ * exercising the flows that can only be driven by hand: grouping a draft's streets, sending
+ * one to Streets, completing a territory, and editing house numbers/statuses/notes.
+ *
+ * Seeds three things deliberately:
+ *  - standalone Streets entries, with houses in mixed states
+ *  - a GROUPED territory whose streets are each backed by a real entry (the `entryId` link the
+ *    Streets list badges from)
+ *  - a DRAFT territory with untouched traced streets, which is the only place the group /
+ *    send-to-Ministry / complete actions are reachable from
+ */
+async function seedStreetsAndTerritories(rng: () => number) {
+  const brandon = TOWNS[0]
+  const flowood = TOWNS[2]
+
+  // Standalone streets — the Streets list on its own, no territory involved.
+  const standalone: Omit<StreetEntry, 'id'>[] = [
+    { name: 'Government St', city: brandon.city, state: 'Mississippi', zip: brandon.zip, houses: buildHouses(rng, 9), createdAt: Date.now() - 86400000 * 30, points: traceAlong(brandon.lat, brandon.lng, 'ew') },
+    { name: 'Municipal Dr', city: brandon.city, state: 'Mississippi', zip: brandon.zip, houses: buildHouses(rng, 6), createdAt: Date.now() - 86400000 * 21, notes: 'Finished the even side; odd numbers still to do.' },
+    { name: 'River Oaks Dr', city: flowood.city, state: 'Mississippi', zip: flowood.zip, houses: buildHouses(rng, 12), createdAt: Date.now() - 86400000 * 9 },
+  ]
+  await db.streetEntries.bulkAdd(standalone as StreetEntry[])
+
+  // A grouped territory: each street backed by its own entry, linked by entryId.
+  const groupedNames = ['Castlewoods Blvd', 'Steed Rd', 'Luckney Rd']
+  const groupedStreets: TerritoryStreet[] = []
+  for (const [i, name] of groupedNames.entries()) {
+    const entryId = (await db.streetEntries.add({
+      name,
+      city: flowood.city,
+      state: 'Mississippi',
+      zip: flowood.zip,
+      houses: buildHouses(rng, randInt(rng, 5, 10)),
+      createdAt: Date.now() - 86400000 * 14,
+      points: traceAlong(flowood.lat + i * 0.004, flowood.lng - i * 0.005, i % 2 ? 'ns' : 'ew'),
+    } as StreetEntry)) as number
+    groupedStreets.push({
+      id: `g${i}`,
+      name,
+      points: traceAlong(flowood.lat + i * 0.004, flowood.lng - i * 0.005, i % 2 ? 'ns' : 'ew'),
+      done: i === 0,
+      entryId,
+    })
+  }
+  await db.territories.add({
+    name: 'Castlewoods North',
+    createdAt: Date.now() - 86400000 * 14,
+    completed: false,
+    grouped: true,
+    assignedTo: 'Br. Alvarez',
+    streets: groupedStreets,
+  } as Territory)
+
+  // The draft — the Map tab's scratch territory. This is the only territory the group /
+  // send-to-Ministry / complete actions can be reached from, so it's the one that matters
+  // for testing. Its streets are deliberately unbacked (no entryId), as a real trace would be.
+  await db.territories.add({
+    name: 'Custom Territory',
+    createdAt: Date.now() - 86400000 * 3,
+    completed: false,
+    streets: [
+      { id: 'd0', name: 'Salem Rd', points: traceAlong(brandon.lat + 0.01, brandon.lng + 0.008, 'ew'), done: true },
+      { id: 'd1', name: 'Post Rd', points: traceAlong(brandon.lat + 0.016, brandon.lng + 0.002, 'ns'), done: false },
+      { id: 'd2', name: 'Cato Rd', points: traceAlong(brandon.lat + 0.004, brandon.lng + 0.016, 'ns'), done: false },
+      { id: 'd3', name: 'Old Fannin Rd', points: traceAlong(brandon.lat - 0.006, brandon.lng + 0.012, 'ew'), done: false },
+    ],
+  } as Territory)
+
+  // A couple of past completions so Reports has something in that row.
+  await db.territoryCompletions.bulkAdd([
+    { completedAt: Date.now() - 86400000 * 47, name: 'Crossgates East', streetCount: 5 },
+    { completedAt: Date.now() - 86400000 * 12, name: 'Spillway South', streetCount: 3 },
+  ] as TerritoryCompletion[])
+}
 
 function buildPeople(rng: () => number, start: Date, end: Date): Person[] {
   const STATUS_COUNTS: [ContactStatus, number][] = [
@@ -407,6 +518,7 @@ export async function seedDemoData() {
   await db.calls.bulkAdd(calls)
   await db.appointments.bulkAdd(appointments)
   await db.timeLogs.bulkAdd(timeLogs)
+  await seedStreetsAndTerritories(rng)
   await db.schedulePrefs.add({
     id: 1,
     completedSurvey: true,
