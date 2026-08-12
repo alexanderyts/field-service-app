@@ -1,27 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, compareHouseNumbers, uniqueStreetName, type StreetEntry, type StreetHouse, type HouseStatus } from '../db'
+import { db, compareHouseNumbers, type StreetEntry, type StreetHouse, type HouseStatus } from '../db'
 import { expandState } from '../usStates'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import ShareModal from './ShareModal'
 import { SharedBadge, SharedWarning } from './SharedBits'
 import { buildStreetPayload } from '../share'
-
-/** Best-effort lookup of a traced street matching this Ministry-tab entry by name, across
-    every territory (not just the active draft) — used to power a "Jump to Map" action
-    for streets that have a real trace on the map. Returns the midpoint of its points. */
-export async function findStreetTraceMidpoint(streetName: string): Promise<{ lat: number; lng: number } | null> {
-  const territories = await db.territories.toArray()
-  for (const t of territories) {
-    const match = t.streets.find((s) => s.name.trim().toLowerCase() === streetName.trim().toLowerCase())
-    if (match && match.points.length > 0) {
-      const mid = match.points[Math.floor(match.points.length / 2)]
-      return { lat: mid.lat, lng: mid.lng }
-    }
-  }
-  return null
-}
+import { findStreetTraceMidpoint } from '../streets'
 
 const HOUSE_STATUS_OPTIONS: { value: '' | HouseStatus; label: string }[] = [
   { value: '', label: '—' },
@@ -41,33 +27,6 @@ export interface ContactPrefill {
   city?: string
   state?: string
   zip?: string
-}
-
-/** Returns the id of the StreetEntry backing a territory street, creating one if this street
-    isn't already linked to one. This is what makes a street managed identically whether it's
-    standalone or inside a territory — the group/import/manage flows all funnel a street through
-    here so it always has a real StreetEntry behind it. Reuse is by the explicit `entryId` link
-    only, never by name: two traces of the same road are kept as separate entries (a new one gets
-    a "(2)"/"(3)" suffix so you can tell them apart). `extra` optionally seeds the city/state/zip. */
-export async function ensureStreetEntry(
-  street: { entryId?: number; name: string; points?: { lat: number; lng: number }[]; assignedTo?: string },
-  extra?: { city?: string; state?: string; zip?: string }
-): Promise<number> {
-  const entries = await db.streetEntries.toArray()
-  if (street.entryId != null) {
-    const linked = entries.find((e) => e.id === street.entryId)
-    if (linked) return linked.id
-  }
-  return (await db.streetEntries.add({
-    name: uniqueStreetName(street.name, entries.map((e) => e.name)),
-    city: extra?.city,
-    state: extra?.state,
-    zip: extra?.zip,
-    houses: [],
-    points: street.points,
-    assignedTo: street.assignedTo,
-    createdAt: Date.now(),
-  })) as number
 }
 
 /**

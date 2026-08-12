@@ -1,6 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import 'fake-indexeddb/auto'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { deflate } from 'pako'
-import { encodeSharePayload, decodeSharePayload, stripInjectedKeys, type SharePayload } from './share'
+import { db, type Person } from './db'
+import {
+  encodeSharePayload,
+  decodeSharePayload,
+  stripInjectedKeys,
+  importSharedPayload,
+  type SharePayload,
+} from './share'
 
 function toBase64Url(bytes: Uint8Array): string {
   let bin = ''
@@ -102,5 +110,108 @@ describe('stripInjectedKeys — runtime id removal', () => {
     const input = { id: 3, name: 'x' }
     stripInjectedKeys(input)
     expect(input.id).toBe(3)
+  })
+})
+
+// Import writes to the database, so these run against fake-indexeddb rather than asserting on
+// the payload alone — the point of F014 is what actually lands in a table.
+describe('importSharedPayload — what reaches the database', () => {
+  beforeEach(async () => {
+    await db.open()
+    await db.transaction('rw', db.tables, async () => {
+      for (const t of db.tables) await t.clear()
+    })
+  })
+
+  it('imports a contact and its calls as new records', async () => {
+    await importSharedPayload({
+      v: 1,
+      kind: 'contact',
+      from: 'Sam',
+      data: {
+        person: { name: 'Jane Doe', status: 'interested', dateMet: 0 },
+        calls: [{ date: 1, notes: 'first' }, { date: 2, notes: 'second' }],
+      },
+    } as SharePayload)
+
+    const people = await db.people.toArray()
+    expect(people).toHaveLength(1)
+    expect(people[0].name).toBe('Jane Doe')
+    expect(people[0].receivedFrom?.name).toBe('Sam')
+
+    const calls = await db.calls.toArray()
+    expect(calls).toHaveLength(2)
+    // Calls must hang off the LOCAL new person, not any id the sender supplied.
+    expect(calls.every((c) => c.personId === people[0].id)).toBe(true)
+  })
+
+  it('ignores an injected primary key instead of colliding with a real row', async () => {
+    const mine = (await db.people.add({ name: 'Mine', status: 'interested', dateMet: 0, createdAt: 0 } as Person)) as number
+
+    // A hand-built payload naming an id that already exists. Before F014 this reached
+    // db.people.add() and threw ConstraintError, aborting the import part-way.
+    await importSharedPayload({
+      v: 1,
+      kind: 'contact',
+      from: 'Attacker',
+      data: {
+        person: { id: mine, name: 'Injected', status: 'interested', dateMet: 0, sharedWith: [{ name: 'forged', at: 0 }] },
+        calls: [],
+      },
+    } as unknown as SharePayload)
+
+    const people = await db.people.toArray()
+    expect(people).toHaveLength(2)
+    expect((await db.people.get(mine))!.name).toBe('Mine')
+    const imported = people.find((p) => p.name === 'Injected')!
+    expect(imported.id).not.toBe(mine)
+    expect(imported.sharedWith).toBeUndefined()
+    expect(imported.receivedFrom?.name).toBe('Attacker')
+  })
+
+  it('imports a territory, backing each street with its own entry', async () => {
+    await importSharedPayload({
+      v: 1,
+      kind: 'territory',
+      from: 'Sam',
+      data: {
+        name: 'North Side',
+        streets: [
+          { id: 'a', name: 'Oak St', points: [{ lat: 32.3, lng: -90 }], done: false, entryId: 7 },
+          { id: 'b', name: 'Elm St', points: [{ lat: 32.4, lng: -90.1 }], done: false, entryId: 8 },
+        ],
+      },
+    } as unknown as SharePayload)
+
+    const territories = await db.territories.toArray()
+    expect(territories).toHaveLength(1)
+    expect(territories[0].grouped).toBe(true)
+
+    const entries = await db.streetEntries.toArray()
+    expect(entries).toHaveLength(2)
+    // The sender's entryIds are theirs, not ours — each street must point at a local entry.
+    for (const s of territories[0].streets) {
+      expect([7, 8]).not.toContain(s.entryId)
+      expect(entries.some((e) => e.id === s.entryId)).toBe(true)
+    }
+  })
+
+  it('gives two streets that shared one sender entry the same local entry', async () => {
+    await importSharedPayload({
+      v: 1,
+      kind: 'territory',
+      from: 'Sam',
+      data: {
+        name: 'North Side',
+        streets: [
+          { id: 'a', name: 'Oak St', points: [{ lat: 32.3, lng: -90 }], done: false, entryId: 7 },
+          { id: 'b', name: 'Oak St', points: [{ lat: 32.5, lng: -90.2 }], done: false, entryId: 7 },
+        ],
+      },
+    } as unknown as SharePayload)
+
+    expect(await db.streetEntries.count()).toBe(1)
+    const streets = (await db.territories.toArray())[0].streets
+    expect(streets[0].entryId).toBe(streets[1].entryId)
   })
 })
