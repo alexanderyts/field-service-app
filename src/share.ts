@@ -32,6 +32,17 @@ export interface SharePayload {
 // file fallback instead. (qrcode's own "data too big" throw is a second backstop.)
 export const MAX_QR_URL_LEN = 1200
 
+// A link can be sent (pasted into a message, tapped) far past the point where it stops being
+// a scannable QR, so the two limits are separate. This one is about what survives being
+// carried by a messaging app and re-opened by a browser — well under the ~2 KB some of them
+// still truncate at. Past it, the file is the only honest transport.
+export const MAX_LINK_URL_LEN = 1800
+
+/** Whether this payload can travel as a tappable link, as opposed to only as a file. */
+export function canShareAsLink(encoded: string): boolean {
+  return buildShareUrl(encoded).length <= MAX_LINK_URL_LEN
+}
+
 // Import is the app's one untrusted-input boundary: a scanned link or a picked .meleo file
 // comes from outside this device. These caps + shape checks keep a malformed or hostile
 // payload from wedging the import — a huge encoded blob (real shares are single-digit KB), a

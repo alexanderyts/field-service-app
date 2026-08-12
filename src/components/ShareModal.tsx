@@ -5,6 +5,7 @@ import {
   type ShareKind,
   type SharePayload,
   buildShareUrl,
+  canShareAsLink,
   encodeSharePayload,
   generateQrDataUrl,
   recordShare,
@@ -12,8 +13,9 @@ import {
 } from '../share'
 
 /** The share flow, reused by contact/street/territory detail views. Asks who the item is
-    going to (recorded locally for attribution + the edit-warning), then produces either a
-    QR to scan or — for items too large to scan reliably — a shareable file. */
+    going to (recorded locally for attribution + the edit-warning), then offers the three
+    transports the same payload can travel by: a QR to scan face-to-face, a tappable link to
+    send, or a file for payloads too large to be either. */
 export default function ShareModal({
   kind,
   recordId,
@@ -33,8 +35,9 @@ export default function ShareModal({
   const [busy, setBusy] = useState(false)
   const [qr, setQr] = useState<string | null>(null)
   const [encoded, setEncoded] = useState<string | null>(null)
+  const [url, setUrl] = useState<string | null>(null)
   const [tooBig, setTooBig] = useState(false)
-  const [fileMsg, setFileMsg] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function generate() {
@@ -47,8 +50,8 @@ export default function ShareModal({
       const payload = await buildPayload(from)
       const enc = await encodeSharePayload(payload)
       setEncoded(enc)
-      const url = buildShareUrl(enc)
-      const dataUrl = await generateQrDataUrl(url)
+      if (canShareAsLink(enc)) setUrl(buildShareUrl(enc))
+      const dataUrl = await generateQrDataUrl(buildShareUrl(enc))
       if (dataUrl) setQr(dataUrl)
       else setTooBig(true)
     } catch {
@@ -56,6 +59,32 @@ export default function ShareModal({
     } finally {
       setBusy(false)
     }
+  }
+
+  async function copyLink() {
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+      setMsg('Link copied — paste it into a message.')
+    } catch {
+      // No clipboard permission (or an insecure origin): showing the link is still a way out.
+      setMsg(url)
+    }
+  }
+
+  async function sendLink() {
+    if (!url) return
+    setMsg(null)
+    const shareData = { title: `Meleo — ${itemName}`, text: `“${itemName}” — open this in Meleo:`, url }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.canShare?.(shareData)) {
+        await navigator.share(shareData)
+        return
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
+    }
+    await copyLink()
   }
 
   async function shareQrImage() {
@@ -80,12 +109,13 @@ export default function ShareModal({
 
   async function shareFile() {
     if (!encoded) return
-    setFileMsg(null)
+    setMsg(null)
     const how = await shareEncodedFile(encoded, `meleo-${kind}-${itemName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`)
-    setFileMsg(how === 'shared' ? 'Shared — the other device can open it in Meleo.' : 'File downloaded — send it to the other person to import.')
+    setMsg(how === 'shared' ? 'Shared — the other device can open it in Meleo.' : 'File downloaded — send it to the other person to import.')
   }
 
   const started = qr !== null || tooBig
+  const them = recipient.trim() || 'them'
 
   return (
     <ModalPortal>
@@ -103,29 +133,44 @@ export default function ShareModal({
                 <input value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="e.g. John Smith" autoFocus />
               </label>
               <p className="muted" style={{ fontSize: 12 }}>
-                They scan the code with their phone's camera to import it into their own Meleo. Nothing is sent to a
-                server — the data travels only in the link.
+                Scan it in person, or send it as a link. Nothing is sent to a server — the data travels inside the
+                link itself.
               </p>
               <button onClick={generate} disabled={busy}>{busy ? 'Preparing…' : 'Create Share Code'}</button>
               {error && <p className="error">{error}</p>}
             </>
-          ) : qr ? (
-            <>
-              <img src={qr} alt="Share QR code" style={{ width: '100%', maxWidth: 280, margin: '0 auto', display: 'block', borderRadius: 8 }} />
-              <p className="muted" style={{ fontSize: 13, textAlign: 'center' }}>
-                Have {recipient.trim() || 'them'} scan this with their camera.
-              </p>
-              <button className="secondary" onClick={shareQrImage}>Save / send QR image</button>
-              <button className="secondary" onClick={onClose}>Done</button>
-            </>
           ) : (
             <>
-              <p className="muted" style={{ fontSize: 13 }}>
-                This item is too large for a scannable code, so it's shared as a small file instead — send it to
-                {recipient.trim() ? ` ${recipient.trim()}` : ' them'} and they open it in Meleo to import.
-              </p>
-              <button onClick={shareFile}>Share as File</button>
-              {fileMsg && <p className="muted" style={{ fontSize: 13 }}>{fileMsg}</p>}
+              {qr && (
+                <>
+                  <img src={qr} alt="Share QR code" style={{ width: '100%', maxWidth: 280, margin: '0 auto', display: 'block', borderRadius: 8 }} />
+                  <p className="muted" style={{ fontSize: 13, textAlign: 'center' }}>
+                    Together right now? Have {them} scan this with their <strong>camera app</strong>.
+                  </p>
+                </>
+              )}
+              {tooBig && (
+                <p className="muted" style={{ fontSize: 13 }}>
+                  This item is too large for a scannable code{url ? ', so send it as a link or a file' : ", so it has to travel as a file"} —
+                  {' '}{them} opens it in Meleo to import.
+                </p>
+              )}
+
+              <div className="share-send">
+                <span className="share-send-label">{qr ? 'Not together? Send it instead' : 'Send it'}</span>
+                {url && <button onClick={sendLink}>Send link</button>}
+                {url && <button className="secondary" onClick={copyLink}>Copy link</button>}
+                <button className="secondary" onClick={shareFile}>Share as file</button>
+                {qr && <button className="secondary" onClick={shareQrImage}>Save QR image</button>}
+              </div>
+
+              {msg && <p className="muted share-send-msg">{msg}</p>}
+              {import.meta.env.DEV && url?.includes('localhost') && (
+                <p className="error" style={{ fontSize: 12 }}>
+                  Dev server: this link points at <strong>localhost</strong>, so it only opens on this machine. To test
+                  on a phone, run the dev server with <strong>--host</strong> and load the app over your network address.
+                </p>
+              )}
               <button className="secondary" onClick={onClose}>Done</button>
             </>
           )}

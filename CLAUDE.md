@@ -20,7 +20,7 @@ codes / files, never a server.
 | Database | Dexie.js 4 + dexie-react-hooks (`useLiveQuery`) → IndexedDB |
 | Map | Leaflet + react-leaflet 5 |
 | Geocoding | Nominatim (OSM) for addresses/reverse-geocode; Overpass API for road-snapping traces — free, no key |
-| Sharing | pako (deflate) + qrcode — compressed payload in a URL hash → QR or `.meleo` file |
+| Sharing | pako (deflate) + qrcode — compressed payload in a URL hash → QR, link, or `.meleo` file |
 | PDF forms | pdf-lib — fills the real S-205b auxiliary-pioneer AcroForm |
 | Font | Satoshi, **bundled locally** as woff2 (`src/assets/fonts/`, `@font-face` in `index.css`) — works offline |
 | Lint | oxlint |
@@ -266,9 +266,11 @@ Two keys are still module-locals inside `Schedule.tsx` (`_minute_bank`,
 ## Sharing (`share.ts` + `ShareModal` / `ImportConfirm` / `SharedBits`)
 
 Peer-to-peer, no server. A contact/street/territory is serialized, deflated (pako), base64url-encoded,
-and put in a deep-link URL **hash** (`#i=…`). Small payloads → a scannable **QR**; large ones → a
-`.meleo` **file** via the OS share sheet. Receiving scans the QR (opens the app at that hash) or imports
-the file; `App.tsx` captures the hash at load and offers `ImportConfirm`. Imports always create **new**
+and put in a deep-link URL **hash** (`#i=…`). That one URL travels by three transports, offered together
+in `ShareModal`: a scannable **QR** (≤ `MAX_QR_URL_LEN`, face-to-face only — the receiver scans with their
+phone's *camera app*; there is no scanner inside Meleo), a tappable **link** to send or copy
+(≤ `MAX_LINK_URL_LEN`, via `canShareAsLink`), and a `.meleo` **file** via the OS share sheet, which is the
+only transport with no size ceiling. `App.tsx` captures the hash at load and offers `ImportConfirm`. Imports always create **new**
 records tagged `receivedFrom`; the owner's copy accumulates `sharedWith`. `SharedBadge`/`SharedWarning`
 surface that attribution and warn before editing a shared item.
 

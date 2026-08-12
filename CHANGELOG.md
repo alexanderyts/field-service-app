@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.18.1`.** History runs from the initial scaffold forward.
+**Current version: `0.19.0`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -146,6 +146,12 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 
 ## 0.18.1 — Reports names the territories it counted · 2026-08-12
 - **"2 completed this month" now says *which* two.** The Custom Territories card showed a bare number with no way to check it from inside the app — so a count that looked wrong couldn't be confirmed or disputed. It now lists each completed territory by name, with the date and street count, and the emailed report carries the same list
+
+## 0.19.0 — Send a share as a link · 2026-08-12
+- **You can now send a share to someone who isn't next to you.** A QR only works face-to-face — the receiver points their camera at your screen — so "Save / send QR image" was a dead end: you'd text someone a *picture* of a code they can't scan. The share screen now offers **Send link** (straight to Messages, WhatsApp, email) and **Copy link** alongside the QR
+- **"Share as file" is always available**, not just for items too large to fit in a code
+- The share screen now says to scan with your **camera app** — Meleo has no built-in scanner, and the old wording didn't make that clear
+- Running the dev server? The share screen now warns when a link points at `localhost`, which can only ever open on the machine that made it
 
 ---
 
