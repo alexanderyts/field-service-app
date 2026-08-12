@@ -152,6 +152,19 @@ export async function importBackup(file: File): Promise<ImportSummary> {
     throw new Error("That doesn't look like a Meleo backup file.")
   }
 
+  // The format is versioned precisely so a newer file can be recognized and refused rather
+  // than half-applied. Restore is clear-then-bulkAdd, so importing a file this build doesn't
+  // understand would wipe real tables and replace them with rows shaped for a schema that
+  // doesn't exist here — destroying data to install data that won't work. Older files are
+  // still accepted: this build knows every format it has ever written.
+  const fileFormat = typeof data.formatVersion === 'number' ? data.formatVersion : 1
+  if (fileFormat > BACKUP_FORMAT_VERSION) {
+    throw new Error(
+      `This backup was made by a newer version of Meleo (${data.appVersion ?? 'unknown'}). ` +
+        'Update the app, then restore it — importing it now could damage your current data.'
+    )
+  }
+
   const knownTables = new Set(db.tables.map((t) => t.name))
   const counts: Record<string, number> = {}
 

@@ -458,7 +458,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         <div className="row">
           <button onClick={handleExport} disabled={backupBusy}>Export Backup</button>
           <button className="secondary" onClick={() => fileInputRef.current?.click()} disabled={backupBusy}>
-            Restore from Backup
+            Restore (replaces current data)
           </button>
         </div>
         <input
