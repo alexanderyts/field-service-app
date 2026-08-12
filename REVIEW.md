@@ -202,13 +202,22 @@ rings and legends while still counted in the totals** — which reads as data lo
 5. **Test:** assert a legacy row still renders after migration. That's the regression this
    correction exists to prevent.
 
-**⚠️ Open question — what `'other'` becomes.** Today `'other'` is offered *even when credit hours
-are turned off* (`['ministry', 'other']`), its prompt reads **"Type of ministry"** with the examples
-*"Letter writing, Cart witnessing"* — and yet `isCredit('other')` is **true**, so it counts as
-credit against the 55h cap. Letter writing and cart witnessing are field ministry. The category
-conflates "a form of ministry I want to name" with "other credit-earning activity", and currently
-treats both as credit. Whichever way this resolves changes historical figures, so it needs an
-explicit decision before the migration is written.
+**✅ Resolved — what `'other'` becomes.** Today `'other'` is offered *even when credit hours are
+turned off*, its prompt reads **"Type of ministry"** with the examples *"Letter writing, Cart
+witnessing"* — and yet `isCredit('other')` is **true**, so it counts as credit against the 55h cap.
+Letter writing and cart witnessing are field ministry, so the control has always promised one
+thing and done another.
+
+**Decision: Ministry stays Ministry; everything else, `'other'` included, migrates to Credit** —
+see [ADR-0001](docs/adr/0001-legacy-other-time-migrates-to-credit.md). This keeps every historical
+figure identical to what was already submitted to the congregation, which matters more than the
+label being retroactively right. Assert it with a test: the migration must not move any month's
+applied total.
+
+**The `'other'` prompt copy must change in the same work.** Leaving "Type of ministry" with
+ministry examples on a control that produces Credit is the original defect; migrating without
+fixing it preserves the trap for new entries. Going forward, letter writing and cart witnessing
+are logged as **Ministry** with an Activity Note.
 
 **F-A6 ties in here:** cleanest is to bank **ministry minutes only** and log credit whole, which
 removes the misattribution near the cap.
