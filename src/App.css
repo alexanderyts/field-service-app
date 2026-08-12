@@ -3569,3 +3569,46 @@ button.small {
 .numpad-controls .chip {
   flex: 1;
 }
+
+/* ── Backup card: permanence copy + last-backup signal ─────────────────── */
+
+.backup-copy {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* A quiet status line rather than a warning banner: the point is that the user always
+   knows where they stand, not that they're nagged every time they open the tab. */
+.backup-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+}
+
+.backup-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* "Never backed up" is the one state worth colouring — it's the only one the user can't
+   discover by reading a date, and the one where the safety net genuinely doesn't exist. */
+.backup-status.never {
+  color: var(--danger);
+  border-color: var(--danger-soft);
+  background: var(--danger-soft);
+}
+
+.backup-status.never .backup-status-dot {
+  background: var(--danger);
+}

@@ -1,5 +1,6 @@
 import { db } from './db'
 import { APP_VERSION } from './version'
+import { setLastBackupAt, LAST_BACKUP_AT_KEY } from './settings'
 
 // Full local backup / restore. Because the app is local-first with no server, a downloadable
 // JSON file is the ONLY way a tester's data survives a device wipe — and it's the bridge to
@@ -15,12 +16,15 @@ const BACKUP_FORMAT_VERSION = 1
 //    listed so a backup taken by a build old enough to still hold it doesn't carry it either.
 //  - notify_sent_ids: transient notification-dedupe bookkeeping, not user data.
 //  - dark_mode: legacy key superseded by `fieldservice_theme`.
+//  - last_backup_at: a record of when THIS device last exported; restoring someone else's
+//    file (or an old one of your own) must not overwrite that with a stale time.
 const SETTINGS_BLOCKLIST = new Set([
   'fieldservice_privacy_v1',
   'fieldservice_privacy_v2',
   'fieldservice_tutorial_seen',
   'fieldservice_notify_sent_ids',
   'fieldservice_dark_mode',
+  LAST_BACKUP_AT_KEY,
 ])
 
 export interface BackupFile {
@@ -77,9 +81,12 @@ export async function exportBackup(): Promise<'shared' | 'downloaded'> {
     if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: 'Meleo backup' })
+        setLastBackupAt(Date.now())
         return 'shared'
       } catch (e) {
         // User dismissed the share sheet — treat as done, don't also trigger a download.
+        // Deliberately NOT stamped as a backup: a dismissed sheet produced no file, and a
+        // "Last backup: just now" line the user hasn't earned is worse than no line at all.
         if (e instanceof Error && e.name === 'AbortError') return 'shared'
         // Any other share failure: fall through to the download path.
       }
@@ -92,6 +99,11 @@ export async function exportBackup(): Promise<'shared' | 'downloaded'> {
   a.href = url
   a.download = filename
   document.body.appendChild(a)
+  // The closest thing to a completion signal this path has: `a.click()` hands the file to
+  // the browser, which offers no event for "the user actually saved it" and lets them
+  // cancel the save dialog silently. So the stamp means "an export reached the OS", which
+  // is the strongest claim available here — see AUDIT F016.
+  setLastBackupAt(Date.now())
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1500)

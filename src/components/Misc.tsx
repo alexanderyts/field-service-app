@@ -9,7 +9,8 @@ import { tipServices, type TipKind } from '../tips'
 import { APP_VERSION } from '../version'
 import { COPYRIGHT_SUMMARY, NOT_AFFILIATED, DEVELOPER_NAME, DEVELOPER_EMAIL } from '../legal'
 import { getProfileName, saveProfileName } from '../profile'
-import { creditHoursEnabled, setCreditHoursEnabled, getTheme, setTheme as saveTheme, type Theme } from '../settings'
+import { creditHoursEnabled, setCreditHoursEnabled, getTheme, setTheme as saveTheme, getLastBackupAt, type Theme } from '../settings'
+import { formatTimeAgo } from '../timeAgo'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
 import {
   NOTIFY_LEAD_OPTIONS,
@@ -96,6 +97,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
   const [pendingImport, setPendingImport] = useState<File | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null)
+  const [lastBackupAt, setLastBackupAt] = useState<number | null>(() => getLastBackupAt())
 
   async function handleExport() {
     setExportMsg(null)
@@ -106,6 +108,9 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
     } catch {
       setExportMsg('Could not create the backup. Please try again.')
     } finally {
+      // Re-read rather than stamping locally: exportBackup only records the time at its real
+      // completion points, so a dismissed share sheet correctly leaves this line unchanged.
+      setLastBackupAt(getLastBackupAt())
       setBackupBusy(false)
     }
   }
@@ -432,10 +437,24 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
       {/* Backup & Restore */}
       <div className="card">
         <strong>💾 Backup &amp; Restore</strong>
-        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
-          Your data lives only on this device. Save a backup file to keep it safe, move it to a new
-          device, or carry it into a future version of the app. Back up regularly while field testing.
+        <p className="muted backup-copy">
+          Everything you record lives only on this device. If you clear your browser data, or lose
+          or replace the phone, it's gone — there's no copy on a server to restore from, because
+          there is no server.
         </p>
+        <p className="muted backup-copy">
+          A backup file is the only way back. Keep a recent one somewhere you'd still have it if
+          this device disappeared, and use it to move to a new device or into a future version of
+          the app.
+        </p>
+
+        <div className={`backup-status${lastBackupAt === null ? ' never' : ''}`}>
+          <span className="backup-status-dot" aria-hidden="true" />
+          {lastBackupAt === null
+            ? "You've never backed up"
+            : `Last backup: ${formatTimeAgo(lastBackupAt, Date.now())}`}
+        </div>
+
         <div className="row">
           <button onClick={handleExport} disabled={backupBusy}>Export Backup</button>
           <button className="secondary" onClick={() => fileInputRef.current?.click()} disabled={backupBusy}>
