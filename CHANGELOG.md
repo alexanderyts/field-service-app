@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.17.0`.** History runs from the initial scaffold forward.
+**Current version: `0.17.1`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -130,6 +130,13 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - Add spacing/type/motion design tokens to `:root`, measured from the values `App.css` already uses most; adopted only in newly-touched CSS
 - Accessibility: 34 icon-only controls gained accessible names, decorative emoji are hidden from assistive tech, and the active tab is announced. Touch targets measured — `.icon-btn` and the tab bar already meet 44px; `.chip` can't without reflowing every tab (tracked as F017)
 - New tests: 49 added (55 → 104), covering the settings module, the aux-config validator, the share hardening, and the new "time ago" formatter
+
+## 0.17.1 — Data-loss fixes · 2026-08-12
+- **Your map pins survive a failed address lookup.** Editing a contact's address while offline used to silently delete its map location. Now an address that only *looks* edited (typed and undone, or retyped the same) keeps its pin without a lookup at all; and if a genuinely new address can't be found, Meleo asks before dropping the old pin instead of deciding for you (F022)
+- **Fast house edits no longer overwrite each other.** Setting one house's status and then editing another's note within a moment could silently revert the first. House notes now save when you finish typing rather than on every keystroke, so characters can't be dropped either (F023)
+- **A backup from a newer version of Meleo is refused instead of applied.** Restoring one would have wiped your data and replaced it with records this version can't read. The message names the version that made the file. "Restore from Backup" is now labelled "Restore (replaces current data)" (F024)
+- **Bulk-deleting contacts, grouping a territory, sending a street to Ministry, and completing a territory** are each one all-or-nothing operation now. Interrupted partway, they used to leave orphaned call history, duplicate street entries, a street in two places at once, or — worst — a completed territory with its completion record lost for good (F025)
+- New tests: 16 added (104 → 120)
 
 ---
 
