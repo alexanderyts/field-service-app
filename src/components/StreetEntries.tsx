@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, compareHouseNumbers, uniqueStreetName, type StreetEntry, type StreetHouse, type HouseStatus } from '../db'
 import { expandState } from '../usStates'
@@ -349,28 +349,41 @@ export function StreetDetail({
   const address = [entry.city, entry.state, entry.zip].filter(Boolean).join(', ')
   const sortedHouses = [...entry.houses].sort((a, b) => compareHouseNumbers(a.number, b.number))
 
+  // Every houses[] write goes through here. Rebuilding the array from the render-time
+  // `entry` snapshot meant two edits issued inside one useLiveQuery round-trip both read the
+  // same stale array and the second silently reverted the first — set a house's status, then
+  // edit another house's note within ~100ms, and the status change vanishes. Re-reading the
+  // row inside a transaction and recomputing from THAT copy makes the race structurally
+  // impossible. Same pattern as `mutateSchedulePrefs` in Schedule.tsx (F012).
+  async function mutateHouses(recompute: (houses: StreetHouse[]) => StreetHouse[] | void) {
+    await db.transaction('rw', db.streetEntries, async () => {
+      const fresh = await db.streetEntries.get(entryId)
+      if (!fresh) return
+      const next = recompute(fresh.houses)
+      if (next) await db.streetEntries.update(entryId, { houses: next })
+    })
+  }
+
   async function addHouses(newHouses: PadHouse[]) {
-    if (!entry) return
-    const existingNums = new Set(entry.houses.map((h) => h.number.toLowerCase()))
-    const additions: StreetHouse[] = []
-    for (const h of newHouses) {
-      const trimmed = h.number.trim()
-      if (!trimmed || existingNums.has(trimmed.toLowerCase())) continue
-      existingNums.add(trimmed.toLowerCase())
-      additions.push({ id: houseId(), number: trimmed, status: h.status, note: h.note })
-    }
-    if (additions.length) await db.streetEntries.update(entry.id, { houses: [...entry.houses, ...additions] })
+    await mutateHouses((houses) => {
+      const existingNums = new Set(houses.map((h) => h.number.toLowerCase()))
+      const additions: StreetHouse[] = []
+      for (const h of newHouses) {
+        const trimmed = h.number.trim()
+        if (!trimmed || existingNums.has(trimmed.toLowerCase())) continue
+        existingNums.add(trimmed.toLowerCase())
+        additions.push({ id: houseId(), number: trimmed, status: h.status, note: h.note })
+      }
+      if (additions.length) return [...houses, ...additions]
+    })
   }
 
   async function updateHouse(id: string, patch: Partial<StreetHouse>) {
-    if (!entry) return
-    const houses = entry.houses.map((h) => (h.id === id ? { ...h, ...patch } : h))
-    await db.streetEntries.update(entry.id, { houses })
+    await mutateHouses((houses) => houses.map((h) => (h.id === id ? { ...h, ...patch } : h)))
   }
 
   async function removeHouse(id: string) {
-    if (!entry) return
-    await db.streetEntries.update(entry.id, { houses: entry.houses.filter((h) => h.id !== id) })
+    await mutateHouses((houses) => houses.filter((h) => h.id !== id))
   }
 
   async function deleteEntry() {
@@ -443,11 +456,9 @@ export function StreetDetail({
                   )}
                   <button className="icon-btn" title="Remove house" aria-label="Remove house" onClick={() => removeHouse(h.id)}>×</button>
                 </div>
-                <input
-                  className="house-note"
-                  placeholder="Note (optional)"
+                <HouseNote
                   value={h.note ?? ''}
-                  onChange={(e) => updateHouse(h.id, { note: e.target.value || undefined })}
+                  onCommit={(note) => updateHouse(h.id, { note: note || undefined })}
                 />
               </li>
             ))}
@@ -506,6 +517,52 @@ export interface PadHouse {
  * close (single submit path, so no chance of double-adding). Outside that mode, ✓ submits
  * the single house and closes.
  */
+/**
+ * A house note that holds its own text and writes only when the user is done with it.
+ *
+ * Writing on every keystroke sent each character through IndexedDB and back out via
+ * useLiveQuery before it could be re-rendered as the input's value — so fast typing dropped
+ * characters, and every character was another chance to clobber a concurrent edit elsewhere
+ * in the list. Now the field owns the text while it's being edited and commits on blur, with
+ * a debounce as the backstop for a modal dismissed mid-typing.
+ */
+function HouseNote({ value, onCommit }: { value: string; onCommit: (value: string) => void }) {
+  const [text, setText] = useState(value)
+  const committed = useRef(value)
+
+  // Re-seed only when the STORED value changes to something this field didn't write (a
+  // restore, or an edit on another device). Without that guard, our own write echoing back
+  // through useLiveQuery would reset the caret mid-word.
+  useEffect(() => {
+    if (value !== committed.current) {
+      committed.current = value
+      setText(value)
+    }
+  }, [value])
+
+  function flush(next: string) {
+    if (next === committed.current) return
+    committed.current = next
+    onCommit(next)
+  }
+
+  useEffect(() => {
+    const t = window.setTimeout(() => flush(text), 700)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text])
+
+  return (
+    <input
+      className="house-note"
+      placeholder="Note (optional)"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => flush(text)}
+    />
+  )
+}
+
 function HouseNumberPad({ onSubmit, onClose }: { onSubmit: (houses: PadHouse[]) => void; onClose: () => void }) {
   const [value, setValue] = useState('')
   const [status, setStatus] = useState<'' | HouseStatus>('')
