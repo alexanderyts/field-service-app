@@ -5,6 +5,7 @@ import { STATUS_LABELS, STATUS_ORDER } from '../contactStatus'
 import { useCurrentLocation } from '../useGeolocation'
 import { analyzeScripture, formatScripture } from '../scripture'
 import { expandState } from '../usStates'
+import { sameAddress } from '../address'
 import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
 import StreetEntries, { type ContactPrefill } from './StreetEntries'
@@ -410,6 +411,7 @@ function ContactForm({ onClose, existing, prefill }: { onClose: () => void; exis
   const [scriptureSuggestion, setScriptureSuggestion] = useState<{ original: string; suggestion: string } | null>(
     null
   )
+  const [confirmDropCoords, setConfirmDropCoords] = useState<{ scripture: string | undefined } | null>(null)
   const { getLocation, loading, error } = useCurrentLocation()
   // Seeded from the existing record's coords (if any) so editing an unrelated field
   // (phone, notes, status…) doesn't trigger a network re-geocode that could silently
@@ -478,25 +480,47 @@ function ContactForm({ onClose, existing, prefill }: { onClose: () => void; exis
     commitSave(undefined)
   }
 
-  async function commitSave(finalScripture: string | undefined) {
+  async function commitSave(finalScripture: string | undefined, dropStaleCoords = false) {
     setSaving(true)
     const metMs = metDate ? combineDateTime(metDate, metTime) : Date.now()
-    const hasAddress = Boolean(street.trim() || city.trim() || state.trim() || zip.trim())
+    const nextAddress = { street: street.trim(), city: city.trim(), state: expandState(state), zip: zip.trim() }
+    const hasAddress = Boolean(nextAddress.street || nextAddress.city || nextAddress.state || nextAddress.zip)
 
     // Only geocode when there's an address but no already-known coordinate for it — a
     // fresh GPS fix, an autocomplete pick, or (on edit) the contact's existing coords
     // when the address wasn't touched. Never re-geocode an address the user didn't change.
     let resolvedCoords = coords
+    // Typing in an address field clears `coords` on the first keystroke, but typing isn't the
+    // same as changing: touch-and-undo, or retyping a value identically, would otherwise throw
+    // away a good coordinate and force a pointless network round-trip. If the text a save is
+    // about to write is the same address the stored coordinate came from, that coordinate is
+    // still valid for it.
+    if (hasAddress && !resolvedCoords && existing?.lat != null && existing.lng != null && sameAddress(nextAddress, existing)) {
+      resolvedCoords = { lat: existing.lat, lng: existing.lng }
+    }
     if (hasAddress && !resolvedCoords) {
-      resolvedCoords = await geocodeAddress(street.trim(), city.trim(), state.trim(), zip.trim())
+      resolvedCoords = await geocodeAddress(nextAddress.street, nextAddress.city, nextAddress.state, nextAddress.zip)
+    }
+
+    // The address genuinely changed, the lookup failed (offline, rate-limited, or an address
+    // OSM can't resolve) and this contact has a pin that's about to be dropped. Keeping it
+    // would point at the OLD address, which is why the form clears it — but dropping it
+    // silently is how an accurate, hard-won GPS position disappears without anyone noticing.
+    // Only the person editing knows whether they fixed a typo or the householder moved, so ask.
+    if (hasAddress && !resolvedCoords && existing?.lat != null && !dropStaleCoords) {
+      setSaving(false)
+      setConfirmDropCoords({ scripture: finalScripture })
+      return
     }
 
     const record = {
       name: name.trim(),
-      street: street.trim() || undefined,
-      city: city.trim() || undefined,
-      state: expandState(state) || undefined,
-      zip: zip.trim() || undefined,
+      // Same normalized values `sameAddress` compared above, so what's written can never
+      // disagree with what the coordinate decision was made against.
+      street: nextAddress.street || undefined,
+      city: nextAddress.city || undefined,
+      state: nextAddress.state || undefined,
+      zip: nextAddress.zip || undefined,
       phone: phone.trim() || undefined,
       notes: notes.trim() || undefined,
       married,
@@ -751,6 +775,21 @@ function ContactForm({ onClose, existing, prefill }: { onClose: () => void; exis
           setScriptureSuggestion(null)
           commitSave(original)
         }}
+      />
+
+      <ConfirmDialog
+        open={confirmDropCoords != null}
+        title="Couldn't look up that address"
+        message="The new address couldn't be found — you may be offline. Saving now removes this contact's map location, since the old pin belongs to the previous address. You can restore it by saving again once you're back online."
+        confirmLabel="Save without a location"
+        cancelLabel="Keep editing"
+        tone="danger"
+        onConfirm={() => {
+          const scripture = confirmDropCoords?.scripture
+          setConfirmDropCoords(null)
+          commitSave(scripture, true)
+        }}
+        onCancel={() => setConfirmDropCoords(null)}
       />
       </div>
     </ModalPortal>
