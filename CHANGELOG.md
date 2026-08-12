@@ -136,7 +136,8 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **Fast house edits no longer overwrite each other.** Setting one house's status and then editing another's note within a moment could silently revert the first. House notes now save when you finish typing rather than on every keystroke, so characters can't be dropped either (F023)
 - **A backup from a newer version of Meleo is refused instead of applied.** Restoring one would have wiped your data and replaced it with records this version can't read. The message names the version that made the file. "Restore from Backup" is now labelled "Restore (replaces current data)" (F024)
 - **Bulk-deleting contacts, grouping a territory, sending a street to Ministry, and completing a territory** are each one all-or-nothing operation now. Interrupted partway, they used to leave orphaned call history, duplicate street entries, a street in two places at once, or — worst — a completed territory with its completion record lost for good (F025)
-- New tests: 16 added (104 → 120)
+- New tests: 31 added (104 → 135), including the first that drive a real IndexedDB — grouping streets into a territory, sending a street to Ministry, completing a territory, deleting contacts, and importing a share are now covered end-to-end rather than by inspection
+- Resolved 4 high-severity advisories in a build-time dependency; `npm audit` is clean again (F027)
 
 ---
 

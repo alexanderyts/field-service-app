@@ -44,6 +44,9 @@ src/
   legal.ts             # Copyright / developer email / "not affiliated" strings
   profile.ts           # User's own name (localStorage) — used as the "from" on shares
   settings.ts          # Typed, crash-safe accessors for theme / credit-hours / last-backup keys
+  streets.ts           # Street identity: ensureStreetEntry / findStreetTraceMidpoint
+  records.ts           # Multi-table operations, each in one transaction (tested via fake-indexeddb)
+  address.ts           # Address comparison, so a save knows whether the address really changed
   timeAgo.ts           # "3 days ago" formatter (now injected, for testability)
   scripture.ts         # Scripture reference formatter + autocorrect
   usStates.ts          # State name/abbreviation expansion
@@ -68,7 +71,7 @@ src/
     Tutorial.tsx       # Guided tour + first-run TutorialPrompt
     InstallPrompt.tsx  # "Add to Home Screen" banner
     Contacts.tsx       # THE MINISTRY TAB: People/Streets/Territories sub-views, contact form/detail, call logger
-    StreetEntries.tsx  # Streets sub-view: street list, StreetDetail, house-number pad, ensureStreetEntry
+    StreetEntries.tsx  # Streets sub-view: street list, StreetDetail, house-number pad
     Territories.tsx    # Territories sub-view: grouped-territory list + detail
     Territory.tsx      # Map-side custom-territory manager: trace/draw modal, send-to-ministry, grouping
     MapView.tsx        # Leaflet map: contact pins, territory traces, satellite toggle, place search
@@ -375,7 +378,9 @@ A change is "done" when:
 - **Green gates:** `npm run build` (tsc **strict** + vite), `npm run lint`, and `npm test` all pass —
   the same three the CI runs before every deploy (`.github/workflows/deploy-pages.yml`).
 - **Pure logic is tested:** new pure functions (math, parsing, sorting, formatting) get a Vitest
-  test next to them (`*.test.ts`). UI/DB glue isn't required to be tested.
+  test next to them (`*.test.ts`). Multi-table DB operations belong in `records.ts` rather than
+  inline in a component, and are tested against `fake-indexeddb` — a flow you can't call without
+  rendering React is a flow you can't test. Component/UI glue isn't required to be tested.
 - **Docs aren't allowed to drift:** if a change touches the schema, tabs, architecture, or a
   localStorage key, update **this CLAUDE.md in the same commit**. Doc drift is treated as a
   workflow failure, not a later cleanup.
