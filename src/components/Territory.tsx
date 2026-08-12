@@ -397,22 +397,31 @@ export function TerritoryManager({
       street is never briefly missing from both records if something goes wrong mid-way. */
   async function confirmGroup() {
     if (!territory || selected.size === 0 || !groupName.trim()) return
-    const toMove = territory.streets.filter((s) => selected.has(s.id))
-    const remaining = territory.streets.filter((s) => !selected.has(s.id))
+    const name = groupName.trim()
     // Each grouped street is backed by a real Ministry → Streets entry (created/linked here) so it's
     // managed identically whether opened from the territory or the Streets list — and the Streets
-    // list can tag it with this territory. Entries are created before the territories transaction
-    // since ensureStreetEntry writes its own table.
-    const movedWithEntries: TerritoryStreet[] = []
-    for (const s of toMove) {
-      const entryId = await ensureStreetEntry(s, { city: s.city, state: s.state, zip: s.zip })
-      movedWithEntries.push({ ...s, entryId })
-    }
-    // One transaction so a checked street is never briefly missing from both records if something
-    // goes wrong mid-way.
-    await db.transaction('rw', db.territories, async () => {
+    // list can tag it with this territory.
+    //
+    // streetEntries is in the transaction scope so `ensureStreetEntry` joins it rather than
+    // writing outside. Creating the entries first, as a separate step, meant a failure during
+    // the territory writes left those entries orphaned — and a retry created a second set,
+    // since ensureStreetEntry only reuses by entryId and the draft street had none yet.
+    // The territory row is re-read inside so a concurrent edit isn't reverted by a stale snapshot.
+    await db.transaction('rw', db.territories, db.streetEntries, async () => {
+      const fresh = await db.territories.get(territory.id)
+      if (!fresh) return
+      const toMove = fresh.streets.filter((s) => selected.has(s.id))
+      const remaining = fresh.streets.filter((s) => !selected.has(s.id))
+      if (toMove.length === 0) return
+
+      const movedWithEntries: TerritoryStreet[] = []
+      for (const s of toMove) {
+        const entryId = await ensureStreetEntry(s, { city: s.city, state: s.state, zip: s.zip })
+        movedWithEntries.push({ ...s, entryId })
+      }
+
       await db.territories.add({
-        name: groupName.trim(),
+        name,
         createdAt: Date.now(),
         completed: false,
         grouped: true,
@@ -437,17 +446,25 @@ export function TerritoryManager({
       const addr = mid ? await reverseGeocodeAddress(mid.lat, mid.lng) : null
       city = addr?.city; state = addr?.state; zip = addr?.zip
     }
-    await db.streetEntries.add({
-      name: street.name,
-      city,
-      state,
-      zip,
-      houses: [],
-      points: street.points,
-      assignedTo: street.assignedTo,
-      createdAt: Date.now(),
+    // Add-then-remove in one transaction: as two separate awaits, an interruption between
+    // them left the street existing in BOTH places — a Streets entry and a territory street
+    // that look like two roads. The territory row is re-read inside the transaction so a
+    // concurrent edit to another street isn't reverted by this one's stale snapshot.
+    await db.transaction('rw', db.streetEntries, db.territories, async () => {
+      await db.streetEntries.add({
+        name: street.name,
+        city,
+        state,
+        zip,
+        houses: [],
+        points: street.points,
+        assignedTo: street.assignedTo,
+        createdAt: Date.now(),
+      })
+      const fresh = await db.territories.get(territory.id)
+      if (!fresh) return
+      await db.territories.update(territory.id, { streets: fresh.streets.filter((s) => s.id !== street.id) })
     })
-    await db.territories.update(territory.id, { streets: territory.streets.filter((s) => s.id !== street.id) })
   }
 
   async function createTerritory() {
@@ -487,12 +504,18 @@ export function TerritoryManager({
   async function completeTerritory() {
     if (!territory) return
     setConfirmComplete(false)
-    await db.territoryCompletions.add({
-      completedAt: Date.now(),
-      name: territory.name,
-      streetCount: territory.streets.length,
-    } as TerritoryCompletion)
-    await db.territories.delete(territory.id)
+    // The completion record is written and the territory deleted in one transaction. These
+    // were two separate awaits, and this is the app's only write-once record: the territory
+    // is gone afterwards, so a failure between them loses the completion permanently — with
+    // nothing left to reconstruct it from. It's also the sole source of the Reports figure.
+    await db.transaction('rw', db.territoryCompletions, db.territories, async () => {
+      await db.territoryCompletions.add({
+        completedAt: Date.now(),
+        name: territory.name,
+        streetCount: territory.streets.length,
+      } as TerritoryCompletion)
+      await db.territories.delete(territory.id)
+    })
   }
 
   async function discardTerritory() {

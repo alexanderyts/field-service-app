@@ -82,12 +82,19 @@ export default function Contacts({
     })
   }
   async function bulkDeletePeople() {
-    for (const id of selectedIds) {
-      await db.people.delete(id)
-      await db.calls.where('personId').equals(id).delete()
-      const appts = await db.appointments.filter((a) => a.personId === id).toArray()
-      if (appts.length) await db.appointments.bulkDelete(appts.map((a) => a.id))
-    }
+    // One transaction for the whole selection, matching the single-person delete below. Run
+    // as a bare loop, a failure partway (or the tab closing mid-delete) left contacts already
+    // gone while their calls and return visits survived as orphans — invisible rows keeping
+    // a person's history alive after the person was deleted.
+    await db.transaction('rw', db.people, db.calls, db.appointments, async () => {
+      for (const id of selectedIds) {
+        await db.people.delete(id)
+        await db.calls.where('personId').equals(id).delete()
+        // `where(...)` uses the personId index; the old `.filter()` was a full-table scan
+        // per selected contact.
+        await db.appointments.where('personId').equals(id).delete()
+      }
+    })
     setSelectedIds(new Set()); setEditMode(false); setConfirmBulk(false)
   }
 
