@@ -10,12 +10,14 @@ import { APP_VERSION } from './version'
 const BACKUP_FORMAT_VERSION = 1
 
 // localStorage keys are exported dynamically (any `fieldservice_*` key), minus these:
-//  - privacy_v1 / tutorial_seen: per-device consent + UX state; a restore shouldn't skip the
-//    first-launch agreement on a new device.
+//  - privacy_v2 / tutorial_seen: per-device consent + UX state; a restore shouldn't skip the
+//    first-launch agreement on a new device. `privacy_v1` is the pre-Meleo-rename key, kept
+//    listed so a backup taken by a build old enough to still hold it doesn't carry it either.
 //  - notify_sent_ids: transient notification-dedupe bookkeeping, not user data.
 //  - dark_mode: legacy key superseded by `fieldservice_theme`.
 const SETTINGS_BLOCKLIST = new Set([
   'fieldservice_privacy_v1',
+  'fieldservice_privacy_v2',
   'fieldservice_tutorial_seen',
   'fieldservice_notify_sent_ids',
   'fieldservice_dark_mode',
