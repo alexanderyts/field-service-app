@@ -24,11 +24,52 @@ const STORAGE_KEY = 'fieldservice_aux_pioneering'
 
 const DEFAULT_CONFIG: AuxConfig = { enabled: false, mode: null, targetHours: 30, weeklyHours: 7, months: [], monthTargets: {} }
 
+const MODES: readonly AuxMode[] = ['this-month', 'multiple-months', 'continuous']
+
+function isTargetHours(v: unknown): v is 15 | 30 {
+  return v === 15 || v === 30
+}
+
+/**
+ * Coerce anything at all into a usable AuxConfig, field by field.
+ *
+ * Spreading the parsed JSON over the defaults (what this used to do) looks safe but isn't:
+ * a key that's present-but-wrong *overwrites* its default rather than falling back to it,
+ * so a stored `{"months":null}` yields `months: null` and the very next `months.includes(…)`
+ * throws — taking out Schedule and Reports, both of which read this on every render. The
+ * value is reachable from outside the app too: backup.ts restores any `fieldservice_*`
+ * string verbatim from a file the app didn't write. Unknown fields are dropped rather than
+ * carried through, since nothing reads them.
+ */
+export function normalizeAuxConfig(input: unknown): AuxConfig {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return { ...DEFAULT_CONFIG }
+  const raw = input as Record<string, unknown>
+
+  const monthTargets: Record<string, 15 | 30> = {}
+  if (raw.monthTargets && typeof raw.monthTargets === 'object' && !Array.isArray(raw.monthTargets)) {
+    for (const [key, value] of Object.entries(raw.monthTargets)) {
+      if (isTargetHours(value)) monthTargets[key] = value
+    }
+  }
+
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_CONFIG.enabled,
+    mode: MODES.includes(raw.mode as AuxMode) ? (raw.mode as AuxMode) : DEFAULT_CONFIG.mode,
+    targetHours: isTargetHours(raw.targetHours) ? raw.targetHours : DEFAULT_CONFIG.targetHours,
+    weeklyHours:
+      typeof raw.weeklyHours === 'number' && Number.isFinite(raw.weeklyHours) && raw.weeklyHours >= 0
+        ? raw.weeklyHours
+        : DEFAULT_CONFIG.weeklyHours,
+    months: Array.isArray(raw.months) ? raw.months.filter((m): m is string => typeof m === 'string') : [],
+    monthTargets,
+  }
+}
+
 export function getAuxConfig(): AuxConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULT_CONFIG }
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
+    return normalizeAuxConfig(JSON.parse(raw))
   } catch {
     return { ...DEFAULT_CONFIG }
   }
