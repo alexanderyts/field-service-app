@@ -4,19 +4,15 @@ import 'leaflet/dist/leaflet.css'
 import './index.css'
 import App from './App.tsx'
 import ErrorBoundary from './ErrorBoundary.tsx'
+import { getTheme } from './settings'
 
-// Applied before first paint so a non-light theme doesn't flash light on load. Guarded
-// because some browser configs (Safari "Block All Cookies", managed profiles) throw
-// synchronously on localStorage access — unguarded, that would throw before the app
-// ever mounts. The old dark-mode boolean key is read as a fallback so devices that
-// enabled dark mode before the theme picker existed keep it without re-choosing.
-try {
-  let theme = localStorage.getItem('fieldservice_theme')
-  if (!theme && localStorage.getItem('fieldservice_dark_mode') === 'yes') theme = 'dark'
-  if (theme === 'dark' || theme === 'pastel' || theme === 'mark') {
-    document.documentElement.dataset.theme = theme
-  }
-} catch { /* localStorage unavailable — default (light) theme */ }
+// Applied before first paint so a non-light theme doesn't flash light on load. `getTheme`
+// is total — it swallows a throwing localStorage (Safari "Block All Cookies", managed
+// profiles) and an unrecognized stored value, and falls back to the legacy dark-mode
+// boolean — so this can't throw before the app ever mounts. Light is the default and
+// carries no attribute.
+const theme = getTheme()
+if (theme !== 'light') document.documentElement.dataset.theme = theme
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

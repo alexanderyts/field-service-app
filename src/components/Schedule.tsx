@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Appointment, type DayScheduleBlock, type SchedulePrefs, type TimeCategory, type TimeLog } from '../db'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../categories'
 import { animateBankValue, collectAndFlyToMinuteBank } from '../minuteBankFly'
+import { creditHoursEnabled, setCreditHoursEnabled } from '../settings'
 import {
   effectiveMonthlyGoalMin,
   fmtDuration,
@@ -417,7 +418,7 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
   // user (no existing record at all) gets no default — they must answer explicitly.
   const [isPioneer, setIsPioneer] = useState<boolean | null>(existing ? (existing.isPioneer ?? true) : null)
   const [creditYes, setCreditYes] = useState<boolean | null>(
-    existing ? localStorage.getItem('fieldservice_credit_hours') === 'yes' : null
+    existing ? creditHoursEnabled() : null
   )
   // Days start unselected either way — this is a plan the person builds, not a default
   // guessed on their behalf.
@@ -493,7 +494,7 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
       monthlyHours: !isPioneer && goalPeriod === 'monthly' ? Number(monthlyHours) || 0 : undefined,
     }
     // Non-pioneers never count credit hours; pioneers answered the question above.
-    localStorage.setItem('fieldservice_credit_hours', isPioneer && creditYes ? 'yes' : 'no')
+    setCreditHoursEnabled(!!(isPioneer && creditYes))
     if (existing) {
       await db.schedulePrefs.update(existing.id, record)
     } else {
@@ -2247,7 +2248,7 @@ function DayActionModal({
   const [numPad, setNumPad] = useState<'hours' | 'minutes' | null>(null)
   const minutesBtnRef = useRef<HTMLButtonElement>(null)
 
-  const creditEnabled = localStorage.getItem('fieldservice_credit_hours') === 'yes'
+  const creditEnabled = creditHoursEnabled()
   const availableCats: TimeCategory[] = creditEnabled
     ? ['ministry', 'ldc', 'hlc', 'convention', 'assembly', 'bethel', 'other']
     : ['ministry', 'other']

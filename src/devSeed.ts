@@ -5,6 +5,7 @@
 import { db, type Person, type Call, type TimeLog, type Appointment, type ContactStatus, type TimeCategory } from './db'
 import { serviceYearBounds, serviceYearlyApplied } from './timeStats'
 import { wipeAllData } from './backup'
+import { setCreditHoursEnabled } from './settings'
 
 function mulberry32(seed: number) {
   return function rng() {
@@ -422,5 +423,5 @@ export async function seedDemoData() {
   localStorage.setItem('fieldservice_privacy_v2', 'yes')
   localStorage.setItem('fieldservice_profile_prompted', 'yes')
   localStorage.setItem('fieldservice_tutorial_seen', 'yes')
-  localStorage.setItem('fieldservice_credit_hours', 'yes')
+  setCreditHoursEnabled(true)
 }

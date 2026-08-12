@@ -9,6 +9,7 @@ import { tipServices, type TipKind } from '../tips'
 import { APP_VERSION } from '../version'
 import { COPYRIGHT_SUMMARY, NOT_AFFILIATED, DEVELOPER_NAME, DEVELOPER_EMAIL } from '../legal'
 import { getProfileName, saveProfileName } from '../profile'
+import { creditHoursEnabled, setCreditHoursEnabled, getTheme, setTheme as saveTheme, type Theme } from '../settings'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
 import {
   NOTIFY_LEAD_OPTIONS,
@@ -35,19 +36,13 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
   const [legalOpen, setLegalOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [confirmSeed, setConfirmSeed] = useState(false)
-  const [creditEnabled, setCreditEnabled] = useState(() => localStorage.getItem('fieldservice_credit_hours') === 'yes')
+  const [creditEnabled, setCreditEnabled] = useState(() => creditHoursEnabled())
   const schedulePrefs = useLiveQuery(() => db.schedulePrefs.get(1), [])
   const defaultExpandCalendar = schedulePrefs?.scheduleDefaultExpand === 'calendar'
   async function setDefaultExpandCalendar(v: boolean) {
     await db.schedulePrefs.update(1, { scheduleDefaultExpand: v ? 'calendar' : 'week' })
   }
-  const [theme, setThemeState] = useState<'light' | 'dark' | 'pastel' | 'mark'>(() => {
-    const t = localStorage.getItem('fieldservice_theme')
-    if (t === 'dark' || t === 'pastel' || t === 'mark') return t
-    // Fallback for devices that enabled dark mode before the theme picker existed.
-    if (localStorage.getItem('fieldservice_dark_mode') === 'yes') return 'dark'
-    return 'light'
-  })
+  const [theme, setThemeState] = useState<Theme>(() => getTheme())
   const [firstName, setFirstName] = useState(() => getProfileName().firstName)
   const [lastName, setLastName] = useState(() => getProfileName().lastName)
   const [minuteAnimEnabled, setMinuteAnimEnabledState] = useState(() => minuteBankAnimationsEnabled())
@@ -153,14 +148,12 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
 
   function toggleCredit(v: boolean) {
     setCreditEnabled(v)
-    localStorage.setItem('fieldservice_credit_hours', v ? 'yes' : 'no')
+    setCreditHoursEnabled(v)
   }
 
-  function changeTheme(t: 'light' | 'dark' | 'pastel' | 'mark') {
+  function changeTheme(t: Theme) {
     setThemeState(t)
-    localStorage.setItem('fieldservice_theme', t)
-    // Retire the old boolean key so it can't disagree with the new one.
-    localStorage.removeItem('fieldservice_dark_mode')
+    saveTheme(t)
     document.documentElement.dataset.theme = t === 'light' ? '' : t
   }
 
