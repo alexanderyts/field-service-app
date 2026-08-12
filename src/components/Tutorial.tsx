@@ -222,7 +222,7 @@ export default function Tutorial({
 
       <div className="tutorial-card-wrap">
       <div className="tutorial-card">
-        <button className="icon-btn tutorial-skip" onClick={onClose} title="Skip tour">×</button>
+        <button className="icon-btn tutorial-skip" onClick={onClose} title="Skip tour" aria-label="Skip tour">×</button>
 
         {/* keyed so the icon/title/body cross-fade fresh on every step */}
         <div className="tutorial-step" key={step}>

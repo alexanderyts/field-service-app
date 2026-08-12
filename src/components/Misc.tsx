@@ -200,7 +200,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
       {/* Tips */}
       <div className="card misc-donate">
         <div className="misc-donate-header">
-          <span className="misc-donate-emoji">☕</span>
+          <span className="misc-donate-emoji" aria-hidden="true">☕</span>
           <div>
             <h4 style={{ margin: 0, lineHeight: 1.4 }}>Enjoying the app? Buy me a coffee at the next break 😊</h4>
           </div>
@@ -534,7 +534,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         {legalOpen && (
           <div className="misc-privacy">
             <div className="misc-privacy-item">
-              <span className="misc-privacy-icon">ℹ️</span>
+              <span className="misc-privacy-icon" aria-hidden="true">ℹ️</span>
               <div>
                 <strong>Not affiliated.</strong>
                 <p>{NOT_AFFILIATED}</p>
@@ -542,7 +542,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
             </div>
 
             <div className="misc-privacy-item">
-              <span className="misc-privacy-icon">📱</span>
+              <span className="misc-privacy-icon" aria-hidden="true">📱</span>
               <div>
                 <strong>Your data stays on your device.</strong>
                 <p>Contacts, call logs, time records, and schedules live only in your browser's local storage (IndexedDB). Nothing is sent to a server — no analytics, tracking, ads, or backend. The developer can't see anything you enter.</p>
@@ -550,7 +550,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
             </div>
 
             <div className="misc-privacy-item">
-              <span className="misc-privacy-icon">⚖️</span>
+              <span className="misc-privacy-icon" aria-hidden="true">⚖️</span>
               <div>
                 <strong>Terms of use.</strong>
                 <p>The app is provided "as is," without warranty of any kind. You're responsible for the information you store and for using it lawfully. To the fullest extent permitted by law, the developer isn't liable for any damages or data loss arising from your use of the app. Use is at your own risk.</p>
@@ -558,7 +558,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
             </div>
 
             <div className="misc-privacy-item">
-              <span className="misc-privacy-icon">©️</span>
+              <span className="misc-privacy-icon" aria-hidden="true">©️</span>
               <div>
                 <strong>Copyright.</strong>
                 <p>{COPYRIGHT_SUMMARY}</p>
@@ -566,7 +566,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
             </div>
 
             <div className="misc-privacy-item">
-              <span className="misc-privacy-icon">👋</span>
+              <span className="misc-privacy-icon" aria-hidden="true">👋</span>
               <div>
                 <strong>Developer.</strong>
                 <p>Made by {DEVELOPER_NAME}. Questions or feedback? <a href={`mailto:${DEVELOPER_EMAIL}`}>{DEVELOPER_EMAIL}</a></p>

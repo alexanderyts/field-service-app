@@ -1570,6 +1570,7 @@ function ScheduleMain({
               data-tutorial="calendar-view-btn"
               onClick={() => changeView(defaultExpand === 'calendar' ? 'week' : 'calendar')}
               title={defaultExpand === 'calendar' ? 'Open week view' : 'Open calendar view'}
+              aria-label={defaultExpand === 'calendar' ? 'Open week view' : 'Open calendar view'}
             >
               {defaultExpand === 'calendar' ? '🗓️' : '📅'}
             </button>
@@ -1994,7 +1995,7 @@ function EditLogModal({ log, onClose }: { log: TimeLog; onClose: () => void }) {
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
           <h3>Edit Time Entry</h3>
           <label className="field">
@@ -2075,7 +2076,7 @@ function EditAppointmentModal({
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
           <h3>Edit Return Visit</h3>
           <label className="field">
@@ -2136,7 +2137,7 @@ function TimeInputModal({
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 340 }}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
           <h3>{title}</h3>
           {subtitle && <p className="muted" style={{ marginTop: -8, fontSize: 13 }}>{subtitle}</p>}
@@ -2296,7 +2297,7 @@ function DayActionModal({
       <div className="modal-backdrop day-modal-backdrop" onClick={onClose}>
         <div className="modal day-action-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
           <div style={{ marginTop: -6, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <div>
@@ -2405,7 +2406,7 @@ function DayActionModal({
                         ))}
                       </div>
                       {blocks.length > 1 && (
-                        <button className="icon-btn" title="Remove this time" onClick={() => removeBlock(i)}>×</button>
+                        <button className="icon-btn" title="Remove this time" aria-label="Remove this time" onClick={() => removeBlock(i)}>×</button>
                       )}
                     </div>
                     <div className="field-row">
@@ -3108,6 +3109,7 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
             <button
               className="icon-btn"
               title="Auxiliary pioneering settings"
+              aria-label="Auxiliary pioneering settings"
               onClick={() => setGearOpen(true)}
             >
               ⚙️
@@ -3124,6 +3126,7 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
             style={{ position: 'absolute', top: 8, right: 8, width: 32, height: 32, fontSize: 16 }}
             onClick={cancelConfiguring}
             title="Close without saving"
+            aria-label="Close without saving"
           >
             ×
           </button>
@@ -3213,7 +3216,7 @@ function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onChange: (
           <div className="modal-backdrop" onClick={() => setGearOpen(false)}>
             <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
               <div className="modal-toolbar">
-                <button className="icon-btn close-x" onClick={() => setGearOpen(false)} title="Close">×</button>
+                <button className="icon-btn close-x" onClick={() => setGearOpen(false)} title="Close" aria-label="Close">×</button>
               </div>
               <h3 style={{ marginTop: 0 }}>Auxiliary pioneering settings</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

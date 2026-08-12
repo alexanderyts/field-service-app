@@ -92,7 +92,7 @@ export default function ShareModal({
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
           <h3 style={{ marginTop: 0 }}>Share “{itemName}”</h3>
 

@@ -203,8 +203,12 @@ function App() {
             className={tab === t.key ? 'active' : ''}
             data-tutorial={`tab-${t.key}`}
             onClick={() => selectTab(t.key)}
+            // The visible label already names the tab, so the glyph is decoration — read
+            // aloud it's noise ("bullseye", or nothing at all). Which tab is current is
+            // otherwise conveyed only by colour.
+            aria-current={tab === t.key ? 'page' : undefined}
           >
-            <span className="tab-icon">{t.icon}</span>
+            <span className="tab-icon" aria-hidden="true">{t.icon}</span>
             {t.label}
           </button>
         ))}

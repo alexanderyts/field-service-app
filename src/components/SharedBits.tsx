@@ -26,10 +26,10 @@ export function StepperNav({
 }) {
   return (
     <div className={`stepper-nav${className ? ' ' + className : ''}`}>
-      <button className="icon-btn nav-arrow" onClick={onPrev} disabled={prevDisabled} title="Previous">‹</button>
+      <button className="icon-btn nav-arrow" onClick={onPrev} disabled={prevDisabled} title="Previous" aria-label="Previous">‹</button>
       {children}
       {trailing}
-      <button className="icon-btn nav-arrow" onClick={onNext} disabled={nextDisabled} title="Next">›</button>
+      <button className="icon-btn nav-arrow" onClick={onNext} disabled={nextDisabled} title="Next" aria-label="Next">›</button>
     </div>
   )
 }

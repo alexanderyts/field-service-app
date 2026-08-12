@@ -228,7 +228,7 @@ export function TerritoryDrawModal({
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal modal-expanded" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Done">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Done" aria-label="Done">×</button>
           </div>
           <h3 style={{ margin: 0 }}>{editStreetId ? 'Re-trace street' : territory.name}</h3>
           <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>
@@ -512,11 +512,11 @@ export function TerritoryManager({
           <div className="modal-backdrop" onClick={() => setManageOpen(false)}>
             <div className="modal manage-territory-modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-toolbar">
-                <button className="icon-btn close-x" onClick={() => setManageOpen(false)} title="Close">×</button>
+                <button className="icon-btn close-x" onClick={() => setManageOpen(false)} title="Close" aria-label="Close">×</button>
               </div>
               <div className="goal-row">
                 <h3 style={{ margin: 0 }}>{territory.name}</h3>
-                <button className="icon-btn" title="Discard territory" onClick={() => setConfirmDiscard(true)}>🗑</button>
+                <button className="icon-btn" title="Discard territory" aria-label="Discard territory" onClick={() => setConfirmDiscard(true)}>🗑</button>
               </div>
               {commonLocationLabel(territory.streets) && (
                 <p className="muted" style={{ margin: '2px 0 0' }}>📍 {commonLocationLabel(territory.streets)}</p>
@@ -658,7 +658,7 @@ export function StreetSnapshotModal({ street, onClose }: { street: TerritoryStre
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
           <h3 style={{ marginTop: 0 }}>{street.name}</h3>
           <TerritoryMiniMap streets={[street]} />

@@ -19,6 +19,12 @@ let lockCount = 0
  * confirm dialog over a form) doesn't unlock the page when the top one closes while the
  * one underneath is still open.
  */
+// TODO(a11y): focus trap + focus restore + Esc-to-close, inherited by every modal.
+// Deliberately not done alongside the rest of the a11y pass — the same shared counter
+// above is the reason: nested modals mean the trap has to hand focus back to the layer
+// underneath rather than to the page, and the custom NumPad / CalendarPicker (which
+// exist precisely to avoid native date/number inputs) make the focusable-element query
+// non-obvious. It needs its own task with manual keyboard testing. See AUDIT F018.
 export default function ModalPortal({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (lockCount === 0) document.body.style.overflow = 'hidden'

@@ -132,7 +132,7 @@ export default function ServiceYearReview({
               <div className="report-highlights">
                 {bestMonth && (
                   <div className="report-highlight-item">
-                    <span className="report-highlight-icon">🏆</span>
+                    <span className="report-highlight-icon" aria-hidden="true">🏆</span>
                     <div>
                       <strong>Best month</strong>
                       <p className="muted">{bestMonth.label} — {fmtDuration(bestMonth.min)}</p>
@@ -141,7 +141,7 @@ export default function ServiceYearReview({
                 )}
                 {newContacts.length > 0 && (
                   <div className="report-highlight-item">
-                    <span className="report-highlight-icon">👋</span>
+                    <span className="report-highlight-icon" aria-hidden="true">👋</span>
                     <div>
                       <strong>{newContacts.length} new contact{newContacts.length !== 1 ? 's' : ''}</strong>
                       <p className="muted">People you met for the first time this year</p>
@@ -150,7 +150,7 @@ export default function ServiceYearReview({
                 )}
                 {newStudies > 0 && (
                   <div className="report-highlight-item">
-                    <span className="report-highlight-icon">📘</span>
+                    <span className="report-highlight-icon" aria-hidden="true">📘</span>
                     <div>
                       <strong>{newStudies} Bible stud{newStudies !== 1 ? 'ies' : 'y'} started</strong>
                     </div>
@@ -158,7 +158,7 @@ export default function ServiceYearReview({
                 )}
                 {returnVisitsScheduled > 0 && (
                   <div className="report-highlight-item">
-                    <span className="report-highlight-icon">🔄</span>
+                    <span className="report-highlight-icon" aria-hidden="true">🔄</span>
                     <div>
                       <strong>{returnVisitsScheduled} return visit{returnVisitsScheduled !== 1 ? 's' : ''} scheduled</strong>
                     </div>
@@ -166,7 +166,7 @@ export default function ServiceYearReview({
                 )}
                 {scripturesShared > 0 && (
                   <div className="report-highlight-item">
-                    <span className="report-highlight-icon">📖</span>
+                    <span className="report-highlight-icon" aria-hidden="true">📖</span>
                     <div>
                       <strong>{scripturesShared} scripture{scripturesShared !== 1 ? 's' : ''} shared</strong>
                     </div>
@@ -174,7 +174,7 @@ export default function ServiceYearReview({
                 )}
                 {stats.total > applied && (
                   <div className="report-highlight-item">
-                    <span className="report-highlight-icon">⏱️</span>
+                    <span className="report-highlight-icon" aria-hidden="true">⏱️</span>
                     <div>
                       <strong>{fmtDuration(stats.total)} logged in total</strong>
                       <p className="muted">55h/mo credit cap applied where it counted toward your goal</p>

@@ -269,7 +269,7 @@ export default function Contacts({
           <div className="modal-backdrop" onClick={() => setShowChooser(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 340 }}>
               <div className="modal-toolbar">
-                <button className="icon-btn close-x" onClick={() => setShowChooser(false)} title="Close">×</button>
+                <button className="icon-btn close-x" onClick={() => setShowChooser(false)} title="Close" aria-label="Close">×</button>
               </div>
               <h3>Add a new entry</h3>
               <p className="muted" style={{ marginTop: -6 }}>What would you like to add?</p>
@@ -557,7 +557,7 @@ function ContactForm({ onClose, existing, prefill }: { onClose: () => void; exis
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">
               ×
             </button>
           </div>
@@ -815,10 +815,10 @@ function ContactDetail({ personId, onClose, onGoToMap }: {
     <div className="modal-backdrop" onClick={onClose}>
       <div className={`modal${expanded ? ' modal-expanded' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-toolbar">
-          <button className="icon-btn" onClick={() => setExpanded((v) => !v)} title={expanded ? 'Collapse' : 'Expand'}>
+          <button className="icon-btn" onClick={() => setExpanded((v) => !v)} title={expanded ? 'Collapse' : 'Expand'} aria-label={expanded ? 'Collapse' : 'Expand'}>
             {expanded ? '⤡' : '⤢'}
           </button>
-          <button className="icon-btn close-x" onClick={onClose} title="Close">
+          <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">
             ×
           </button>
         </div>
@@ -990,7 +990,7 @@ function ReturnVisitEditor({ appt, onClose }: { appt: Appointment; onClose: () =
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
           <h3>Edit Return Visit</h3>
           <div className="field-row">
@@ -1089,7 +1089,7 @@ function CallLogger({
     <div className="card">
       {onCancel && (
         <div className="modal-toolbar">
-          <button className="icon-btn close-x" onClick={onCancel} disabled={saving} title="Cancel edit">×</button>
+          <button className="icon-btn close-x" onClick={onCancel} disabled={saving} title="Cancel edit" aria-label="Cancel edit">×</button>
         </div>
       )}
       <h4>{existing ? 'Edit Call' : 'Log a Call'}</h4>

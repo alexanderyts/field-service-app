@@ -39,7 +39,7 @@ export default function ImportConfirm({ encoded, onClose }: { encoded: string; o
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
 
           {error ? (

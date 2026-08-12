@@ -266,7 +266,7 @@ export default function Reports() {
           <div className="report-highlights">
             {longestDay && (
               <div className="report-highlight-item">
-                <span className="report-highlight-icon">🏆</span>
+                <span className="report-highlight-icon" aria-hidden="true">🏆</span>
                 <div>
                   <strong>Longest day</strong>
                   <p className="muted">{longestDay.label} — {fmtDuration(longestDay.min)}</p>
@@ -275,7 +275,7 @@ export default function Reports() {
             )}
             {mostActiveDay && byDay.size > 1 && (
               <div className="report-highlight-item">
-                <span className="report-highlight-icon">📅</span>
+                <span className="report-highlight-icon" aria-hidden="true">📅</span>
                 <div>
                   <strong>Most active day</strong>
                   <p className="muted">{mostActiveDay}s were your busiest this month</p>
@@ -284,7 +284,7 @@ export default function Reports() {
             )}
             {returnVisits > 0 && (
               <div className="report-highlight-item">
-                <span className="report-highlight-icon">🔄</span>
+                <span className="report-highlight-icon" aria-hidden="true">🔄</span>
                 <div>
                   <strong>{returnVisits} return visit{returnVisits !== 1 ? 's' : ''} scheduled</strong>
                   <p className="muted">People who wanted to hear more — great work!</p>
@@ -293,7 +293,7 @@ export default function Reports() {
             )}
             {newContacts.length > 0 && (
               <div className="report-highlight-item">
-                <span className="report-highlight-icon">👋</span>
+                <span className="report-highlight-icon" aria-hidden="true">👋</span>
                 <div>
                   <strong>{newContacts.length} new contact{newContacts.length !== 1 ? 's' : ''} added</strong>
                   <p className="muted">{newContacts.map((p) => p.name).join(', ')}</p>
@@ -302,7 +302,7 @@ export default function Reports() {
             )}
             {atHomeCalls > 0 && (
               <div className="report-highlight-item">
-                <span className="report-highlight-icon">🗣️</span>
+                <span className="report-highlight-icon" aria-hidden="true">🗣️</span>
                 <div>
                   <strong>{atHomeCalls} conversation{atHomeCalls !== 1 ? 's' : ''} logged</strong>
                   <p className="muted">Every door opened is a door that mattered</p>
@@ -311,7 +311,7 @@ export default function Reports() {
             )}
             {scripturesShared > 0 && (
               <div className="report-highlight-item">
-                <span className="report-highlight-icon">📖</span>
+                <span className="report-highlight-icon" aria-hidden="true">📖</span>
                 <div>
                   <strong>{scripturesShared} scripture{scripturesShared !== 1 ? 's' : ''} shared</strong>
                   <p className="muted">Planting seeds that last</p>
@@ -320,7 +320,7 @@ export default function Reports() {
             )}
             {notHomeCalls > 0 && (
               <div className="report-highlight-item">
-                <span className="report-highlight-icon">🚪</span>
+                <span className="report-highlight-icon" aria-hidden="true">🚪</span>
                 <div>
                   <strong>{notHomeCalls} door{notHomeCalls !== 1 ? 's' : ''} not answered</strong>
                   <p className="muted">Persistence is a form of love — keep showing up</p>

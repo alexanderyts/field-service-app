@@ -61,7 +61,7 @@ export default function InstallBanner() {
 
   return (
     <div className="install-banner">
-      <span className="install-banner-icon">📲</span>
+      <span className="install-banner-icon" aria-hidden="true">📲</span>
       <div className="install-banner-text">
         <strong>Add Meleo to your Home Screen</strong>
         <span> so your data stays safe and it opens like a real app.</span>

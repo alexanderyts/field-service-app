@@ -149,12 +149,12 @@ function TerritoryDetail({
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
 
           <div className="detail-head">
             <h3>{territory.name}</h3>
-            <button className="icon-btn" title="View all streets on the map" onClick={() => setShowImage(true)}>🗺️</button>
+            <button className="icon-btn" title="View all streets on the map" aria-label="View all streets on the map" onClick={() => setShowImage(true)}>🗺️</button>
           </div>
           <p className="muted contact-line">
             {territory.streets.length} street{territory.streets.length === 1 ? '' : 's'}
@@ -189,7 +189,7 @@ function TerritoryDetail({
                     </div>
                     <div className="row" style={{ gap: 6 }}>
                       {s.points.length >= 2 && (
-                        <button className="icon-btn" title="View traced map" onClick={() => setViewStreet(s)}>🗺️</button>
+                        <button className="icon-btn" title="View traced map" aria-label="View traced map" onClick={() => setViewStreet(s)}>🗺️</button>
                       )}
                       <button className="secondary small" onClick={() => openManage(s)}>
                         Manage
@@ -235,7 +235,7 @@ function TerritoryDetail({
             <div className="modal-backdrop" onClick={() => setShowImage(false)}>
               <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
                 <div className="modal-toolbar">
-                  <button className="icon-btn close-x" onClick={() => setShowImage(false)} title="Close">×</button>
+                  <button className="icon-btn close-x" onClick={() => setShowImage(false)} title="Close" aria-label="Close">×</button>
                 </div>
                 <h3 style={{ marginTop: 0 }}>{territory.name}</h3>
                 <TerritoryMiniMap streets={territory.streets} />

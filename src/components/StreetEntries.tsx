@@ -263,7 +263,7 @@ function StreetEntryForm({
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
           <h3>{existing ? 'Edit Street' : 'New Street'}</h3>
           {existing && <SharedWarning sharedWith={existing.sharedWith} />}
@@ -383,12 +383,12 @@ export function StreetDetail({
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={onClose} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={onClose} title="Close" aria-label="Close">×</button>
           </div>
 
           <div className="detail-head">
             <h3>{entry.name}</h3>
-            <button className="icon-btn" title="Edit street" onClick={() => setShowEdit(true)}>✎</button>
+            <button className="icon-btn" title="Edit street" aria-label="Edit street" onClick={() => setShowEdit(true)}>✎</button>
           </div>
           <p className="muted contact-line">
             {address || 'No city/zip on file'}
@@ -435,12 +435,13 @@ export function StreetDetail({
                     <button
                       className="icon-btn"
                       title="Create a contact for this house"
+                      aria-label="Create a contact for this house"
                       onClick={() => { onCreateContact({ street: `${h.number} ${entry.name}`, city: entry.city, state: entry.state, zip: entry.zip }); onClose() }}
                     >
                       👤
                     </button>
                   )}
-                  <button className="icon-btn" title="Remove house" onClick={() => removeHouse(h.id)}>×</button>
+                  <button className="icon-btn" title="Remove house" aria-label="Remove house" onClick={() => removeHouse(h.id)}>×</button>
                 </div>
                 <input
                   className="house-note"
@@ -556,7 +557,7 @@ function HouseNumberPad({ onSubmit, onClose }: { onSubmit: (houses: PadHouse[]) 
       <div className="modal-backdrop" onClick={close}>
         <div className="modal numpad-modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">
-            <button className="icon-btn close-x" onClick={close} title="Close">×</button>
+            <button className="icon-btn close-x" onClick={close} title="Close" aria-label="Close">×</button>
           </div>
           <h3 style={{ marginTop: 0 }}>Add House{multiple ? 's' : ''}</h3>
 
