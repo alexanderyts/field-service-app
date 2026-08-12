@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.16.1`.** History runs from the initial scaffold forward.
+**Current version: `0.17.0`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -120,6 +120,16 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.16.1 — Schedule write-path hardening · 2026-07-18
 - Fix silent time loss in the minute bank: quick-logged time and the banked-hour roll-over now persist to the DB *before* the ~1.1s fly-to-pill animation, so a backgrounded/killed PWA can no longer drop the write (F011)
 - Fix stale-snapshot schedule writes: every `dateOverrides`/`daySchedule` mutation now re-reads the prefs row inside a Dexie transaction instead of spreading a possibly-stale `useLiveQuery` snapshot, preventing double-logged time and resurrected/dropped scheduled blocks (F012)
+
+## 0.17.0 — Backup safety net, settings foundation & accessibility · 2026-08-12
+- **Know when you last backed up**: the More tab now shows "Last backup: 3 days ago", or "You've never backed up" when there isn't one. Recorded only when an export actually completes — dismissing the iOS share sheet doesn't count. The backup card's copy now says plainly that clearing browser data or losing the device erases everything and this file is the only way back
+- Add a typed settings module (`src/settings.ts`) wrapping the existing `fieldservice_*` keys; every getter is total, so a corrupt or unreadable value can no longer crash a render. All 10 credit-hours/theme call sites now go through it
+- Harden the share importer against a decompression bomb (inflate output is now capped and aborts mid-stream) and against primary-key injection (ids are stripped at runtime, not just in the types) — REVIEW F-B1/F-B2
+- Validate the stored aux-pioneering config field by field; a corrupt value used to throw a `TypeError` out of both Schedule and Reports — REVIEW F-B4
+- Stop backups from carrying privacy-policy acceptance between devices: the blocklist named the retired `privacy_v1` key while the live one is `privacy_v2`, so the block had been inert. Restoring a backup now re-shows the first-launch privacy screen once, as intended
+- Add spacing/type/motion design tokens to `:root`, measured from the values `App.css` already uses most; adopted only in newly-touched CSS
+- Accessibility: 34 icon-only controls gained accessible names, decorative emoji are hidden from assistive tech, and the active tab is announced. Touch targets measured — `.icon-btn` and the tab bar already meet 44px; `.chip` can't without reflowing every tab (tracked as F017)
+- New tests: 49 added (55 → 104), covering the settings module, the aux-config validator, the share hardening, and the new "time ago" formatter
 
 ---
 

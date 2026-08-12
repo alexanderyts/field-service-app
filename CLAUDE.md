@@ -43,6 +43,8 @@ src/
   version.ts           # APP_VERSION (stamped into backups)
   legal.ts             # Copyright / developer email / "not affiliated" strings
   profile.ts           # User's own name (localStorage) — used as the "from" on shares
+  settings.ts          # Typed, crash-safe accessors for theme / credit-hours / last-backup keys
+  timeAgo.ts           # "3 days ago" formatter (now injected, for testability)
   scripture.ts         # Scripture reference formatter + autocorrect
   usStates.ts          # State name/abbreviation expansion
   contactStatus.ts     # ContactStatus labels + display order
@@ -222,19 +224,27 @@ share state, etc. So the same street is managed identically in the Streets tab a
 Convention `fieldservice_*`. `backup.ts` exports every `fieldservice_*` key **except** its
 `SETTINGS_BLOCKLIST` (per-device consent/UX + transient bookkeeping).
 
-| Key | Purpose |
-|---|---|
-| `fieldservice_privacy_v2` | `'yes'` when privacy policy accepted (v1 was pre-Meleo rename) |
-| `fieldservice_profile_prompted` | `'yes'` once the name prompt was shown |
-| `fieldservice_first_name` / `_last_name` | User's own name (share attribution, personalization) |
-| `fieldservice_tutorial_seen` | `'yes'` once the guided-tour prompt was shown |
-| `fieldservice_credit_hours` | `'yes'` when credit-hour categories are enabled |
-| `fieldservice_minute_bank` | Integer minutes accumulated toward the next auto-hour |
-| `fieldservice_theme` | `'light' | 'dark' | 'pastel' | 'mark'` |
-| `fieldservice_dark_mode` | Legacy boolean, read as a fallback for `_theme` |
-| `fieldservice_participated_months` | Months the user marked as "participated in ministry" |
-| `fieldservice_notify_enabled` / `_notify_lead_min` / `_notify_sent_ids` | Return-visit reminder settings + dedupe |
-| `fieldservice_aux_*` | Auxiliary-pioneer config (see `auxPioneering.ts`) |
+Each key should have exactly **one owning module** — never read or write one as a bare string
+literal from a component. Owners: `settings.ts` (theme, credit-hours, last-backup),
+`profile.ts` (name + prompt flag), `notifications.ts` (notify\_\*), `auxPioneering.ts` (aux),
+`minuteBankFly.ts` (animation toggle), `Onboarding.tsx` (privacy), `Tutorial.tsx` (tour seen).
+Two keys are still module-locals inside `Schedule.tsx` (`_minute_bank`,
+`_participated_months`) — move them to an owner rather than adding a second reader.
+
+| Key | Purpose | Owner |
+|---|---|---|
+| `fieldservice_privacy_v2` | `'yes'` when privacy policy accepted (v1 was pre-Meleo rename) | `Onboarding.tsx` |
+| `fieldservice_profile_prompted` | `'yes'` once the name prompt was shown | `profile.ts` |
+| `fieldservice_first_name` / `_last_name` | User's own name (share attribution, personalization) | `profile.ts` |
+| `fieldservice_tutorial_seen` | `'yes'` once the guided-tour prompt was shown | `Tutorial.tsx` |
+| `fieldservice_credit_hours` | `'yes'` when credit-hour categories are enabled | `settings.ts` |
+| `fieldservice_minute_bank` | Integer minutes accumulated toward the next auto-hour | `Schedule.tsx` (local) |
+| `fieldservice_theme` | `'light' | 'dark' | 'pastel' | 'mark'` | `settings.ts` |
+| `fieldservice_dark_mode` | Legacy boolean, read as a fallback for `_theme`; cleared on any theme write | `settings.ts` |
+| `fieldservice_last_backup_at` | Epoch ms of the last completed backup export; absent = never. Blocklisted, so it never travels inside a backup | `settings.ts` |
+| `fieldservice_participated_months` | Months the user marked as "participated in ministry" | `Schedule.tsx` (local) |
+| `fieldservice_notify_enabled` / `_notify_lead_min` / `_notify_sent_ids` | Return-visit reminder settings + dedupe | `notifications.ts` |
+| `fieldservice_aux_*` | Auxiliary-pioneer config (see `auxPioneering.ts`) | `auxPioneering.ts` |
 
 ---
 
@@ -331,7 +341,13 @@ Single `App.css` for components; `index.css` for global tokens + 4 themes + base
 --danger / --danger-soft, --credit / --credit-soft, --visit / --visit-soft
 --cat-* (per TimeCategory), --tag-* (per ContactStatus)
 --shadow-sm, --shadow-md, --title-shadow
+--space-1..8 (2/4/6/8/10/12/14/16px), --fs-xs..2xl (--fs-base is 13px), --lh-tight/base/relaxed
+--dur-fast/--dur/--dur-slow, --ease-standard/--ease-emphasized
 ```
+
+The spacing/type/motion scales were **measured from the values `App.css` already used most**, so
+adopting a token is a rename, not a redesign. Use them in new or touched CSS; a repo-wide sweep of
+the existing one-off values is deliberately deferred until there's a visual-regression check.
 
 **Notable classes:** `.card` / `.card.highlight`, `.chip` / `.chip.active`, `.segmented` (sub-view/filter
 toggles), `.field` / `.field-label` / `.field-row`, `.modal` / `.modal-backdrop` (+ `.modal-expanded`),
