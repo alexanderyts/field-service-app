@@ -38,9 +38,31 @@ export const MAX_QR_URL_LEN = 1200
 // pathologically large list, or an object shaped nothing like what the writer expects.
 const MAX_ENCODED_LEN = 256 * 1024
 const MAX_LIST = 2000
+// Capping the *encoded* size isn't enough on its own: deflate ratios can exceed 1000:1, so a
+// 256 KB payload could inflate to hundreds of MB and exhaust memory before JSON.parse — let
+// alone before MAX_LIST gets a look. Real shares are single-digit KB inflated; 4 MB is far
+// above anything legitimate and far below a level that could wedge a phone.
+const MAX_INFLATED_LEN = 4 * 1024 * 1024
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
+}
+
+/**
+ * Fields the payload *types* strip only at compile time. `Omit<Person, 'id' | …>` is erased
+ * at runtime, so a hand-built payload can carry an `id` (or a `personId`, or a forged
+ * `sharedWith`) straight through a spread into `db.<table>.add()`. An injected `id` either
+ * collides with a real row — throwing ConstraintError mid-import, leaving a half-written
+ * record — or jumps the auto-increment counter. Every one of these is set by the importer
+ * itself, so removing them can never lose real data.
+ */
+const INJECTED_KEYS = ['id', 'personId', 'createdAt', 'sharedWith', 'receivedFrom', 'completed', 'grouped'] as const
+
+/** Shallow copy of `record` with every locally-assigned field removed. */
+export function stripInjectedKeys<T extends object>(record: T): T {
+  const out = { ...record } as Record<string, unknown>
+  for (const key of INJECTED_KEYS) delete out[key]
+  return out as T
 }
 
 /** Rejects a decoded payload whose data isn't shaped like the kind it claims to be, so
@@ -91,6 +113,41 @@ export async function encodeSharePayload(payload: SharePayload): Promise<string>
   return 'r' + toBase64Url(raw)
 }
 
+/** Marker so the size guard inside the inflate callback is distinguishable from a genuine
+    pako failure once it surfaces out of `push`. */
+class InflatedTooLarge extends Error {}
+
+/** Streaming inflate that aborts as soon as the output passes MAX_INFLATED_LEN, rather than
+    materializing the whole thing and measuring afterwards — throwing from pako's `onData`
+    unwinds out of `push` mid-stream, so a decompression bomb never gets built in memory. */
+async function inflateCapped(body: Uint8Array): Promise<Uint8Array> {
+  const { Inflate } = await import('pako')
+  const inflator = new Inflate()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  inflator.onData = (chunk) => {
+    const bytes = chunk as Uint8Array
+    total += bytes.length
+    if (total > MAX_INFLATED_LEN) throw new InflatedTooLarge()
+    chunks.push(bytes)
+  }
+  try {
+    inflator.push(body, true)
+  } catch (e) {
+    if (e instanceof InflatedTooLarge) throw new Error('This share is too large to import.')
+    throw new Error('This share is malformed and was not imported.')
+  }
+  if (inflator.err) throw new Error('This share is malformed and was not imported.')
+
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    out.set(chunk, offset)
+    offset += chunk.length
+  }
+  return out
+}
+
 export async function decodeSharePayload(encoded: string): Promise<SharePayload> {
   if (typeof encoded !== 'string' || encoded.length > MAX_ENCODED_LEN) {
     throw new Error('This share is too large or malformed to import.')
@@ -99,8 +156,7 @@ export async function decodeSharePayload(encoded: string): Promise<SharePayload>
   const body = fromBase64Url(encoded.slice(1))
   let json: string
   if (mode === 'c') {
-    const { inflate } = await import('pako')
-    json = new TextDecoder().decode(inflate(body))
+    json = new TextDecoder().decode(await inflateCapped(body))
   } else {
     json = new TextDecoder().decode(body)
   }
@@ -244,19 +300,19 @@ export async function importSharedPayload(payload: SharePayload): Promise<void> 
   if (payload.kind === 'contact') {
     const { person, calls } = payload.data as ContactPayload
     const personId = (await db.people.add({
-      ...person,
+      ...stripInjectedKeys(person),
       createdAt: Date.now(),
       receivedFrom,
     } as Person)) as number
     for (const c of calls) {
-      await db.calls.add({ ...c, personId } as Call)
+      await db.calls.add({ ...stripInjectedKeys(c), personId } as Call)
     }
     return
   }
 
   if (payload.kind === 'street') {
     const data = payload.data as StreetPayload
-    await db.streetEntries.add({ ...data, createdAt: Date.now(), receivedFrom } as StreetEntry)
+    await db.streetEntries.add({ ...stripInjectedKeys(data), createdAt: Date.now(), receivedFrom } as StreetEntry)
     return
   }
 
@@ -285,10 +341,12 @@ export async function importSharedPayload(payload: SharePayload): Promise<void> 
       })) as number
       if (s.entryId != null) bySenderEntry.set(s.entryId, entryId)
     }
+    // `id` is kept: on a TerritoryStreet it's an identifier scoped to this territory's own
+    // array (a React key, not a database primary key), so it can't collide with a stored row.
     streets.push({ ...s, entryId })
   }
   await db.territories.add({
-    ...data,
+    ...stripInjectedKeys(data),
     streets,
     createdAt: Date.now(),
     completed: false,
