@@ -3612,3 +3612,19 @@ button.small {
 .backup-status.never .backup-status-dot {
   background: var(--danger);
 }
+
+/* ── Grouped-territory street rows: finished state ─────────────────────── */
+
+.territory-street-done {
+  gap: var(--space-4);
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+/* Struck through rather than hidden or greyed out of existence: a finished street is still
+   part of the territory, and its house history is still worth opening. */
+.street-done {
+  text-decoration: line-through;
+  color: var(--muted);
+}

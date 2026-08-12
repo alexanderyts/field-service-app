@@ -152,15 +152,26 @@ describe('completeTerritory', () => {
     expect(await db.territories.get(draftId)).toBeUndefined()
   })
 
+  // The decision behind this is deliberate: completing a territory records the work and
+  // clears the grouping, but never destroys what was learned working it. Houses, statuses
+  // and notes outlive the territory.
   it('leaves the backing Streets entries alone — finishing a territory keeps their history', async () => {
     const draftId = await seedDraft([street('a', 'Oak St')])
     await groupStreetsIntoTerritory(draftId, ['a'], 'North Side')
     const grouped = (await db.territories.toArray()).find((t) => t.grouped)!
+    const entryId = grouped.streets[0].entryId!
+    await db.streetEntries.update(entryId, {
+      houses: [{ id: 'h1', number: '342', status: 'not-home', note: 'Dog in the yard' }],
+    })
 
     await completeTerritory(grouped.id)
 
-    expect(await db.streetEntries.count()).toBe(1)
     expect(await db.territories.get(grouped.id)).toBeUndefined()
+    const entry = await db.streetEntries.get(entryId)
+    expect(entry).toBeDefined()
+    expect(entry!.houses).toHaveLength(1)
+    expect(entry!.houses[0].status).toBe('not-home')
+    expect(entry!.houses[0].note).toBe('Dog in the yard')
   })
 
   it('writes nothing for a territory that no longer exists', async () => {

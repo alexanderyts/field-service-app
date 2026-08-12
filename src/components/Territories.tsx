@@ -5,6 +5,7 @@ import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import { StreetDetail, type ContactPrefill } from './StreetEntries'
 import { ensureStreetEntry } from '../streets'
+import { completeTerritory } from '../records'
 import { StreetSnapshotModal, TerritoryMiniMap } from './Territory'
 import ShareModal from './ShareModal'
 import { SharedBadge, SharedWarning } from './SharedBits'
@@ -108,8 +109,23 @@ function TerritoryDetail({
   const [showImage, setShowImage] = useState(false)
   const [openStreetEntryId, setOpenStreetEntryId] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmComplete, setConfirmComplete] = useState(false)
   const [showShare, setShowShare] = useState(false)
   const [viewStreet, setViewStreet] = useState<TerritoryStreet | null>(null)
+
+  /** Mark a street finished (or not). Without this a grouped territory could never reach
+      "all streets done", which is the whole signal Complete Territory reads — the draft has
+      had this since tracing existed, the durable copy never did. Re-reads inside a
+      transaction so two quick toggles can't build on the same stale snapshot (cf. F023). */
+  async function toggleStreetDone(streetId: string) {
+    await db.transaction('rw', db.territories, async () => {
+      const fresh = await db.territories.get(territoryId)
+      if (!fresh) return
+      await db.territories.update(territoryId, {
+        streets: fresh.streets.map((s) => (s.id === streetId ? { ...s, done: !s.done } : s)),
+      })
+    })
+  }
 
   async function setStreetAssignee(streetId: string, name: string) {
     if (!territory) return
@@ -121,6 +137,7 @@ function TerritoryDetail({
   if (!territory) return null
 
   const territoryLocation = commonLocationLabel(territory.streets)
+  const allDone = territory.streets.length > 0 && territory.streets.every((s) => s.done)
 
   function entryFor(street: TerritoryStreet) {
     return resolveStreetEntry(street, streetEntries)
@@ -142,6 +159,16 @@ function TerritoryDetail({
   async function deleteTerritory() {
     setConfirmDelete(false)
     await db.territories.delete(territoryId)
+    onClose()
+  }
+
+  /** Finish a territory for real: record the completion Reports counts, then clear the
+      grouping. Distinct from Delete, which removes a territory without crediting the work —
+      that's for one created by mistake. The streets keep their own entries and house history
+      either way, so finishing a territory never destroys what was learned working it. */
+  async function finishTerritory() {
+    setConfirmComplete(false)
+    await completeTerritory(territoryId)
     onClose()
   }
 
@@ -182,12 +209,20 @@ function TerritoryDetail({
               return (
                 <li key={s.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
                   <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
-                    <div>
-                      <strong>{entry?.name ?? s.name}</strong>
-                      {entry && (
-                        <span className="badge">{entry.houses.length} house{entry.houses.length === 1 ? '' : 's'}</span>
-                      )}
-                    </div>
+                    <label className="checkbox-row territory-street-done">
+                      <input
+                        type="checkbox"
+                        checked={!!s.done}
+                        onChange={() => toggleStreetDone(s.id)}
+                        aria-label={`Mark ${entry?.name ?? s.name} finished`}
+                      />
+                      <div>
+                        <strong className={s.done ? 'street-done' : undefined}>{entry?.name ?? s.name}</strong>
+                        {entry && (
+                          <span className="badge">{entry.houses.length} house{entry.houses.length === 1 ? '' : 's'}</span>
+                        )}
+                      </div>
+                    </label>
                     <div className="row" style={{ gap: 6 }}>
                       {s.points.length >= 2 && (
                         <button className="icon-btn" title="View traced map" aria-label="View traced map" onClick={() => setViewStreet(s)}>🗺️</button>
@@ -215,7 +250,16 @@ function TerritoryDetail({
           </ul>
 
           <div className="row">
-            <button onClick={() => setShowShare(true)}>↗ Share</button>
+            <button
+              className={allDone ? '' : 'secondary'}
+              onClick={() => setConfirmComplete(true)}
+              disabled={territory.streets.length === 0}
+            >
+              Complete Territory
+            </button>
+            <button className="secondary" onClick={() => setShowShare(true)}>↗ Share</button>
+          </div>
+          <div className="row">
             <button className="danger" onClick={() => setConfirmDelete(true)}>Delete Territory</button>
             <button className="secondary" onClick={onClose}>Close</button>
           </div>
@@ -254,6 +298,22 @@ function TerritoryDetail({
         )}
 
         {viewStreet && <StreetSnapshotModal street={viewStreet} onClose={() => setViewStreet(null)} />}
+
+        <ConfirmDialog
+          open={confirmComplete}
+          title={`Complete "${territory.name}"?`}
+          message={
+            (allDone
+              ? 'Every street is marked finished. '
+              : 'Not every street is marked finished yet. Complete it anyway? ') +
+            "This records it in your reports and clears the grouping. Each street stays in Ministry → Streets with its house numbers, statuses and notes — nothing you recorded is lost."
+          }
+          confirmLabel="Complete Territory"
+          cancelLabel="Not yet"
+          tone="primary"
+          onConfirm={finishTerritory}
+          onCancel={() => setConfirmComplete(false)}
+        />
 
         <ConfirmDialog
           open={confirmDelete}

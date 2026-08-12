@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.17.1`.** History runs from the initial scaffold forward.
+**Current version: `0.18.0`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -138,6 +138,11 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **Bulk-deleting contacts, grouping a territory, sending a street to Ministry, and completing a territory** are each one all-or-nothing operation now. Interrupted partway, they used to leave orphaned call history, duplicate street entries, a street in two places at once, or — worst — a completed territory with its completion record lost for good (F025)
 - New tests: 31 added (104 → 135), including the first that drive a real IndexedDB — grouping streets into a territory, sending a street to Ministry, completing a territory, deleting contacts, and importing a share are now covered end-to-end rather than by inspection
 - Resolved 4 high-severity advisories in a build-time dependency; `npm audit` is clean again (F027)
+
+## 0.18.0 — Finish a territory from the Territories tab · 2026-08-12
+- **You can now complete a grouped territory.** "Complete Territory" only existed on the Map's scratch draft, so the real territories in Ministry → Territories — the ones you actually work through — could never be finished or counted. Completing one records it in Reports and clears the grouping (F026)
+- **Mark a territory's streets finished as you go.** Grouped territories had no way to tick a street off, so a territory could never read as fully worked. Finished streets show struck through
+- Completing a territory never destroys what you learned working it: every street stays in Ministry → Streets with its house numbers, statuses and notes. "Delete Territory" stays separate, for one created by mistake
 
 ---
 
