@@ -231,7 +231,7 @@ function StreetEntryForm({
   }
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
           <div className="modal-toolbar">
@@ -364,7 +364,7 @@ export function StreetDetail({
   }
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">
@@ -582,7 +582,7 @@ function HouseNumberPad({ onSubmit, onClose }: { onSubmit: (houses: PadHouse[]) 
   const keys = alpha ? LETTERS : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={close}>
       <div className="modal-backdrop" onClick={close}>
         <div className="modal numpad-modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">

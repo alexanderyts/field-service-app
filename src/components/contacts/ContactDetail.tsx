@@ -64,7 +64,7 @@ export function ContactDetail({ personId, onClose, onGoToMap }: {
   const household = householdSummary(person)
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
     <div className="modal-backdrop" onClick={onClose}>
       <div className={`modal${expanded ? ' modal-expanded' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-toolbar">

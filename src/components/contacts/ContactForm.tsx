@@ -224,7 +224,7 @@ export function ContactForm({ onClose, existing, prefill }: { onClose: () => voi
   }
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">

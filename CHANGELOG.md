@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.20.3`.** History runs from the initial scaffold forward.
+**Current version: `0.20.4`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -186,6 +186,10 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.20.3 — Browser security policy · 2026-09-07
 - **The app now tells the browser exactly what it's allowed to load and run.** Only Meleo's own code can execute — no injected or inline script ever will — and the only outside places it may contact are the map-tile and address-lookup services it already uses. Nothing changes day to day; it closes the door on a whole class of tampering (F009)
 - Checked by opening the real built app in a browser and exercising the map (both tile sources), the Schedule tab and a contact's share code, with no policy refusals
+
+## 0.20.4 — Popups work from the keyboard · 2026-09-07
+- **Every popup can now be used without a mouse or touch.** Opening one moves the keyboard focus inside it, Tab moves between its controls without escaping to the page behind, and Esc closes it — the same as tapping outside. When it closes, focus goes back to where you were; with a confirm on top of another popup, back to the popup underneath (F018)
+- Nothing changes for touch use; this is for keyboard and screen-reader users
 
 ---
 

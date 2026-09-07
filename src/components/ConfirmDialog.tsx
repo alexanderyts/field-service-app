@@ -25,7 +25,7 @@ export default function ConfirmDialog({
   if (!open) return null
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onCancel}>
       <div className="modal-backdrop confirm-backdrop" onClick={onCancel}>
         <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
           <h3>{title}</h3>

@@ -1,7 +1,45 @@
 import { createPortal } from 'react-dom'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type MutableRefObject, type ReactNode } from 'react'
+import { FOCUSABLE_SELECTOR, tabTarget } from './focusTrap'
 
 let lockCount = 0
+
+/** One open dialog. The most recently mounted is the top of the stack and the only one the
+    keyboard talks to; `restoreTo` is whatever had focus the moment it opened — for a dialog
+    opened over another dialog, that is a control inside the one underneath. */
+interface Layer {
+  host: HTMLElement
+  closeRef: MutableRefObject<(() => void) | undefined>
+  restoreTo: HTMLElement | null
+}
+const layers: Layer[] = []
+
+function focusablesIn(host: HTMLElement): HTMLElement[] {
+  return Array.from(host.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((el) => el.getClientRects().length > 0)
+}
+
+/** Installed on `document` (capture phase, so it wins over any handler inside the dialog)
+    only while at least one dialog is open. */
+function onKeyDown(e: KeyboardEvent) {
+  const top = layers[layers.length - 1]
+  if (!top) return
+  if (e.key === 'Escape') {
+    const close = top.closeRef.current
+    if (close) {
+      e.preventDefault()
+      e.stopPropagation()
+      close()
+    }
+    return
+  }
+  if (e.key === 'Tab') {
+    const items = focusablesIn(top.host)
+    const active = document.activeElement as HTMLElement | null
+    const target = tabTarget(items, active && items.includes(active) ? active : null, e.shiftKey)
+    e.preventDefault()
+    target?.focus()
+  }
+}
 
 /**
  * Renders its children directly onto document.body via a portal (instead of wherever
@@ -18,22 +56,53 @@ let lockCount = 0
  * The scroll lock uses a shared counter so one modal opening on top of another (e.g. a
  * confirm dialog over a form) doesn't unlock the page when the top one closes while the
  * one underneath is still open.
+ *
+ * Keyboard (AUDIT F018), inherited by every modal:
+ * - Focus moves into the dialog on open (onto whatever the modal `autoFocus`es, else the
+ *   host itself — never onto the first button, which for a confirm is "Delete").
+ * - Tab / Shift+Tab cycle within the dialog instead of escaping to the page behind it.
+ * - Esc calls `onClose` — the same handler as tapping the backdrop.
+ * - On close, focus goes back to where it was when the dialog opened; for a dialog over a
+ *   dialog, that is the control inside the one underneath, not the page.
+ * The pure Tab-cycling rule is `focusTrap.ts` (unit-tested); this is the DOM side.
  */
-// TODO(a11y): focus trap + focus restore + Esc-to-close, inherited by every modal.
-// Deliberately not done alongside the rest of the a11y pass — the same shared counter
-// above is the reason: nested modals mean the trap has to hand focus back to the layer
-// underneath rather than to the page, and the custom NumPad / CalendarPicker (which
-// exist precisely to avoid native date/number inputs) make the focusable-element query
-// non-obvious. It needs its own task with manual keyboard testing. See AUDIT F018.
-export default function ModalPortal({ children }: { children: ReactNode }) {
+export default function ModalPortal({ children, onClose }: { children: ReactNode; onClose?: () => void }) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  // Read through a ref so the latest handler is used without re-running the mount effect.
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
   useEffect(() => {
-    if (lockCount === 0) document.body.style.overflow = 'hidden'
+    if (lockCount === 0) {
+      document.body.style.overflow = 'hidden'
+      document.addEventListener('keydown', onKeyDown, true)
+    }
     lockCount++
+
+    const host = hostRef.current!
+    const layer: Layer = { host, closeRef, restoreTo: document.activeElement as HTMLElement | null }
+    layers.push(layer)
+    // A modal that autoFocuses an input has already placed focus; don't take it away.
+    if (!host.contains(document.activeElement)) host.focus()
+
     return () => {
+      const i = layers.indexOf(layer)
+      if (i !== -1) layers.splice(i, 1)
       lockCount--
-      if (lockCount === 0) document.body.style.overflow = ''
+      if (lockCount === 0) {
+        document.body.style.overflow = ''
+        document.removeEventListener('keydown', onKeyDown, true)
+      }
+      const back = layer.restoreTo
+      if (back && document.contains(back)) back.focus()
+      else layers[layers.length - 1]?.host.focus()
     }
   }, [])
 
-  return createPortal(children, document.body)
+  return createPortal(
+    <div ref={hostRef} className="modal-host" tabIndex={-1} role="dialog" aria-modal="true">
+      {children}
+    </div>,
+    document.body
+  )
 }

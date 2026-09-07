@@ -151,7 +151,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
 
 export function TutorialPrompt({ onYes, onNo }: { onYes: () => void; onNo: () => void }) {
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onNo}>
     <div className="modal-backdrop" onClick={onNo}>
       <div className="modal tutorial-prompt-modal" onClick={(e) => e.stopPropagation()}>
         <div className="tutorial-icon">👋</div>
@@ -209,7 +209,7 @@ export default function Tutorial({
   }, [step, currentTab, current.highlight])
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
     <div className="tutorial-overlay">
       {rect ? (
         <div

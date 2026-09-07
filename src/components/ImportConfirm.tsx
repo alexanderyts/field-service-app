@@ -35,7 +35,7 @@ export default function ImportConfirm({ encoded, onClose }: { encoded: string; o
   const desc = payload ? describePayload(payload) : null
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">

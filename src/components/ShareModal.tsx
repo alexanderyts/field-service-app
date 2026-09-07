@@ -118,7 +118,7 @@ export default function ShareModal({
   const them = recipient.trim() || 'them'
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">

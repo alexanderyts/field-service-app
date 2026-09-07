@@ -131,7 +131,7 @@ export function DayActionModal({
     .join(', ')
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop day-modal-backdrop" onClick={onClose}>
         <div className="modal day-action-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
           <div className="modal-toolbar">

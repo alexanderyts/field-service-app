@@ -27,7 +27,7 @@ export function TimeInputModal({
   const durationMin = timeInputToMinutes(end) - timeInputToMinutes(start)
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 340 }}>
           <div className="modal-toolbar">

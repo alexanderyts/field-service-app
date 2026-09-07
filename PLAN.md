@@ -13,14 +13,14 @@ effort **S/M/L** · and dependencies where they matter.
 
 Status markers: ✅ done · 🟡 partly done.
 
-> **Status as of 0.20.3 (2026-09-07).** Phase 0 is largely complete; Epic 1.1 and 1.4 have
+> **Status as of 0.20.4 (2026-09-07).** Phase 0 is largely complete; Epic 1.1 and 1.4 have
 > shipped. Two Phase-0 items are deliberately half-finished and are split below so the
 > remainder isn't lost.
 >
 > **Wave 0 is cleared.** AUDIT F022–F025 all landed in 0.17.1, and F026–F030 landed after.
 > F031–F033 (added by the 2026-09-06 review pass) are all closed as of 0.20.0, F010 in
-> 0.20.1, F008 in 0.20.2, and F009 in 0.20.3. Two audit findings remain open — F017, F018 —
-> both post-1.0.
+> 0.20.1, F008 in 0.20.2, F009 in 0.20.3, and F018 in 0.20.4. One audit finding remains open —
+> F017, the 44px chip height — and it needs a design decision, not a fix.
 > `REVIEW.md` stands at 19 of 20 closed, 1 waived: nothing in it is open.
 >
 > **The 1.0 line is complete.** All six items shipped in 0.19.1 and 0.20.0 — see the section at
@@ -49,11 +49,10 @@ Status markers: ✅ done · 🟡 partly done.
   *Blocked on a visual-regression check: a repo-wide value sweep can't be verified by eye.*
 - **F0.2a Accessible names + decorative-emoji hiding** ✅ *(0.17.0)* — 34 icon-only controls
   named; `aria-current` on the active tab.
-- **F0.2b Focus trap + Esc in `ModalPortal`** — **[UI] M.** Deferred with reasoning; nested
-  modals mean focus must restore to the layer beneath, and the custom NumPad/CalendarPicker
-  complicate the focusable query. Needs manual keyboard testing. *(AUDIT F018.)*
-  **Move this up if accessibility is claimed anywhere public** — a store listing or the privacy
-  copy saying so makes it a 1.0 item rather than a post-1.0 one.
+- **F0.2b Focus trap + Esc in `ModalPortal`** ✅ *(0.20.4)* — inherited by every modal; nested
+  dialogs hand focus back to the layer beneath. Keyboard-tested in a real browser. *(AUDIT F018.)*
+  The accessibility caveat on claiming it publicly is lifted for dialogs; F0.2c (chip height) is
+  the remaining touch-target item.
 - **F0.2c 44px touch targets** 🟡 — `.icon-btn` (44×44) and `.tabbar button` (~49px) already
   comply. `.chip` is ~32px and can't grow without reflowing every tab or making wrapped rows'
   hit areas overlap. Needs a container-level rethink. *(AUDIT F017.)*
@@ -219,8 +218,8 @@ this?* Six items passed it. Nothing else did. **All six have shipped.**
 **1.0 is unblocked.** What's left below is the next release's work. The remaining call is a
 release decision (store listing, the accessibility question in F0.2b), not an engineering one.
 
-**Everything else is post-1.0**, including the two remaining audit findings — F017 and F018 —
-both real, neither of which changes what a user's data does. Epics 2–9 are the next release's features — calling them 1.0 blockers is
+**Everything else is post-1.0**, including the one remaining audit finding — F017 — which is
+real and changes nothing about what a user's data does. Epics 2–9 are the next release's features — calling them 1.0 blockers is
 what kept this line undrawn.
 
 **Waves after 1.0.**

@@ -80,7 +80,7 @@ export default function ServiceYearReview({
   const countedHours = useCountUp(Math.round(applied / 60), 1800, phase === 'reveal')
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
     <div className="modal-backdrop year-review-backdrop" onClick={onClose}>
       <div className="modal year-review-modal" onClick={(e) => e.stopPropagation()}>
         <button className="year-review-close" onClick={onClose} aria-label="Close">×</button>

@@ -16,7 +16,7 @@ export function NumPad({ initialValue, label, max, onConfirm, onClose }: {
   function confirm() { onConfirm(input || '0'); onClose() }
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal numpad-modal" onClick={(e) => e.stopPropagation()}>
         <div className="numpad-display">

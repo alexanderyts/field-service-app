@@ -37,7 +37,7 @@ export function EditAppointmentModal({
   }
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
           <div className="modal-toolbar">

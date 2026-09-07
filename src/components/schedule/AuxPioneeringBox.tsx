@@ -243,7 +243,7 @@ export function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onCh
       )}
 
       {gearOpen && (
-        <ModalPortal>
+        <ModalPortal onClose={() => setGearOpen(false)}>
           <div className="modal-backdrop" onClick={() => setGearOpen(false)}>
             <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
               <div className="modal-toolbar">

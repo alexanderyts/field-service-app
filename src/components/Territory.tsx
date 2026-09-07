@@ -225,7 +225,7 @@ export function TerritoryDrawModal({
   }
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal modal-expanded" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
           <div className="modal-toolbar">
@@ -288,7 +288,7 @@ export function TerritoryDrawModal({
           )}
 
           {pendingStroke && (
-            <ModalPortal>
+            <ModalPortal onClose={() => setPendingStroke(null)}>
               <div className="modal-backdrop" onClick={() => setPendingStroke(null)}>
                 <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
                   <h3>Name this street</h3>
@@ -474,7 +474,7 @@ export function TerritoryManager({
       {/* Manage modal — the whole street workspace, opened by the Map tab's territory button once a
           draft has streets. Everything the old below-map card offered lives here. */}
       {territory && manageOpen && (
-        <ModalPortal>
+        <ModalPortal onClose={() => setManageOpen(false)}>
           <div className="modal-backdrop" onClick={() => setManageOpen(false)}>
             <div className="modal manage-territory-modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-toolbar">
@@ -590,7 +590,7 @@ export function TerritoryManager({
       />
 
       {groupNaming && (
-        <ModalPortal>
+        <ModalPortal onClose={() => setGroupNaming(false)}>
           <div className="modal-backdrop" onClick={() => setGroupNaming(false)}>
             <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
               <h3>Group into a territory</h3>
@@ -620,7 +620,7 @@ export function TerritoryManager({
     grouped-territory detail. */
 export function StreetSnapshotModal({ street, onClose }: { street: TerritoryStreet; onClose: () => void }) {
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">

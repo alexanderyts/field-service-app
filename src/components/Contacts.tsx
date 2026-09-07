@@ -234,7 +234,7 @@ export default function Contacts({
       )}
 
       {showChooser && (
-        <ModalPortal>
+        <ModalPortal onClose={() => setShowChooser(false)}>
           <div className="modal-backdrop" onClick={() => setShowChooser(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 340 }}>
               <div className="modal-toolbar">

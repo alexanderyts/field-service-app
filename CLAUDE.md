@@ -39,7 +39,8 @@ src/
   index.css            # Global resets, design tokens (CSS vars), 4 themes, base element styles
   db.ts                # Dexie schema (v8) + all TypeScript interfaces + house-number sort/resolve helpers
   ErrorBoundary.tsx    # Top-level crash catcher
-  ModalPortal.tsx      # Portal + body-scroll-lock wrapper used by every modal
+  ModalPortal.tsx      # Portal + body-scroll-lock + keyboard (focus in, Tab trap, Esc, focus restore) for every modal
+  focusTrap.ts         # The pure Tab-cycling rule ModalPortal uses (unit-tested)
   version.ts           # APP_VERSION (stamped into backups)
   legal.ts             # Copyright / developer email / "not affiliated" strings
   profile.ts           # User's own name (localStorage) — used as the "from" on shares
@@ -430,6 +431,15 @@ A change is "done" when:
   `src/version.ts` (`APP_VERSION`), and `package.json` together.
 
 ---
+
+### Modals
+
+Every `<ModalPortal>` **must pass `onClose`** — the same handler the backdrop tap uses — so Esc
+closes it (AUDIT F018). Focus handling is inherited: focus moves into the dialog on open (onto an
+`autoFocus`ed input if there is one, else the host — never the first button, which for a confirm
+is Delete), Tab/Shift+Tab cycle inside it, and on close focus returns to where it was when the
+dialog opened (for a dialog over a dialog, to the control in the one underneath). A new modal gets
+all of this for free; the only thing it has to do is pass `onClose`.
 
 ## What NOT to Do
 

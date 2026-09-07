@@ -173,7 +173,7 @@ function TerritoryDetail({
   }
 
   return (
-    <ModalPortal>
+    <ModalPortal onClose={onClose}>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-toolbar">
@@ -276,7 +276,7 @@ function TerritoryDetail({
         )}
 
         {showImage && (
-          <ModalPortal>
+          <ModalPortal onClose={() => setShowImage(false)}>
             <div className="modal-backdrop" onClick={() => setShowImage(false)}>
               <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
                 <div className="modal-toolbar">

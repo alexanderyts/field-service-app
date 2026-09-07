@@ -2028,6 +2028,14 @@ button.small {
   border-radius: 0 999px 999px 0;
 }
 
+/* ---- Modal host (ModalPortal) ---- */
+/* The wrapper every modal is portalled into. It has no box of its own (its children are
+   position: fixed) and is focused programmatically on open so keyboard focus starts inside
+   the dialog — so it must never draw a focus ring. */
+.modal-host:focus {
+  outline: none;
+}
+
 /* ---- Category dot in entry list ---- */
 .cat-dot {
   display: inline-block;
