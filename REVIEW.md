@@ -3,15 +3,15 @@
 _Reviewed against the full `src/` tree, built and tested in a clean environment. Line numbers are
 from the versions reviewed and have since drifted — use the symbol names._
 
-> **Status (2026-09-07, v0.20.0). 14 of 20 findings closed, 1 waived, 5 open.**
+> **Status (2026-09-07, v0.20.1). 19 of 20 findings closed, 1 waived, 0 open.**
 > Closed: F-A1, F-A2 (0.16.1); F-B1, F-B2, F-B4 (0.17.0); F-A3, F-A4, F-A5, F-B3 (0.17.1, as
-> AUDIT F022–F025); F-C1, F-C3, F-B5, F-B6 (0.19.1); F-A6 (0.20.0, settled inside §4 as planned).
-> Waived: F-C7.
+> AUDIT F022–F025); F-C1, F-C3, F-B5, F-B6 (0.19.1); F-A6 (0.20.0, settled inside §4 as planned);
+> F-B7, F-C2, F-C4, F-C5, F-C6 (0.20.1). Waived: F-C7.
 >
-> **The 1.0 line in `PLAN.md` is complete** — §4 landed in 0.20.0 with its migration and the
-> `'other'` copy fix. Everything still open (F-B7, F-C2, F-C4, F-C5, F-C6) is low/medium
-> hardening; none of it writes wrong data. `AUDIT.md` is authoritative for finding status; this
-> file is authoritative only for §3, the one part that still describes unbuilt work.
+> **Every finding in this review is resolved.** The 1.0 line in `PLAN.md` is complete. What
+> remains of this file is §3, the one part that still describes unbuilt work; `AUDIT.md` is
+> authoritative for finding status and still carries four open low-severity items of its own
+> (F008, F009, F017, F018).
 
 ---
 
@@ -73,7 +73,7 @@ the restored set — the device ends up as the union of two states rather than t
 _Fix:_ clear every non-blocklisted `fieldservice_*` key before writing the file's settings.
 Pairs naturally with AUDIT F032.
 
-**F-B7 — low — open.** The v1→v2 `visits`→`calls` migration swallows errors
+**F-B7 — low — CLOSED (0.20.1).** The v1→v2 `visits`→`calls` migration swallows errors
 (`.catch(() => [])`), so a dropped-store race loses old visit history silently.
 
 ### C. Robustness / defensive gaps
@@ -85,7 +85,7 @@ Pairs naturally with AUDIT F032.
 the button stuck on "Matching to street…" with no recovery but closing the modal.
 _Fix:_ an `AbortController` + timeout on every fetch; clear loading flags in `finally`.
 
-**F-C2 — low/medium — open.** Double-submit windows: "Submit Time" stays live during the ~620ms
+**F-C2 — low/medium — CLOSED (0.20.1).** Double-submit windows: "Submit Time" stays live during the ~620ms
 collect animation; `StreetEntryForm.save` has no `saving` guard and its dup-check can race.
 (The contact form and call logger both already guard — copy that pattern.)
 
@@ -95,12 +95,12 @@ collect animation; `StreetEntryForm.save` has no `saving` guard and its dup-chec
 _Fix:_ coerce with a `Number.isFinite` fallback **in `timeStats.ts`**, not at the three call
 sites (`Schedule.tsx:1031`, `Schedule.tsx:1070`, `Reports.tsx:131`).
 
-**F-C4 — low — open.** `dateOverrides` grows unbounded — an entry (often `[]`) per touched date,
+**F-C4 — low — CLOSED (0.20.1).** `dateOverrides` grows unbounded — an entry (often `[]`) per touched date,
 never pruned, re-serialized into every update and every backup.
 
-**F-C5 — low — open.** `emailReport` can exceed `mailto:` length limits for a big month.
+**F-C5 — low — CLOSED (0.20.1).** `emailReport` can exceed `mailto:` length limits for a big month.
 
-**F-C6 — low — open.** Address autocomplete doesn't sequence overlapping responses → stale
+**F-C6 — low — CLOSED (0.20.1).** Address autocomplete doesn't sequence overlapping responses → stale
 suggestions.
 
 **F-C7 — low — waived.** Streets-list territory badge over-matches by name. Already `AUDIT.md`
@@ -237,5 +237,6 @@ are logged as **Ministry** with an Activity Note.
 2. ✅ **Done — the 1.0 line is complete** (see `PLAN.md`). The doc reconciliation (AUDIT F031),
    F-C1, F-C3, F-B5 + AUDIT F033 and F-B6 + AUDIT F032 landed in 0.19.1; §4 with its migration
    and the `'other'` copy fix (resolving F-A6) landed in 0.20.0.
-3. **⬅ Next: post-1.0.** The §3 reframe, F-C2, F-C4, F-C5, F-C6, F-B7, then AUDIT F008 — which
-   pays for itself across all of it.
+3. ✅ **Done (0.20.1).** F-B7, F-C2, F-C4, F-C5, F-C6, plus AUDIT F010.
+4. **⬅ Next: post-1.0.** The §3 reframe, then AUDIT F008 — which pays for itself across
+   everything after it.

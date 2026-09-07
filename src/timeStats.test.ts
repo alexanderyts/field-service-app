@@ -9,6 +9,7 @@ import {
   serviceYearlyApplied,
   monthlyGoalFromWeekly,
   quickLogStrategy,
+  pruneDateOverrides,
 } from './timeStats'
 
 const H = 60 // minutes per hour
@@ -125,6 +126,30 @@ describe('quickLogStrategy — what the minute bank is allowed to hold (F-A6)', 
   it('does nothing for a zero duration', () => {
     expect(quickLogStrategy('ministry', 0, 0)).toBe('none')
     expect(quickLogStrategy('credit', 0, 0)).toBe('none')
+  })
+})
+
+describe('pruneDateOverrides — one-off schedule overrides stop growing forever (F-C4)', () => {
+  const now = new Date(2026, 8, 7) // 7 Sept 2026 -> service year 2027; previous year starts 1 Sept 2025
+  const over = {
+    '2024-03-10': [],          // two service years back — goes
+    '2025-08-31': [],          // last day of SY2025 — goes
+    '2025-09-01': [],          // first day of the previous service year — kept
+    '2026-09-06': [{ start: 540, end: 720, category: 'ministry' }], // yesterday — kept
+    '2027-01-15': [],          // future — kept
+  }
+
+  it('keeps this service year and the previous one, drops anything older', () => {
+    expect(Object.keys(pruneDateOverrides(over, now)!).sort()).toEqual(['2025-09-01', '2026-09-06', '2027-01-15'])
+  })
+
+  it('keeps an empty override — it is what stops a submitted day from reappearing', () => {
+    expect(pruneDateOverrides(over, now)!['2025-09-01']).toEqual([])
+  })
+
+  it('never drops a key it cannot parse, and passes undefined through', () => {
+    expect(pruneDateOverrides({ garbage: [] }, now)).toEqual({ garbage: [] })
+    expect(pruneDateOverrides(undefined, now)).toBeUndefined()
   })
 })
 

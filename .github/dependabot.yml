@@ -1,0 +1,19 @@
+# AUDIT F010 — the build-time advisories in F027 sat unnoticed because `npm audit` only ran
+# when someone happened to run it. Dependabot opens a PR when a dependency has a fix, so
+# CI (build + lint + test) gates the update instead of a human remembering to check.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for routine minor/patch bumps keeps the noise down; majors stay separate so a
+      # breaking change is never buried in a batch.
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

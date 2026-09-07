@@ -124,6 +124,31 @@ export function serviceYearlyTotals(logs: TimeLog[], label: number): RawTotals {
   return monthTotals(logs.filter((l) => l.date >= start && l.date <= end))
 }
 
+/**
+ * Drops one-off schedule overrides that can no longer matter. `dateOverrides` gains an entry
+ * (often an empty one, meaning "this date's weekly plan is cleared/submitted") for every date
+ * the person touches, and nothing ever removed them — so the record grew without bound and was
+ * re-serialized into every plan write and every backup (REVIEW.md F-C4).
+ *
+ * An empty override is NOT redundant — it's what stops a submitted day's weekly plan from
+ * reappearing as a hollow "still to do" arc — so pruning is by age only: anything dated before
+ * the start of the *previous* service year goes. That keeps every date any view leads with
+ * (this year and last) exactly as it was; a ring two or more service years back may show the
+ * weekly pattern's hollow arc again, which is the trade accepted here.
+ */
+export function pruneDateOverrides<T>(overrides: Record<string, T> | undefined, now: Date): Record<string, T> | undefined {
+  if (!overrides) return overrides
+  const keepFrom = serviceYearBounds(serviceYearLabel(now) - 1).start
+  const kept: Record<string, T> = {}
+  for (const [key, value] of Object.entries(overrides)) {
+    const [y, m, d] = key.split('-').map(Number)
+    const stamp = new Date(y, m - 1, d).getTime()
+    // An unparseable key is kept: pruning must never be the thing that loses a plan.
+    if (Number.isNaN(stamp) || stamp >= keepFrom) kept[key] = value
+  }
+  return kept
+}
+
 /** A month's goal, derived from a weekly hours target using the average weeks/month (4.3). */
 export function monthlyGoalFromWeekly(weeklyHours: number): number {
   const hours = Number.isFinite(weeklyHours) ? weeklyHours : 0

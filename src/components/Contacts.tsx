@@ -428,14 +428,23 @@ function ContactForm({ onClose, existing, prefill }: { onClose: () => void; exis
   // Debounced address lookup — waits for a pause in typing before hitting Nominatim,
   // both to be a reasonable API citizen and to avoid a suggestion list that's constantly
   // re-fetching mid-keystroke.
+  // Each lookup takes a ticket; only the newest ticket's answer is shown. Responses don't
+  // arrive in the order they were sent, so without this a slow reply to "Map" could land
+  // after the fast reply to "Maple Av" and replace the right list with a stale one
+  // (REVIEW.md F-C6). Clearing the list takes a ticket too, so a late reply can't refill it.
+  const addressLookupSeq = useRef(0)
   useEffect(() => {
     const q = [street, city, state].filter(Boolean).join(', ')
     if (street.trim().length < 4) {
+      addressLookupSeq.current++
       setAddressSuggestions([])
       return
     }
     const t = window.setTimeout(() => {
-      searchAddress(q).then(setAddressSuggestions)
+      const ticket = ++addressLookupSeq.current
+      searchAddress(q).then((results) => {
+        if (ticket === addressLookupSeq.current) setAddressSuggestions(results)
+      })
     }, 500)
     return () => window.clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps

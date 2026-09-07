@@ -9,6 +9,7 @@ import {
   fmtDuration,
   isCredit,
   monthTotals,
+  pruneDateOverrides,
   quickLogStrategy,
   serviceYearLabel,
   serviceYearRangeLabel,
@@ -332,7 +333,12 @@ async function mutateSchedulePrefs(
     const current = await db.schedulePrefs.get(prefsId)
     if (!current) return
     const patch = mutate(current)
-    if (patch) await db.schedulePrefs.update(prefsId, patch)
+    if (!patch) return
+    // Every plan write is also the moment stale overrides get dropped (F-C4) — here, on the
+    // fresh in-transaction copy, so the prune can't race a concurrent write any more than the
+    // patch itself can.
+    if (patch.dateOverrides) patch.dateOverrides = pruneDateOverrides(patch.dateOverrides, new Date())
+    await db.schedulePrefs.update(prefsId, patch)
   })
 }
 

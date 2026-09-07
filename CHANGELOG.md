@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.20.0`.** History runs from the initial scaffold forward.
+**Current version: `0.20.1`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -168,6 +168,15 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **Turning credit hours off now means Ministry only**, as the setting always implied
 - **The minute bank holds ministry minutes only.** Leftover minutes from credit time used to go into the same pot and come back out labelled as whichever kind of time happened to fill it — which could quietly misfile hours right at the cap, where the difference matters most. Credit is logged whole instead
 - New tests: 6 added covering the conversion itself — a real older database is built, upgraded, and checked to confirm no entry is left unlabelled and no month's counted total changes
+
+## 0.20.1 — Loose ends from the review · 2026-09-07
+- **A double tap can't log time twice or add a street twice.** "Submit Time" stayed live for a moment after the first tap while the minutes animated into the bank, and "Save Street" had no guard while it checked for a duplicate name — either could write two entries from one fast double tap (F-C2)
+- **Address suggestions can't go stale.** If you kept typing, a slow reply to an earlier version of the address could arrive last and overwrite the right suggestions with old ones. Only the newest lookup is shown now (F-C6)
+- **A long monthly report no longer arrives cut off.** Some mail apps truncate a mail link around 2,000 characters; a big month with several completed territories could pass that silently. Past the limit the full report is copied to your clipboard and the email opens with a note to paste it — and there's a new **Copy Report** button either way (F-C5)
+- **Old one-off schedule changes are cleaned up.** Every date you ever cleared or edited individually was kept forever and re-saved into every backup. Anything older than the previous service year is now dropped on the next schedule change; this year and last are untouched (F-C4)
+- **A very old upgrade no longer hides a failure.** The early visits→calls conversion used to swallow any error and carry on with the history missing; it now only skips a genuinely absent table and otherwise stops so nothing is silently lost (F-B7)
+- Dependabot now opens a weekly pull request when a dependency has a fix, so security advisories can't accumulate unnoticed again (F010)
+- New tests: 3 added (168 → 171) covering the schedule-override cleanup
 
 ---
 

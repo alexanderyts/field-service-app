@@ -318,7 +318,16 @@ db.version(2).stores({
       await tx.table('people').update(p.id, { dateMet: p.createdAt })
     }
   }
-  const oldVisits = await tx.table('visits').toArray().catch(() => [])
+  // Only a genuinely absent `visits` store is safe to skip. Any other failure — a read error,
+  // a dropped-store race mid-upgrade — must abort so Dexie rolls the whole upgrade back,
+  // rather than silently carrying on with the old visit history discarded (REVIEW.md F-B7).
+  let oldVisits: Record<string, unknown>[] = []
+  try {
+    oldVisits = await tx.table('visits').toArray()
+  } catch (e) {
+    const name = (e as { name?: string } | null)?.name
+    if (name !== 'NotFoundError' && name !== 'InvalidTableError') throw e
+  }
   for (const v of oldVisits) {
     await tx.table('calls').add({
       personId: v.personId,

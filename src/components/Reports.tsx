@@ -149,7 +149,7 @@ export default function Reports() {
   const monthLabel = targetDate.toLocaleString(undefined, { month: 'long', year: 'numeric' })
   const isCurrentMonth = monthOffset === 0
 
-  function emailReport() {
+  function reportBody(): string {
     let body = `Meleo Report — ${monthLabel}\n\n`
     body += `Total Hours: ${fmtDuration(totalMin)}\n`
     if (ministryMin) body += `  Ministry: ${fmtDuration(ministryMin)}\n`
@@ -170,8 +170,43 @@ export default function Reports() {
       }
     }
     if (yearGoalMin) body += `\nYearly Goal Progress: ${fmtDuration(yearAppliedMin)} of ${fmtDuration(yearGoalMin)} (${yearPct}%)\n`
+    return body
+  }
+
+  const [copyMsg, setCopyMsg] = useState<string | null>(null)
+
+  async function copyReport() {
+    try {
+      await navigator.clipboard.writeText(reportBody())
+      setCopyMsg('Report copied — paste it anywhere.')
+    } catch {
+      setCopyMsg("Couldn't copy on this device — use Email instead.")
+    }
+  }
+
+  // A `mailto:` link is a URL, and some mail apps cut it off around 2,000 characters — a big
+  // month with a long list of completed territories can pass that and arrive truncated with
+  // no warning (REVIEW.md F-C5). Past the limit the full text goes to the clipboard and the
+  // email opens with a one-line note to paste it, which is never cut off.
+  const MAILTO_SAFE_LEN = 1800
+  async function emailReport() {
     const subject = `Meleo Report — ${monthLabel}`
-    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    const body = reportBody()
+    const full = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    if (full.length <= MAILTO_SAFE_LEN) {
+      window.location.href = full
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(body)
+      setCopyMsg('This report is too long for a mail link, so it was copied — paste it into the email.')
+      const note = 'This report was copied to your clipboard — paste it here.'
+      window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(note)}`
+    } catch {
+      // No clipboard: send what fits rather than nothing, and say so.
+      setCopyMsg('This report is too long for a mail link and copying failed — it may arrive cut off.')
+      window.location.href = full
+    }
   }
 
   if (!ran) {
@@ -420,9 +455,15 @@ export default function Reports() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <button onClick={emailReport} disabled={!email || totalMin === 0}>
-          Email Report
-        </button>
+        <div className="row">
+          <button onClick={emailReport} disabled={!email || totalMin === 0}>
+            Email Report
+          </button>
+          <button className="secondary" onClick={copyReport} disabled={totalMin === 0}>
+            Copy Report
+          </button>
+        </div>
+        {copyMsg && <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>{copyMsg}</p>}
       </div>
       </div>
       )}{/* /report-body */}

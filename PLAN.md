@@ -13,14 +13,14 @@ effort **S/M/L** · and dependencies where they matter.
 
 Status markers: ✅ done · 🟡 partly done.
 
-> **Status as of 0.20.0 (2026-09-07).** Phase 0 is largely complete; Epic 1.1 and 1.4 have
+> **Status as of 0.20.1 (2026-09-07).** Phase 0 is largely complete; Epic 1.1 and 1.4 have
 > shipped. Two Phase-0 items are deliberately half-finished and are split below so the
 > remainder isn't lost.
 >
 > **Wave 0 is cleared.** AUDIT F022–F025 all landed in 0.17.1, and F026–F030 landed after.
-> F031–F033 (added by the 2026-09-06 review pass) are all closed as of 0.20.0. Five audit
-> findings remain open — F008, F009, F010, F017, F018 — and every one is post-1.0.
-> `REVIEW.md` stands at 14 of 20 closed.
+> F031–F033 (added by the 2026-09-06 review pass) are all closed as of 0.20.0, and F010 in
+> 0.20.1. Four audit findings remain open — F008, F009, F017, F018 — every one post-1.0.
+> `REVIEW.md` stands at 19 of 20 closed, 1 waived: nothing in it is open.
 >
 > **The 1.0 line is complete.** All six items shipped in 0.19.1 and 0.20.0 — see the section at
 > the end. What remains in this file is the next release's work, not the current one's.
