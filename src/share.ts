@@ -49,6 +49,12 @@ export function canShareAsLink(encoded: string): boolean {
 // pathologically large list, or an object shaped nothing like what the writer expects.
 const MAX_ENCODED_LEN = 256 * 1024
 const MAX_LIST = 2000
+// MAX_LIST bounds how many elements a list can have, never how big one element is — a single
+// contact name or house note could otherwise arrive at nearly MAX_INFLATED_LEN and get written
+// straight to IndexedDB, then rendered into a list row on every paint (AUDIT F033). 10,000
+// chars is far past any real name/address/note field and comfortably below anything that could
+// wedge a phone.
+const MAX_STR = 10_000
 // Capping the *encoded* size isn't enough on its own: deflate ratios can exceed 1000:1, so a
 // 256 KB payload could inflate to hundreds of MB and exhaust memory before JSON.parse — let
 // alone before MAX_LIST gets a look. Real shares are single-digit KB inflated; 4 MB is far
@@ -76,12 +82,29 @@ export function stripInjectedKeys<T extends object>(record: T): T {
   return out as T
 }
 
+/** Walks a value at every depth, rejecting any string over MAX_STR or any array over
+    MAX_LIST — closes the gap the per-kind checks below leave open: they cap `calls`/`houses`/
+    `streets` themselves, but a TerritoryStreet's own nested `points`/`houses` arrays, or any
+    string anywhere in the payload, were never bounded at all (AUDIT F033). */
+function assertBoundedDepth(v: unknown): void {
+  const bad = () => { throw new Error('This share is malformed and was not imported.') }
+  if (typeof v === 'string') {
+    if (v.length > MAX_STR) bad()
+  } else if (Array.isArray(v)) {
+    if (v.length > MAX_LIST) bad()
+    for (const item of v) assertBoundedDepth(item)
+  } else if (isObject(v)) {
+    for (const value of Object.values(v)) assertBoundedDepth(value)
+  }
+}
+
 /** Rejects a decoded payload whose data isn't shaped like the kind it claims to be, so
     importSharedPayload only ever spreads the expected fields into the local database. */
 function assertValidPayload(p: SharePayload): void {
   const bad = () => { throw new Error('This share is malformed and was not imported.') }
   const d = p.data as Record<string, unknown>
   if (!isObject(d)) bad()
+  assertBoundedDepth(d)
   const okList = (v: unknown) => v == null || (Array.isArray(v) && v.length <= MAX_LIST)
   if (p.kind === 'contact') {
     const person = (d as { person?: unknown }).person

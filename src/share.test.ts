@@ -84,6 +84,62 @@ describe('decodeSharePayload — trust boundary', () => {
   it('rejects a corrupt compressed body without crashing', async () => {
     await expect(decodeSharePayload('c' + toBase64Url(new Uint8Array([1, 2, 3, 4, 5])))).rejects.toThrow(/malformed/i)
   })
+
+  // AUDIT F033: MAX_LIST bounds how many elements a list has, never how big one element is.
+  it('rejects a string field far past any real name/note, anywhere in the payload', async () => {
+    const bad = {
+      v: 1,
+      kind: 'contact',
+      from: 'x',
+      data: { person: { name: 'A'.repeat(20_000), status: 'interested', dateMet: 0 }, calls: [] },
+    } as unknown as SharePayload
+    const encoded = await encodeSharePayload(bad)
+    await expect(decodeSharePayload(encoded)).rejects.toThrow(/malformed/i)
+  })
+
+  it('rejects an over-long string nested inside a list element, not just top-level fields', async () => {
+    const bad = {
+      v: 1,
+      kind: 'contact',
+      from: 'x',
+      data: {
+        person: { name: 'Jane Doe', status: 'interested', dateMet: 0 },
+        calls: [{ date: 1, notes: 'N'.repeat(20_000) }],
+      },
+    } as unknown as SharePayload
+    const encoded = await encodeSharePayload(bad)
+    await expect(decodeSharePayload(encoded)).rejects.toThrow(/malformed/i)
+  })
+
+  // The one-level-deep gap: `streets` itself was capped, but a TerritoryStreet's own nested
+  // `points`/`houses` arrays never were.
+  it('rejects an over-long array nested inside a territory street, not just the streets list itself', async () => {
+    const points = Array.from({ length: 2001 }, (_, i) => ({ lat: i, lng: i }))
+    const bad = {
+      v: 1,
+      kind: 'territory',
+      from: 'x',
+      data: { name: 'T', streets: [{ id: 'a', name: 'Oak St', points, done: false }] },
+    } as unknown as SharePayload
+    const encoded = await encodeSharePayload(bad)
+    await expect(decodeSharePayload(encoded)).rejects.toThrow(/malformed/i)
+  })
+
+  it('still accepts ordinary nested strings and arrays well under the caps', async () => {
+    const payload: SharePayload = {
+      v: 1,
+      kind: 'territory',
+      from: 'Tester',
+      data: {
+        name: 'North Side',
+        streets: [
+          { id: 'a', name: 'Oak St', points: [{ lat: 32.3, lng: -90 }], done: false, city: 'Brandon' },
+        ],
+      },
+    } as unknown as SharePayload
+    const decoded = await decodeSharePayload(await encodeSharePayload(payload))
+    expect((decoded.data as { name: string }).name).toBe('North Side')
+  })
 })
 
 describe('stripInjectedKeys — runtime id removal', () => {

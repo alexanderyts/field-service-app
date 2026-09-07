@@ -7,6 +7,7 @@ import { db, type ContactStatus, type Person } from '../db'
 import { STATUS_LABELS } from '../contactStatus'
 import { useCurrentLocation } from '../useGeolocation'
 import { TerritoryManager, TerritoryStreetsOverlay } from './Territory'
+import { fetchWithTimeout } from '../fetchWithTimeout'
 
 const meIcon = L.divIcon({
   className: 'me-marker',
@@ -160,7 +161,7 @@ export default function MapView({
     setSearchErr(null)
     try {
       // Same free Nominatim service the app already uses for reverse geocoding, /search endpoint.
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`)
+      const res = await fetchWithTimeout(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`)
       const data = await res.json()
       if (data?.[0]) setSearchTarget({ lat: +data[0].lat, lng: +data[0].lon })
       else setSearchErr('No place found — try a fuller address.')

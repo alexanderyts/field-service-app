@@ -7,6 +7,7 @@ import { analyzeScripture, formatScripture } from '../scripture'
 import { expandState } from '../usStates'
 import { sameAddress } from '../address'
 import { deleteContacts } from '../records'
+import { fetchWithTimeout } from '../fetchWithTimeout'
 import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
 import StreetEntries, { type ContactPrefill } from './StreetEntries'
@@ -321,7 +322,7 @@ async function geocodeAddress(street: string, city: string, state: string, zip: 
   const q = [street, city, state, zip].filter(Boolean).join(', ')
   if (!q) return null
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
       { headers: { 'User-Agent': 'FieldServiceApp/1.0' } }
     )
@@ -347,7 +348,7 @@ interface AddressSuggestion {
 async function searchAddress(query: string): Promise<AddressSuggestion[]> {
   if (query.trim().length < 4) return []
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5&countrycodes=us`,
       { headers: { 'User-Agent': 'FieldServiceApp/1.0' } }
     )

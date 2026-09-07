@@ -5,6 +5,8 @@
 // Everything degrades gracefully: no network, no nearby road, or too few points all fall
 // back to the raw waypoints the user placed.
 
+import { fetchWithTimeout } from './fetchWithTimeout'
+
 export interface LatLng {
   lat: number
   lng: number
@@ -35,11 +37,14 @@ export async function fetchRoadsNear(points: LatLng[]): Promise<LatLng[][]> {
   const bbox = `${minLat - padLat},${minLng - padLng},${maxLat + padLat},${maxLng + padLng}`
   const query = `[out:json][timeout:20];way["highway"~"${HIGHWAY_RE}"](${bbox});out geom;`
   try {
-    const res = await fetch(OVERPASS_URL, {
+    // Overpass's own `[timeout:20]` in the query only bounds how long the SERVER works; it
+    // does nothing if the response itself never arrives. A client-side bound slightly past
+    // that catches the case the server-side one can't (REVIEW.md F-C1).
+    const res = await fetchWithTimeout(OVERPASS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: 'data=' + encodeURIComponent(query),
-    })
+    }, 25_000)
     if (!res.ok) return []
     const data = await res.json()
     const ways: LatLng[][] = []

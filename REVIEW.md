@@ -1,16 +1,15 @@
 # Meleo — Code, Stability & Functionality Review
 
-_Reviewed: the full `src/` tree, built and tested in a clean environment. Line numbers are from
-the versions reviewed and have since drifted — use the symbol names._
+_Reviewed against the full `src/` tree, built and tested in a clean environment. Line numbers are
+from the versions reviewed and have since drifted — use the symbol names._
 
-> **Implementation status (2026-08-12, v0.17.0).** This review is **not** fully implemented.
-> Five findings have landed: F-A1 and F-A2 (as AUDIT F011/F012, in 0.16.1), and F-B1, F-B2, F-B4
-> (as AUDIT F013/F014/F015, in 0.17.0). Everything else below is **open**. The two remaining
-> `high`-severity ones are now tracked as **AUDIT F022** (F-A3) and **AUDIT F023** (F-A4) and are
-> the recommended next work. Each finding is marked ✅ / ⬜ below.
+> **Status (2026-09-06, v0.19.0). 9 of 20 findings closed, 1 waived, 10 open.**
+> Closed: F-A1, F-A2 (0.16.1); F-B1, F-B2, F-B4 (0.17.0); F-A3, F-A4, F-A5, F-B3 (0.17.1, as
+> AUDIT F022–F025 — each spot-checked in source on 2026-09-06). Waived: F-C7.
 >
-> **§4 (Ministry/Credit) has been corrected** — the original said no data migration was required.
-> That is wrong for anything the user can see. See the section for the mechanism.
+> Everything still open is low/medium hardening **except §4**, which is the only open item that
+> writes wrong data in ordinary use. `AUDIT.md` is authoritative for finding status; this file is
+> authoritative only for §3 and §4, the parts that still describe unbuilt work.
 
 ---
 
@@ -21,117 +20,98 @@ Meleo is a **mature, unusually well-disciplined codebase** for a solo project: T
 audit register. The architecture (local-first Dexie + peer-to-peer sharing, no backend) is
 coherent and the pure-math layer is careful and well-covered.
 
-The genuine risks are **not** crashes — they're **silent data loss and lost-update races**, which
-matter more here than almost anywhere because there is no server copy to fall back on. They
-cluster in three places: (1) the minute-bank write path, (2) read-modify-write on JSON
-array/map fields read from `useLiveQuery` snapshots, and (3) the untrusted-input boundaries.
+The genuine risks were never crashes — they were **silent data loss and lost-update races**,
+which matter more here than almost anywhere because there is no server copy to fall back on.
+They clustered in three places: the minute-bank write path, read-modify-write on JSON
+array/map fields read from `useLiveQuery` snapshots, and the untrusted-input boundary. **All
+three clusters are now closed.**
 
-The project is in a genuinely shippable state. Everything below is hardening, not "it's broken."
+What remains is hardening plus one modelling error. The project is in a shippable state; §4 is
+the thing to fix before calling it released.
 
 ---
 
-## 2. Findings, ranked
+## 2. Findings
+
+### Closed — see `AUDIT.md` for named proof
+
+| ID | Closed as | Summary |
+|----|-----------|---------|
+| F-A1 | F011 (`d5c6624`) | Minute-bank logged time persisted only *after* ~1.1s of animation |
+| F-A2 | F012 (`d5c6624`) | Schedule writes spread a stale `useLiveQuery` prefs snapshot |
+| F-A3 | F022 (`7f11c44`) | Geocode failure wiped an accurate coordinate |
+| F-A4 | F023 (`2cf8732`) | Per-keystroke read-modify-write on `houses[]` |
+| F-A5 | F025 (`03070ac`) | Four multi-table flows ran untransacted |
+| F-B1 | F013 (`3217bce`) | Decompression bomb — inflate had no output cap |
+| F-B2 | F014 (`3217bce`) | "id stripping" was compile-time only (`Omit<>` is erased) |
+| F-B3 | F024 (`7f5273d`) | `importBackup` ignored its own `formatVersion` |
+| F-B4 | F015 (`2f984ae`) | `getAuxConfig` spread parsed JSON over its defaults |
 
 ### A. Data loss & lost-update races
 
-**F-A1 — critical — ✅ fixed (AUDIT F011, `d5c6624`).** Logged time was written to the DB only
-*after* ~1.1s of animation, while the minute bank had already decremented in localStorage. A
-backgrounded/killed PWA in that window silently lost the time. `bankQuickLogMinutes` now persists
-all rows and the bank **before** animating.
-
-**F-A2 — high — ✅ fixed (AUDIT F012, `d5c6624`).** Every `dateOverrides`/`daySchedule` mutation
-spread the `prefs` captured in the current render closure, so a second action before
-`useLiveQuery` re-propagated could double-log time or resurrect a submitted block. All such
-writes now route through `mutateSchedulePrefs`, which re-reads the row inside a transaction.
-
-**F-A3 — high — ⬜ open (AUDIT F022).** Editing a contact wipes an accurate coordinate when
-geocoding fails. Any address-field edit clears `coords`; on save, if there's an address but
-Nominatim returns null (offline, rate-limited, or a rural address OSM can't resolve), the update
-writes `lat/lng: undefined`, destroying a good GPS/autocomplete pin.
-*Note: the "address cleared" case has since been handled, which makes this look fixed. It isn't —
-the geocode-failure path still wipes.*
-_Fix:_ only overwrite coords when a geocode actually succeeds; otherwise keep the existing pin.
-
-**F-A4 — high — ⬜ open (AUDIT F023).** Per-keystroke read-modify-write on `houses[]`.
-`updateHouse` fires on every keystroke and rebuilds `entry.houses` from the `useLiveQuery`
-snapshot, as do `removeHouse` and status changes. Two edits inside one query round-trip both read
-the same stale array; the second overwrites the first.
-_Fix:_ same pattern as F-A2 — mutate inside a transaction that re-reads the row; debounce the note
-input and flush on blur.
-
-**F-A5 — medium — ⬜ open.** Several multi-step flows aren't transactional. `confirmGroup` creates
-backing entries *outside* the transaction (duplicates on retry); `sendStreetToMinistry` adds then
-removes in two separate awaits (both copies exist if interrupted); `bulkDeletePeople` deletes
-person/calls/appointments in a sequential loop with no transaction (orphans), unlike the correctly
-transactional single delete. `completeTerritory` writes a completion then deletes the territory,
-untransacted — and that completion is the sole source of the Reports figure.
-_Fix:_ wrap each flow in one `db.transaction('rw', …)` and rebuild arrays from an in-transaction read.
-
-**F-A6 — low/medium — ⬜ open.** Minute-bank category attribution is lossy: `redeemMinuteBank`
+**F-A6 — low/medium — open.** Minute-bank category attribution is lossy: `redeemMinuteBank`
 hard-codes `category: 'ministry'` regardless of what fed the bank, while the auto-roll-over uses
 whatever category triggered it. Because credit vs. ministry drives the 55h cap, this can
 misclassify time near the cap.
-_Fix:_ simplest correct behaviour is to bank **ministry minutes only** and log credit whole. Settle
-alongside §4.
+_Fix:_ bank **ministry minutes only** and log credit whole. **Settle as part of §4, not
+separately** — it is the same modelling question.
 
 ### B. Untrusted-input hardening
 
-**F-B1 — high — ✅ fixed (AUDIT F013, `3217bce`).** Decompression bomb: the inflate step had no
-output cap, so a crafted payload under the 256 KB encoded cap could inflate to hundreds of MB.
-Now a streaming inflate aborts past 4 MB. Proof: a real deflate bomb in `src/share.test.ts`.
+**F-B5 — medium — open.** Element *counts* are capped (`MAX_LIST`); element *contents* are not.
+No string in a payload is length-checked anywhere, and nested arrays
+(`TerritoryStreet.points`, per-street `houses`) are unbounded for the same reason. Sharpened as
+AUDIT F033.
+_Fix:_ one `MAX_STR` plus a nested-length check in the per-kind validators in
+`assertValidPayload`; extend `src/share.test.ts`.
 
-**F-B2 — high — ✅ fixed (AUDIT F014, `3217bce`).** "id stripping" was compile-time only —
-`Omit<Person,'id'>` is erased at runtime, so a crafted payload could inject a primary key.
-`stripInjectedKeys` now removes every importer-assigned field before each write.
+**F-B6 — low — open.** Restore doesn't clear stale `fieldservice_*` keys, so leftovers mix with
+the restored set — the device ends up as the union of two states rather than the backed-up one.
+_Fix:_ clear every non-blocklisted `fieldservice_*` key before writing the file's settings.
+Pairs naturally with AUDIT F032.
 
-**F-B3 — medium — ⬜ open.** `importBackup` ignores its own `formatVersion`/`dbVersion`. A backup
-from a *newer* build imported into an older one silently clears real tables and inserts
-incompatible rows. _Fix:_ refuse, with a friendly message, when the backup is newer than the app
-can handle. *(Scheduled as PLAN 1.4.)*
-
-**F-B4 — medium — ✅ fixed (AUDIT F015, `2f984ae`).** `getAuxConfig` spread parsed JSON over the
-defaults, so `{"months":null}` produced `months: null` and threw a `TypeError` out of both
-Schedule and Reports. `normalizeAuxConfig` now coerces each field independently.
-
-**F-B5 — medium — ⬜ open.** Nested arrays are unbounded despite `MAX_LIST`: element *count* is
-capped but not element contents, so each `TerritoryStreet.points` array is unbounded. _Fix:_ bound
-points-per-street and houses-per-street too.
-
-**F-B6 — low — ⬜ open.** Restore doesn't clear stale `fieldservice_*` keys, so leftovers mix with
-the restored set.
-
-**F-B7 — low — ⬜ open.** The v1→v2 `visits`→`calls` migration swallows errors (`.catch(() => [])`),
-so a dropped-store race loses old visit history silently.
+**F-B7 — low — open.** The v1→v2 `visits`→`calls` migration swallows errors
+(`.catch(() => [])`), so a dropped-store race loses old visit history silently.
 
 ### C. Robustness / defensive gaps
 
-**F-C1 — medium — ⬜ open.** No client-side timeout or abort on *any* external fetch. Overpass's
-`[timeout:20]` is server-side only; the socket can hang for minutes, and `finishStreet` leaves the
-button stuck on "Matching to street…" with no recovery but closing the modal. _Fix:_ an
-`AbortController` + timeout on every fetch; clear loading flags in `finally`.
+**F-C1 — medium — open.** No client-side timeout or abort on *any* external fetch. Confirmed
+2026-09-06: six `fetch(` sites in `src/` (`MapView.tsx`, `Contacts.tsx` ×2, `Territory.tsx`,
+`auxSlip.ts`, `roadSnap.ts`) and **zero** occurrences of `AbortController`. Overpass's
+`[timeout:20]` is server-side only; the socket can hang for minutes, and `finishStreet` leaves
+the button stuck on "Matching to street…" with no recovery but closing the modal.
+_Fix:_ an `AbortController` + timeout on every fetch; clear loading flags in `finally`.
 
-**F-C2 — low/medium — ⬜ open.** Double-submit windows: "Submit Time" stays live during the ~620ms
+**F-C2 — low/medium — open.** Double-submit windows: "Submit Time" stays live during the ~620ms
 collect animation; `StreetEntryForm.save` has no `saving` guard and its dup-check can race.
+(The contact form and call logger both already guard — copy that pattern.)
 
-**F-C3 — low — ⬜ open.** `NaN` propagation: `effectiveMonthlyGoalMin` has no guard if a
-restored/legacy `weeklyHours` is `undefined`/`NaN` — the goal becomes `NaN` and renders as broken
-rings. _Fix:_ coerce with a `Number.isFinite` fallback.
+**F-C3 — low — open.** `effectiveMonthlyGoalMin` falls through to
+`monthlyGoalFromWeekly(prefs.weeklyHours)` with no finite guard, so a restored or legacy
+`weeklyHours` makes the goal `NaN` and renders broken rings on both Schedule and Reports.
+_Fix:_ coerce with a `Number.isFinite` fallback **in `timeStats.ts`**, not at the three call
+sites (`Schedule.tsx:1031`, `Schedule.tsx:1070`, `Reports.tsx:131`).
 
-**F-C4 — low — ⬜ open.** `dateOverrides` grows unbounded — an entry (often `[]`) per touched date,
+**F-C4 — low — open.** `dateOverrides` grows unbounded — an entry (often `[]`) per touched date,
 never pruned, re-serialized into every update and every backup.
 
-**F-C5 — low — ⬜ open.** `emailReport` can exceed `mailto:` length limits for a big month.
+**F-C5 — low — open.** `emailReport` can exceed `mailto:` length limits for a big month.
 
-**F-C6 — low — ⬜ open.** Address autocomplete doesn't sequence overlapping responses → stale
+**F-C6 — low — open.** Address autocomplete doesn't sequence overlapping responses → stale
 suggestions.
 
-**F-C7 — low — ⬜ waived.** Streets-list territory badge over-matches by name. Already
-`AUDIT.md` F003.
+**F-C7 — low — waived.** Streets-list territory badge over-matches by name. Already `AUDIT.md`
+F003.
 
-### D. Already tracked in AUDIT.md
+### D. Tracked in `AUDIT.md`
 
-`F008` oversized `Schedule.tsx`/`Contacts.tsx` — the single biggest maintainability lever.
-`F009` no CSP. `F010` no automated dependency updates.
+`F008` oversized `Schedule.tsx`/`Contacts.tsx` — the biggest maintainability lever.
+`F009` no CSP. `F010` no automated dependency updates. `F017` `.chip` below 44px.
+`F018` no focus trap in `ModalPortal`.
+
+Added by the 2026-09-06 pass: `F031` `CONTEXT.md` documents a category model that doesn't exist ·
+`F032` restore gates `formatVersion` but ignores `dbVersion` · `F033` no string-length caps in
+share validation.
 
 ---
 
@@ -151,11 +131,12 @@ toward building a weekly schedule.
    "Add Scheduled Service Time". Let the survey offer "I just want to track my time".
 4. **Keep the planner fully functional** — nothing removed, re-weighted.
 
-Do this **after** the write-path work, so the UI is reordered over solid foundations.
+The write-path work this was gated behind has landed, so this is unblocked. It is still
+post-1.0: it changes no data and fixes no defect.
 
 ---
 
-## 4. Change plan — time types: **Ministry** and **Credit** *(corrected)*
+## 4. Change plan — time types: **Ministry** and **Credit**
 
 **The design.** Two categories: **Ministry** and **Credit**. A Credit log may optionally carry an
 **Activity Note** naming what it was ("LDC", "Circuit assembly") — for the person's own records
@@ -167,9 +148,7 @@ type is a **personal annotation, not a dimension of the data model**. See `CONTE
 identically for the 55h cap and every total. So the *arithmetic* needs no change at all — a new
 `'credit'` category is `!== 'ministry'` and every cap/total keeps working untouched.
 
-**⚠️ Correction: a data migration IS required.** The original review said old rows could simply be
-mapped at display time and that a migration was optional tidying. That's wrong, and the mechanism
-is easy to miss:
+**A data migration IS required.** The mechanism is easy to miss:
 
 ```
 CATEGORY_ORDER = Object.keys(CATEGORY_LABELS)     // categories.ts
@@ -188,7 +167,7 @@ Net effect: a user with a year of LDC hours opens the app and finds them **missi
 rings and legends while still counted in the totals** — which reads as data loss. The one-time
 `.upgrade()` migration is therefore the *safer* path, not optional.
 
-**Recommended plan:**
+**Plan:**
 
 1. **Data:** add `'credit'` to `TimeCategory` and an optional non-indexed `activityNote?: string`
    to `TimeLog` (no `.version()` bump needed for a non-indexed field).
@@ -199,38 +178,38 @@ rings and legends while still counted in the totals** — which reads as data lo
    text — reusing the reveal mechanic already built for `'other'`.
 4. **Toggle:** `fieldservice_credit_hours` keeps its meaning — off = Ministry only, on = Ministry +
    Credit.
-5. **Test:** assert a legacy row still renders after migration. That's the regression this
-   correction exists to prevent.
+5. **F-A6:** bank **ministry minutes only** and log credit whole, which removes the
+   misattribution near the cap.
+6. **Test:** assert a legacy row still renders after migration, and assert the migration does not
+   move any month's applied total. Those are the two regressions this section exists to prevent.
+7. **Docs:** `CONTEXT.md`'s Time section becomes true on landing (AUDIT F031); update `CLAUDE.md`'s
+   `TimeCategory` union and the `categories.ts` entry in the same commit, per the definition of
+   done.
 
-**✅ Resolved — what `'other'` becomes.** Today `'other'` is offered *even when credit hours are
-turned off*, its prompt reads **"Type of ministry"** with the examples *"Letter writing, Cart
-witnessing"* — and yet `isCredit('other')` is **true**, so it counts as credit against the 55h cap.
-Letter writing and cart witnessing are field ministry, so the control has always promised one
-thing and done another.
+**What `'other'` becomes.** Today `'other'` is offered *even when credit hours are turned off*, its
+prompt reads **"Type of ministry"** with the examples *"Letter writing, Cart witnessing"*
+(`Schedule.tsx:2480–2481`) — and yet `isCredit('other')` is **true**, so it counts as credit
+against the 55h cap. Letter writing and cart witnessing are field ministry, so the control has
+always promised one thing and done another.
 
 **Decision: Ministry stays Ministry; everything else, `'other'` included, migrates to Credit** —
 see [ADR-0001](docs/adr/0001-legacy-other-time-migrates-to-credit.md). This keeps every historical
 figure identical to what was already submitted to the congregation, which matters more than the
-label being retroactively right. Assert it with a test: the migration must not move any month's
-applied total.
+label being retroactively right.
 
 **The `'other'` prompt copy must change in the same work.** Leaving "Type of ministry" with
 ministry examples on a control that produces Credit is the original defect; migrating without
 fixing it preserves the trap for new entries. Going forward, letter writing and cart witnessing
 are logged as **Ministry** with an Activity Note.
 
-**F-A6 ties in here:** cleanest is to bank **ministry minutes only** and log credit whole, which
-removes the misattribution near the cap.
-
 ---
 
-## 5. Suggested sequencing
+## 5. Sequencing
 
-1. ✅ Harden the write path — F-A1, F-A2.
-2. ✅ Untrusted input — F-B1, F-B2, F-B4.
-3. **⬅ next:** clear the remaining `high` findings — F-A3 (AUDIT F022) and F-A4 (AUDIT F023), plus
-   F-B3 (PLAN 1.4) and F-A5.
-4. Ship the Ministry/Credit change **with its migration**, resolving F-A6 and the `'other'` question.
-5. Reframe scheduling → tracking (§3).
-6. Robustness pass — F-C1 fetch timeouts, F-C2 double-submit guards, F-C3 NaN guard.
-7. Then the `AUDIT.md` F008 split — it pays for itself across all of the above.
+1. ✅ **Done.** Write path (F-A1, F-A2), untrusted input (F-B1/B2/B4), both remaining `high`
+   findings (F-A3, F-A4), plus F-A5 and F-B3 — all landed by 0.17.1.
+2. **⬅ Next: the 1.0 line** (see `PLAN.md`). §4 with its migration and the `'other'` copy fix
+   (resolving F-A6), F-C1, F-C3, F-B5 + AUDIT F033, F-B6 + AUDIT F032, and the doc
+   reconciliation (AUDIT F031).
+3. **Post-1.0.** The §3 reframe, F-C2, F-C4, F-C5, F-C6, F-B7, then AUDIT F008 — which pays for
+   itself across all of it.

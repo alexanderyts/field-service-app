@@ -165,6 +165,18 @@ export async function importBackup(file: File): Promise<ImportSummary> {
     )
   }
 
+  // Same reasoning as the formatVersion gate above, but for the *schema* version: the backup
+  // format has changed once since launch, while the Dexie schema has moved eight times and
+  // keeps moving (AUDIT F032). A file written by a newer schema has rows shaped for tables
+  // this build doesn't have — refuse before any table is touched, not just any format bump.
+  const fileDbVersion = typeof data.dbVersion === 'number' ? data.dbVersion : 1
+  if (fileDbVersion > db.verno) {
+    throw new Error(
+      `This backup was made by a newer version of Meleo (${data.appVersion ?? 'unknown'}). ` +
+        'Update the app, then restore it — importing it now could damage your current data.'
+    )
+  }
+
   const knownTables = new Set(db.tables.map((t) => t.name))
   const counts: Record<string, number> = {}
 
@@ -177,6 +189,18 @@ export async function importBackup(file: File): Promise<ImportSummary> {
       counts[name] = rows.length
     }
   })
+
+  // Restore should leave the device in exactly the backed-up state, not the union of the old
+  // and new settings — clear every current non-blocklisted key first so nothing the old state
+  // set (and the file doesn't mention) survives the restore.
+  try {
+    const staleKeys: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('fieldservice_') && !SETTINGS_BLOCKLIST.has(key)) staleKeys.push(key)
+    }
+    for (const key of staleKeys) localStorage.removeItem(key)
+  } catch { /* localStorage blocked */ }
 
   let settingsCount = 0
   if (data.settings && typeof data.settings === 'object') {

@@ -64,4 +64,22 @@ describe('importBackup — file gate', () => {
     const current = backupFile({ app: 'field-service', formatVersion: 1, appVersion: '0.17.0', tables: {} })
     await expect(importBackup(current)).rejects.toThrow(/touched the database/)
   })
+
+  // AUDIT F032: the backup format hasn't changed since v1, but the Dexie schema (`db.verno`,
+  // mocked at 8 above) has moved eight times and will move again — this is the version that
+  // actually diverges, and needs the same before-any-table-is-touched gate as formatVersion.
+  it('refuses a backup written by a newer schema version', async () => {
+    const future = backupFile({ app: 'field-service', formatVersion: 1, dbVersion: 9, appVersion: '9.9.9', tables: {} })
+    await expect(importBackup(future)).rejects.toThrow(/newer version/i)
+  })
+
+  it('treats a missing dbVersion as the original schema rather than refusing it', async () => {
+    const legacy = backupFile({ app: 'field-service', formatVersion: 1, appVersion: '0.6.0', tables: {} })
+    await expect(importBackup(legacy)).rejects.toThrow(/touched the database/)
+  })
+
+  it('accepts a backup written by the current schema version', async () => {
+    const current = backupFile({ app: 'field-service', formatVersion: 1, dbVersion: 8, appVersion: '0.19.0', tables: {} })
+    await expect(importBackup(current)).rejects.toThrow(/touched the database/)
+  })
 })

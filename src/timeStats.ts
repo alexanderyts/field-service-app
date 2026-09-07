@@ -102,7 +102,8 @@ export function serviceYearlyTotals(logs: TimeLog[], label: number): RawTotals {
 
 /** A month's goal, derived from a weekly hours target using the average weeks/month (4.3). */
 export function monthlyGoalFromWeekly(weeklyHours: number): number {
-  return weeklyHours * 60 * 4.3
+  const hours = Number.isFinite(weeklyHours) ? weeklyHours : 0
+  return hours * 60 * 4.3
 }
 
 /**

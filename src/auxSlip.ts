@@ -1,4 +1,5 @@
 import type { AuxConfig } from './auxPioneering'
+import { fetchWithTimeout } from './fetchWithTimeout'
 
 // S-205b-E ("Application for Auxiliary Pioneer Service") is a real fillable AcroForm —
 // confirmed by inspecting it directly, not a flat page needing coordinate-overlay text.
@@ -43,7 +44,7 @@ export async function buildAuxSlipPdf(cfg: AuxConfig, name: AuxSlipName): Promis
   // reasoning App.tsx already applies to lazy-loading the Map tab's Leaflet dependency.
   const { PDFDocument, StandardFonts } = await import('pdf-lib')
 
-  const res = await fetch(encodeURI(FORM_URL))
+  const res = await fetchWithTimeout(encodeURI(FORM_URL))
   if (!res.ok) throw new Error('Could not load the S-205b-E form template.')
   const templateBytes = await res.arrayBuffer()
 

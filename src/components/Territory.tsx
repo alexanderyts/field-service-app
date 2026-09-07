@@ -8,6 +8,7 @@ import ShareModal from './ShareModal'
 import { groupStreetsIntoTerritory, sendStreetToMinistry as moveStreetToMinistry, completeTerritory } from '../records'
 import { STREET_COLORS } from '../territoryImage'
 import { fetchRoadsNear, snapPathToRoads, type LatLng } from '../roadSnap'
+import { fetchWithTimeout } from '../fetchWithTimeout'
 import { buildTracedStreetPayload } from '../share'
 
 function newStreetId() {
@@ -29,7 +30,7 @@ interface ReverseAddress {
     traced street's name and to seed the mirrored Ministry-tab street entry's address. */
 async function reverseGeocodeAddress(lat: number, lng: number): Promise<ReverseAddress | null> {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`,
       { headers: { 'User-Agent': 'FieldServiceApp/1.0' } }
     )

@@ -96,4 +96,9 @@ describe('monthlyGoalFromWeekly', () => {
   it('scales weekly hours by 4.3 weeks and converts to minutes', () => {
     expect(monthlyGoalFromWeekly(10)).toBeCloseTo(10 * H * 4.3)
   })
+
+  it('falls back to 0 for a non-finite weeklyHours instead of returning NaN', () => {
+    expect(monthlyGoalFromWeekly(Number.NaN)).toBe(0)
+    expect(monthlyGoalFromWeekly(undefined as unknown as number)).toBe(0)
+  })
 })
