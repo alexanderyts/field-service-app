@@ -67,6 +67,7 @@ src/
   territoryImage.ts    # Schematic canvas rendering of traced streets (no map tiles → no tainted canvas)
   devSeed.ts           # Demo/seed data (loaded from More tab)
   localDate.ts         # parse/format YYYY-MM-DD + HH:mm as LOCAL time (never toISOString — it shifts the date west of UTC)
+  csp.ts               # Content-Security-Policy + the build-only Vite plugin that injects it (see section below)
   components/
     Onboarding.tsx     # SplashScreen + PrivacyGate + ProfileGate (+ hasAcceptedPolicy/hasSeenProfilePrompt)
     Tutorial.tsx       # Guided tour + first-run TutorialPrompt
@@ -373,6 +374,28 @@ toggles), `.field` / `.field-label` / `.field-row`, `.modal` / `.modal-backdrop`
 `.misc-section-title`, `.combobox` / `.combobox-list`.
 
 ---
+
+## Content-Security-Policy (`csp.ts`)
+
+The production `index.html` carries a `<meta http-equiv="Content-Security-Policy">`, injected
+at build by `cspPlugin()` in `vite.config.ts` (AUDIT F009). It is **not** applied in dev — the
+dev server needs its HMR WebSocket and injects its own client.
+
+- `script-src 'self'` — nothing inline, no eval, no other host. This is the part that matters.
+- Every outside host is named: `nominatim.openstreetmap.org`, `overpass-api.de` (connect);
+  `*.basemaps.cartocdn.com`, `server.arcgisonline.com` (map tiles, img).
+- `data:` is allowed for `img-src` and `connect-src` on purpose — QR codes are `data:` PNGs and
+  `ShareModal` `fetch()`es that URL to build a shareable file. Removing either breaks sharing
+  silently.
+- `style-src` keeps `'unsafe-inline'`: React `style={{}}` and Leaflet's positioning both need
+  it. Tightening that is a component rewrite, not a policy change.
+
+**Adding a new outside service means adding its host to `CSP_DIRECTIVES` in the same commit** —
+the browser will otherwise refuse the request with only a console message, and nothing in the
+test suite can see that. `src/csp.test.ts` pins the load-bearing directives. When in doubt,
+`npm run build && npm run preview` and drive the built page in a real browser; that is the only
+check that catches a policy that quietly blocks something (the sister project once shipped a CSP
+that silently killed every inline script and passed every test).
 
 ## Dev Server
 

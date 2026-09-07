@@ -11,7 +11,7 @@ from the versions reviewed and have since drifted — use the symbol names._
 > **Every finding in this review is resolved.** The 1.0 line in `PLAN.md` is complete. What
 > remains of this file is §3, the one part that still describes unbuilt work; `AUDIT.md` is
 > authoritative for finding status and still carries four open low-severity items of its own
-> (F009, F017, F018).
+> (F017, F018).
 
 ---
 

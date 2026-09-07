@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.20.2`.** History runs from the initial scaffold forward.
+**Current version: `0.20.3`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -182,6 +182,10 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **No visible change.** `Schedule.tsx` (3,477 lines) and `Contacts.tsx` (1,214) are now a short root file each over a folder of small, single-purpose files — the pure date and planning logic in files with no React in them at all. Nothing about how the app works changed; every test, the build, and a real-browser check of the Schedule tab all pass as before (F008)
 - The two files each had their own copy of the same date helpers; there is one now (`localDate.ts`)
 - The minute bank and "participated this month" settings now go through the same typed settings module as every other setting, with tests
+
+## 0.20.3 — Browser security policy · 2026-09-07
+- **The app now tells the browser exactly what it's allowed to load and run.** Only Meleo's own code can execute — no injected or inline script ever will — and the only outside places it may contact are the map-tile and address-lookup services it already uses. Nothing changes day to day; it closes the door on a whole class of tampering (F009)
+- Checked by opening the real built app in a browser and exercising the map (both tile sources), the Schedule tab and a contact's share code, with no policy refusals
 
 ---
 

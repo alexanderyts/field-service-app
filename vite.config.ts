@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { cspPlugin } from './src/csp.ts'
 
 // Netlify serves this at the domain root ('/'), but GitHub Pages serves a project repo
 // at '/<repo-name>/' — set GH_PAGES=1 (only in the gh-pages deploy script) so asset URLs,
@@ -11,6 +12,7 @@ export default defineConfig({
   base,
   plugins: [
     react(),
+    cspPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
