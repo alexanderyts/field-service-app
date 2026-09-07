@@ -3,7 +3,14 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Appointment, type DayScheduleBlock, type SchedulePrefs, type TimeCategory, type TimeLog } from '../db'
 import { CATEGORY_LABELS, CATEGORY_ORDER, CREDIT_ACTIVITY_SUGGESTIONS } from '../categories'
 import { animateBankValue, collectAndFlyToMinuteBank } from '../minuteBankFly'
-import { creditHoursEnabled, setCreditHoursEnabled } from '../settings'
+import {
+  creditHoursEnabled,
+  setCreditHoursEnabled,
+  getMinuteBank,
+  setMinuteBank,
+  getParticipatedMonth,
+  setParticipatedMonth,
+} from '../settings'
 import {
   effectiveMonthlyGoalMin,
   fmtDuration,
@@ -155,25 +162,6 @@ function monthElapsedPct(year: number, month: number, today: Date): number {
   return Math.round((today.getDate() / daysInMonth) * 100)
 }
 
-// ── Non-pioneer monthly participation (localStorage, keyed by "YYYY-M") ───────
-// A non-pioneer with no goal and not auxiliary pioneering doesn't track hours at all —
-// just whether they went out in service that month, once, not per-day.
-function monthlyKey(year: number, month: number) { return `${year}-${month}` }
-
-function getParticipatedMonth(year: number, month: number): boolean {
-  try {
-    const map = JSON.parse(localStorage.getItem('fieldservice_participated_months') ?? '{}')
-    return !!map[monthlyKey(year, month)]
-  } catch { return false }
-}
-
-function setParticipatedMonth(year: number, month: number, participated: boolean) {
-  try {
-    const map = JSON.parse(localStorage.getItem('fieldservice_participated_months') ?? '{}')
-    map[monthlyKey(year, month)] = participated
-    localStorage.setItem('fieldservice_participated_months', JSON.stringify(map))
-  } catch { /* localStorage unavailable — won't persist */ }
-}
 
 export default function Schedule({ onGoToContact }: { onGoToContact: (personId: number) => void }) {
   const prefs = useLiveQuery(() => db.schedulePrefs.toArray(), [])
@@ -1309,7 +1297,7 @@ function ScheduleMain({
       await db.timeLogs.add({ date: d.getTime(), minutes: 60, category, note: 'Added from minute bank' } as TimeLog)
     }
     if (h > 0) await saveQuickLog(date, h * 60, category, activityNote)
-    saveMinuteBank(bank)
+    setMinuteBank(bank)
     // Keep the modal open through the gather (so the field's glow is visible), then close it
     // once the ball has launched from the field's captured position.
     await collectAndFlyToMinuteBank(minutesFieldEl)
@@ -1368,7 +1356,7 @@ function ScheduleMain({
     const d = new Date()
     d.setHours(12, 0, 0, 0)
     await db.timeLogs.add({ date: d.getTime(), minutes: 60, category: 'ministry', note: 'Added from minute bank' } as TimeLog)
-    saveMinuteBank(0)
+    setMinuteBank(0)
     await animateBankValue(startValue, 0, 380, setDisplayedBank)
     setBankCollapsing(true)
     await new Promise((resolve) => window.setTimeout(resolve, 260))
@@ -2630,10 +2618,6 @@ function DayActionModal({
     </ModalPortal>
   )
 }
-
-// ── Minute bank (localStorage) ──────────────────────────────
-function getMinuteBank() { return parseInt(localStorage.getItem('fieldservice_minute_bank') ?? '0', 10) || 0 }
-function saveMinuteBank(v: number) { localStorage.setItem('fieldservice_minute_bank', String(Math.max(0, v))) }
 
 // ── Calendar picker ──────────────────────────────────────────
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']

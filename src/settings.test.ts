@@ -6,6 +6,10 @@ import {
   setTheme,
   getLastBackupAt,
   setLastBackupAt,
+  getMinuteBank,
+  setMinuteBank,
+  getParticipatedMonth,
+  setParticipatedMonth,
 } from './settings'
 
 // Vitest runs these in plain Node (no DOM), so localStorage is stubbed here. A hand-rolled
@@ -131,5 +135,52 @@ describe('when localStorage throws', () => {
     expect(() => setCreditHoursEnabled(true)).not.toThrow()
     expect(() => setTheme('dark')).not.toThrow()
     expect(() => setLastBackupAt(Date.now())).not.toThrow()
+  })
+})
+
+// Moved here from Schedule.tsx (F0.3's "two keys remain module-locals" leftover, closed while
+// splitting that file for F008). Same keys, same stored strings — only the owner changed.
+describe('minuteBank', () => {
+  it('defaults to 0 and round-trips a whole number of minutes', () => {
+    expect(getMinuteBank()).toBe(0)
+    setMinuteBank(45)
+    expect(store['fieldservice_minute_bank']).toBe('45')
+    expect(getMinuteBank()).toBe(45)
+  })
+
+  it('never stores or returns a negative or fractional bank', () => {
+    setMinuteBank(-10)
+    expect(getMinuteBank()).toBe(0)
+    setMinuteBank(12.9)
+    expect(getMinuteBank()).toBe(12)
+  })
+
+  it('reads garbage (a restored value the app never wrote) as 0', () => {
+    store['fieldservice_minute_bank'] = 'lots'
+    expect(getMinuteBank()).toBe(0)
+  })
+
+  it('does not throw when storage is blocked', () => {
+    installStorage(true)
+    expect(() => setMinuteBank(5)).not.toThrow()
+    expect(getMinuteBank()).toBe(0)
+  })
+})
+
+describe('participatedMonth', () => {
+  it('is false by default and round-trips per month, keyed the way Schedule always keyed it', () => {
+    expect(getParticipatedMonth(2026, 8)).toBe(false)
+    setParticipatedMonth(2026, 8, true)
+    expect(JSON.parse(store['fieldservice_participated_months'])).toEqual({ '2026-8': true })
+    expect(getParticipatedMonth(2026, 8)).toBe(true)
+    expect(getParticipatedMonth(2026, 7)).toBe(false)
+  })
+
+  it('reads a corrupt map (a restored value) as nobody having participated', () => {
+    store['fieldservice_participated_months'] = '[1,2]'
+    expect(getParticipatedMonth(2026, 8)).toBe(false)
+    store['fieldservice_participated_months'] = 'not json'
+    expect(() => setParticipatedMonth(2026, 8, true)).not.toThrow()
+    expect(getParticipatedMonth(2026, 8)).toBe(true)
   })
 })

@@ -20,6 +20,12 @@ const KEY = {
       existed keep it, and cleared the first time a theme is set. */
   legacyDarkMode: 'fieldservice_dark_mode',
   lastBackupAt: 'fieldservice_last_backup_at',
+  /** Leftover minutes held aside rather than logged (they become an hour at 60). Ministry
+      minutes only — see `quickLogStrategy`. Stored as a plain integer string. */
+  minuteBank: 'fieldservice_minute_bank',
+  /** Non-pioneer "did I share in the ministry this month" — a JSON map keyed "YYYY-M"
+      (month 0-based, matching Date.getMonth), value true/false. */
+  participatedMonths: 'fieldservice_participated_months',
 } as const
 
 function readRaw(key: string): string | null {
@@ -87,3 +93,34 @@ export function setLastBackupAt(at: number): void {
 /** The key backup.ts must exclude from export/restore — a backup carries the user's data,
     not another device's record of when *it* was last backed up. */
 export const LAST_BACKUP_AT_KEY = KEY.lastBackupAt
+
+/** Minutes currently in the minute bank; 0 for anything that isn't a positive integer. */
+export function getMinuteBank(): number {
+  const parsed = parseInt(readRaw(KEY.minuteBank) ?? '0', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+export function setMinuteBank(minutes: number): void {
+  writeRaw(KEY.minuteBank, String(Math.max(0, Math.floor(minutes))))
+}
+
+function readParticipatedMap(): Record<string, boolean> {
+  try {
+    const parsed: unknown = JSON.parse(readRaw(KEY.participatedMonths) ?? '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, boolean>) : {}
+  } catch {
+    return {}
+  }
+}
+
+/** Whether a non-pioneer shared in the ministry at all in the given month (0-based). A
+    person with zero hours may still have participated — this is independent of time logs. */
+export function getParticipatedMonth(year: number, month: number): boolean {
+  return !!readParticipatedMap()[`${year}-${month}`]
+}
+
+export function setParticipatedMonth(year: number, month: number, participated: boolean): void {
+  const map = readParticipatedMap()
+  map[`${year}-${month}`] = participated
+  writeRaw(KEY.participatedMonths, JSON.stringify(map))
+}
