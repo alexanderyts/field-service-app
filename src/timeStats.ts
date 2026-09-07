@@ -8,6 +8,29 @@ export function isCredit(category: TimeCategory) {
   return category !== 'ministry'
 }
 
+/**
+ * How a quick-logged duration should be recorded — the minute bank's admission rule, kept
+ * here as a pure decision so it can be tested without a DOM.
+ *
+ * - `'whole'` — write the full h:mm as one entry, no banking.
+ * - `'bank'` — write the whole hours and put the leftover minutes in the minute bank.
+ * - `'confirm'` — ask whether to round up to the next hour first (30+ leftover minutes).
+ *
+ * **Credit is always `'whole'` (AUDIT F-A6).** The bank is a single pot with no category of
+ * its own, so any credit minutes it accepted had to be guessed back on the way out — the
+ * auto-roll-over used whichever category happened to trigger it, and cashing the bank in
+ * hard-coded ministry. Either can misclassify time right at the 55h cap, where the
+ * ministry/credit split is exactly what decides the month's applied total. Admitting only
+ * ministry minutes removes the ambiguity at the source instead of teaching the bank to track
+ * categories.
+ */
+export function quickLogStrategy(category: TimeCategory, hours: number, minutes: number): 'none' | 'whole' | 'bank' | 'confirm' {
+  if (hours === 0 && minutes === 0) return 'none'
+  if (isCredit(category)) return 'whole'
+  if (minutes === 0) return 'whole'
+  return minutes >= 30 ? 'confirm' : 'bank'
+}
+
 export interface MonthTotals {
   ministry: number
   credit: number
@@ -21,7 +44,8 @@ export interface MonthTotals {
  * Ministry/credit split + capped contribution for a single month's logs.
  *
  * Rule: ministry hours always apply in full, however large (e.g. 72h of pure ministry
- * -> 72h applied). Credit hours (ldc, hlc, convention, assembly, bethel, other) can top
+ * -> 72h applied). Credit hours (LDC, HLC, Bethel, qualifying convention/assembly time —
+ * all one category, annotated per log) can top
  * that up, but the combined ministry+credit total is capped at 55h toward the yearly
  * goal (e.g. 24h ministry + 64h credit = 88h raw -> only 55h applied). Ministry alone
  * is never reduced by the cap, even when it already exceeds 55h on its own — the cap

@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.19.0`.** History runs from the initial scaffold forward.
+**Current version: `0.20.0`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -152,6 +152,21 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **"Share as file" is always available**, not just for items too large to fit in a code
 - The share screen now says to scan with your **camera app** — Meleo has no built-in scanner, and the old wording didn't make that clear
 - Running the dev server? The share screen now warns when a link points at `localhost`, which can only ever open on the machine that made it
+
+## 0.19.1 — Hardening for 1.0 · 2026-09-07
+- **Meleo no longer hangs waiting on a lookup that will never answer.** Address search, the map's place search, the street "Matching to street…" step and the aux-pioneer slip all had no time limit, so on a weak signal they could sit there indefinitely with no way out but closing the window. Each now gives up after a sensible wait and tells you, instead of spinning (F-C1)
+- **A broken goal can't blank out your progress rings.** If a restored or older backup carried an unreadable weekly-hours figure, every ring on Schedule and Reports drew as empty. The goal now falls back to zero cleanly (F-C3)
+- **Restoring a backup now leaves your device exactly as the backup had it.** Settings the backup didn't mention used to survive the restore and mix in, so you ended up with a blend of the old and new state rather than the one you restored (F-B6). Restore also refuses a file written by a newer *database* version, the same way it already refused a newer file format (F032)
+- **A shared contact or territory can no longer arrive with an absurdly large name or note.** Sharing checked how *many* items a share carried but never how big any one of them was, and nested lists weren't checked at all (F033)
+
+## 0.20.0 — Ministry and Credit · 2026-09-07
+- **Time is now logged as one of two things: Ministry or Credit.** The old list of seven — LDC, HLC, Convention, Assembly, Bethel, Other — asked you to file every entry into a category the congregation's report doesn't even have a field for. Credit is submitted as a single figure regardless of what earned it, so that's how Meleo records it now
+- **What the time actually was is still yours to keep.** Every entry can carry a short note — "LDC", "Circuit assembly", "Cart witnessing" — with one-tap picks for the common ones. It's for your own records: it never changes a total, a goal, or the 55-hour cap
+- **Your existing entries were converted automatically, and nothing moved.** Every past LDC, HLC, Convention, Assembly, Bethel and Other entry is now Credit with its old name kept as its note. Your monthly and yearly totals are identical to what they were — those categories always counted as credit anyway, so only the label changed
+- **"Type of ministry" no longer files your time as credit.** That box suggested "Letter writing, Cart witnessing" — real field ministry — but everything entered through it counted against the 55-hour credit cap. Letter writing and cart witnessing are Ministry, and now log as Ministry with a note (F-A6 / ADR-0001)
+- **Turning credit hours off now means Ministry only**, as the setting always implied
+- **The minute bank holds ministry minutes only.** Leftover minutes from credit time used to go into the same pot and come back out labelled as whichever kind of time happened to fill it — which could quietly misfile hours right at the cap, where the difference matters most. Credit is logged whole instead
+- New tests: 6 added covering the conversion itself — a real older database is built, upgraded, and checked to confirm no entry is left unlabelled and no month's counted total changes
 
 ---
 

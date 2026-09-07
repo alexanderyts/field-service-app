@@ -43,16 +43,12 @@
   --visit: #6d5dd3;
   --visit-soft: #e9e6f9;
 
-  /* Time-tracking category colors — one distinct, readable hue per ministry type
-     for the Schedule weekly calendar. Kept apart from --visit's violet so return-visit
-     tick marks in the same view never get confused with a logged category. */
+  /* Time-tracking category colors — one hue per Time Category, for the Schedule weekly
+     calendar. Kept apart from --visit's violet so return-visit tick marks in the same view
+     never get confused with a logged category. Credit aliases --credit so the goal rings,
+     the legend and the entry-list dot can never drift to different ambers. */
   --cat-ministry: #2f6f5e;
-  --cat-ldc: #b5651d;
-  --cat-hlc: #2b6cb0;
-  --cat-convention: #b23a6b;
-  --cat-assembly: #9a8b2b;
-  --cat-bethel: #4a4e9e;
-  --cat-other: #8a8478;
+  --cat-credit: var(--credit);
   /* ── Spacing, type and motion scales ──────────────────────────────────────
      These are NOT a new design language — every value below was measured from
      what App.css already uses most, so adopting a token is a rename rather than
@@ -152,12 +148,7 @@
   /* Category colors brightened for dark surfaces — the light-theme hues are tuned for
      contrast against white and go muddy on near-black. */
   --cat-ministry: #4a9480;
-  --cat-ldc: #d08544;
-  --cat-hlc: #5b96d6;
-  --cat-convention: #d16a97;
-  --cat-assembly: #b5a545;
-  --cat-bethel: #7d81cf;
-  --cat-other: #a09a8d;
+  --cat-credit: var(--credit);
   --tag-interested: #6fbba5;
   --tag-interested-bg: #16302a;
   --tag-return: #6ba3dc;
@@ -200,12 +191,7 @@
   --shadow-md: 0 8px 24px rgba(70, 55, 80, 0.1);
   --title-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 6px rgba(70, 55, 80, 0.08);
   --cat-ministry: #5c8d7d;
-  --cat-ldc: #bd7a45;
-  --cat-hlc: #5c85b8;
-  --cat-convention: #bb6390;
-  --cat-assembly: #a29655;
-  --cat-bethel: #7478b8;
-  --cat-other: #9c91a4;
+  --cat-credit: var(--credit);
   --tag-interested: #4f8271;
   --tag-interested-bg: #e4f0ea;
   --tag-return: #4f79a8;
@@ -248,15 +234,10 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
   --title-shadow: none;
-  /* Category hues tuned to sit distinctly on navy — the blue-family ones (hlc, bethel) are
+  /* Category hues tuned to sit distinctly on navy — the blue-family ones are
      pushed lighter/brighter so they don't sink into the background. */
   --cat-ministry: #3caf7f;
-  --cat-ldc: #d9873f;
-  --cat-hlc: #57a5e6;
-  --cat-convention: #db6f9c;
-  --cat-assembly: #c1ad4a;
-  --cat-bethel: #8b90e6;
-  --cat-other: #9aabbf;
+  --cat-credit: var(--credit);
   --tag-interested: #5bc399;
   --tag-interested-bg: #123328;
   --tag-return: #63a9e8;

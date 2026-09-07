@@ -3,13 +3,15 @@
 _Reviewed against the full `src/` tree, built and tested in a clean environment. Line numbers are
 from the versions reviewed and have since drifted — use the symbol names._
 
-> **Status (2026-09-06, v0.19.0). 9 of 20 findings closed, 1 waived, 10 open.**
+> **Status (2026-09-07, v0.20.0). 14 of 20 findings closed, 1 waived, 5 open.**
 > Closed: F-A1, F-A2 (0.16.1); F-B1, F-B2, F-B4 (0.17.0); F-A3, F-A4, F-A5, F-B3 (0.17.1, as
-> AUDIT F022–F025 — each spot-checked in source on 2026-09-06). Waived: F-C7.
+> AUDIT F022–F025); F-C1, F-C3, F-B5, F-B6 (0.19.1); F-A6 (0.20.0, settled inside §4 as planned).
+> Waived: F-C7.
 >
-> Everything still open is low/medium hardening **except §4**, which is the only open item that
-> writes wrong data in ordinary use. `AUDIT.md` is authoritative for finding status; this file is
-> authoritative only for §3 and §4, the parts that still describe unbuilt work.
+> **The 1.0 line in `PLAN.md` is complete** — §4 landed in 0.20.0 with its migration and the
+> `'other'` copy fix. Everything still open (F-B7, F-C2, F-C4, F-C5, F-C6) is low/medium
+> hardening; none of it writes wrong data. `AUDIT.md` is authoritative for finding status; this
+> file is authoritative only for §3, the one part that still describes unbuilt work.
 
 ---
 
@@ -49,23 +51,24 @@ the thing to fix before calling it released.
 
 ### A. Data loss & lost-update races
 
-**F-A6 — low/medium — open.** Minute-bank category attribution is lossy: `redeemMinuteBank`
-hard-codes `category: 'ministry'` regardless of what fed the bank, while the auto-roll-over uses
-whatever category triggered it. Because credit vs. ministry drives the 55h cap, this can
-misclassify time near the cap.
-_Fix:_ bank **ministry minutes only** and log credit whole. **Settle as part of §4, not
-separately** — it is the same modelling question.
+**F-A6 — low/medium — CLOSED (0.20.0).** Minute-bank category attribution was lossy:
+`redeemMinuteBank` hard-coded `category: 'ministry'` regardless of what fed the bank, while the
+auto-roll-over used whatever category triggered it. Because credit vs. ministry drives the 55h
+cap, this could misclassify time near the cap.
+_Fixed as planned, inside §4:_ the bank now holds **ministry minutes only** — `quickLogTime`
+logs credit whole (no banking, no round-up prompt), so both the rolled-over hour and the
+"cash in now" hour are ministry by construction rather than by guess.
 
 ### B. Untrusted-input hardening
 
-**F-B5 — medium — open.** Element *counts* are capped (`MAX_LIST`); element *contents* are not.
+**F-B5 — medium — CLOSED (0.19.1, AUDIT F033).** Element *counts* are capped (`MAX_LIST`); element *contents* are not.
 No string in a payload is length-checked anywhere, and nested arrays
 (`TerritoryStreet.points`, per-street `houses`) are unbounded for the same reason. Sharpened as
 AUDIT F033.
 _Fix:_ one `MAX_STR` plus a nested-length check in the per-kind validators in
 `assertValidPayload`; extend `src/share.test.ts`.
 
-**F-B6 — low — open.** Restore doesn't clear stale `fieldservice_*` keys, so leftovers mix with
+**F-B6 — low — CLOSED (0.19.1).** Restore doesn't clear stale `fieldservice_*` keys, so leftovers mix with
 the restored set — the device ends up as the union of two states rather than the backed-up one.
 _Fix:_ clear every non-blocklisted `fieldservice_*` key before writing the file's settings.
 Pairs naturally with AUDIT F032.
@@ -75,7 +78,7 @@ Pairs naturally with AUDIT F032.
 
 ### C. Robustness / defensive gaps
 
-**F-C1 — medium — open.** No client-side timeout or abort on *any* external fetch. Confirmed
+**F-C1 — medium — CLOSED (0.19.1).** No client-side timeout or abort on *any* external fetch. Confirmed
 2026-09-06: six `fetch(` sites in `src/` (`MapView.tsx`, `Contacts.tsx` ×2, `Territory.tsx`,
 `auxSlip.ts`, `roadSnap.ts`) and **zero** occurrences of `AbortController`. Overpass's
 `[timeout:20]` is server-side only; the socket can hang for minutes, and `finishStreet` leaves
@@ -86,7 +89,7 @@ _Fix:_ an `AbortController` + timeout on every fetch; clear loading flags in `fi
 collect animation; `StreetEntryForm.save` has no `saving` guard and its dup-check can race.
 (The contact form and call logger both already guard — copy that pattern.)
 
-**F-C3 — low — open.** `effectiveMonthlyGoalMin` falls through to
+**F-C3 — low — CLOSED (0.19.1).** `effectiveMonthlyGoalMin` falls through to
 `monthlyGoalFromWeekly(prefs.weeklyHours)` with no finite guard, so a restored or legacy
 `weeklyHours` makes the goal `NaN` and renders broken rings on both Schedule and Reports.
 _Fix:_ coerce with a `Number.isFinite` fallback **in `timeStats.ts`**, not at the three call
@@ -136,7 +139,30 @@ post-1.0: it changes no data and fixes no defect.
 
 ---
 
-## 4. Change plan — time types: **Ministry** and **Credit**
+## 4. Change plan — time types: **Ministry** and **Credit** — ✅ LANDED (0.20.0)
+
+> **Shipped as planned**, with three things this plan did not account for, found while building
+> it and all closed in the same change:
+>
+> 1. **Planned schedule blocks carry a category too.** `DayScheduleBlock.category` and the
+>    legacy `daySchedule.creditCategory` live in `schedulePrefs`, not `timeLogs`. Migrating only
+>    the logs would have left a saved weekly plan holding `'ldc'` — drawn with no color, labelled
+>    blank, and, on submit, **writing a fresh `'ldc'` row back into `timeLogs` after the
+>    migration had already run**, where nothing would ever catch it. The v9 upgrade rewrites
+>    both.
+> 2. **The Activity Note has to be offered on Ministry, not only Credit.** This plan's own
+>    ruling is that letter writing and cart witnessing are Ministry *with an Activity Note* — but
+>    step 3 reveals the control for Credit only, which would have left no way to name them at
+>    log time (Edit-after-the-fact only), making the `'other'` copy fix worse in practice. The
+>    control now shows for both: quick-picks + free text for Credit, free text for Ministry.
+> 3. **The emailed report's per-category loop became a duplicate line.** It printed
+>    `CATEGORY_LABELS[cat]` for every non-ministry category under an existing "Credit Hours"
+>    line; with two categories that reads "Credit Hours: 64h / Credit: 64h". Removed rather than
+>    re-pointed at the Activity Note, because the Service Report has no field for the type
+>    (`CONTEXT.md`) — credit is submitted as one figure.
+>
+> Proof: `src/db.migration.test.ts` (real v8 → v9 upgrade against fake-indexeddb; both halves
+> verified non-vacuous by disabling each and watching the matching assertions go red).
 
 **The design.** Two categories: **Ministry** and **Credit**. A Credit log may optionally carry an
 **Activity Note** naming what it was ("LDC", "Circuit assembly") — for the person's own records
@@ -208,8 +234,8 @@ are logged as **Ministry** with an Activity Note.
 
 1. ✅ **Done.** Write path (F-A1, F-A2), untrusted input (F-B1/B2/B4), both remaining `high`
    findings (F-A3, F-A4), plus F-A5 and F-B3 — all landed by 0.17.1.
-2. **⬅ Next: the 1.0 line** (see `PLAN.md`). §4 with its migration and the `'other'` copy fix
-   (resolving F-A6), F-C1, F-C3, F-B5 + AUDIT F033, F-B6 + AUDIT F032, and the doc
-   reconciliation (AUDIT F031).
-3. **Post-1.0.** The §3 reframe, F-C2, F-C4, F-C5, F-C6, F-B7, then AUDIT F008 — which pays for
-   itself across all of it.
+2. ✅ **Done — the 1.0 line is complete** (see `PLAN.md`). The doc reconciliation (AUDIT F031),
+   F-C1, F-C3, F-B5 + AUDIT F033 and F-B6 + AUDIT F032 landed in 0.19.1; §4 with its migration
+   and the `'other'` copy fix (resolving F-A6) landed in 0.20.0.
+3. **⬅ Next: post-1.0.** The §3 reframe, F-C2, F-C4, F-C5, F-C6, F-B7, then AUDIT F008 — which
+   pays for itself across all of it.

@@ -4,17 +4,9 @@ The vocabulary this project uses for the ministry domain. One meaning per term, 
 in code, UI copy, and docs. This is a glossary only — no implementation detail, no decisions.
 Architectural decisions live in `docs/adr/`; findings live in `AUDIT.md`.
 
-> **Where the code differs (as of 0.19.0).** The **Time** section below describes the *target*
-> model, not the shipped one. `db.ts` still declares seven Time Categories and `categories.ts`
-> still labels all seven; **Activity Note does not exist yet**. The change and its required
-> migration are `REVIEW.md` §4, and the drift is tracked as AUDIT F031 — delete this note when
-> that work lands. Everything outside the Time section describes the app as it is today.
-
 ---
 
 ## Time
-
-*(Target model — see the note above.)*
 
 **Time Log** — one recorded block of time: a date, a number of minutes, a Time Category, and
 an optional Activity Note. The atomic unit of everything the Reports tab reports on.

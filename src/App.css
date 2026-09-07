@@ -1533,12 +1533,6 @@ button.small {
   background: var(--credit);
 }
 
-.slot-logged.ldc { background: var(--cat-ldc); }
-.slot-logged.hlc { background: var(--cat-hlc); }
-.slot-logged.convention { background: var(--cat-convention); }
-.slot-logged.assembly { background: var(--cat-assembly); }
-.slot-logged.bethel { background: var(--cat-bethel); }
-.slot-logged.other { background: var(--cat-other); }
 
 /* Logged total shown inside the day's bar (right edge), with a faint backing so it stays
    readable over any logged/scheduled slots behind it. */
@@ -1737,12 +1731,6 @@ button.small {
   background: var(--credit);
 }
 
-.legend .sw.ldc { background: var(--cat-ldc); }
-.legend .sw.hlc { background: var(--cat-hlc); }
-.legend .sw.convention { background: var(--cat-convention); }
-.legend .sw.assembly { background: var(--cat-assembly); }
-.legend .sw.bethel { background: var(--cat-bethel); }
-.legend .sw.other { background: var(--cat-other); }
 
 .legend.tight {
   gap: 14px;

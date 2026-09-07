@@ -61,7 +61,12 @@ export interface Call {
   lng?: number
 }
 
-export type TimeCategory = 'ministry' | 'ldc' | 'hlc' | 'convention' | 'assembly' | 'bethel' | 'other'
+/** What kind of time a Time Log is. Exactly two, because the category is the only part of a
+    log that changes a calculation: Ministry counts toward the yearly goal in full, Credit is
+    subject to the 55h Credit Cap. What *kind* of credit it was (LDC, HLC, a circuit assembly)
+    is a personal annotation — `TimeLog.activityNote` — not a dimension of the data model,
+    because the congregation's Service Report has no field for it. See CONTEXT.md. */
+export type TimeCategory = 'ministry' | 'credit'
 
 /** One suggested (planned) window of time on a weekly-schedule day — minutes since
     midnight, typed by ministry category so a morning of ministry and an afternoon of
@@ -78,6 +83,11 @@ export interface TimeLog {
   minutes: number
   category: TimeCategory
   note?: string
+  /** Optional free text naming what this time actually was ("LDC", "Cart witnessing",
+      "Circuit assembly") — purely for the person's own records. It never affects the Credit
+      Cap, any total, or any goal, and it is not a reportable field. Non-indexed, so adding it
+      needed no schema change; the v9 upgrade backfills it from the pre-v9 category labels. */
+  activityNote?: string
 }
 
 export interface Appointment {
@@ -360,6 +370,78 @@ db.version(7).stores({
 
 db.version(8).stores({
   streetEntries: '++id, name, createdAt',
+})
+
+/** The seven-category model collapsed to two (Ministry / Credit). Every pre-v9 non-ministry
+    category was already credit as far as every calculation was concerned — `isCredit` has
+    always been `category !== 'ministry'` — so no month's applied total moves. What the label
+    carried was *description*, and that survives as `activityNote`.
+
+    This is a data migration rather than a read-time fallback because the display code
+    *iterates* the category list: `CATEGORY_ORDER` drives the goal rings (`daySegments`), the
+    week legend and the month scans, and `CATEGORY_LABELS[cat]` names each entry. Leave a row
+    on `'ldc'` after that list shrinks to two and the row is never visited — it vanishes from
+    every ring and legend while still counted in the totals, which reads to the user as data
+    loss. Rewriting the rows once is the safer path, not the optional one. */
+const PRE_V9_CATEGORY_LABELS: Record<string, string> = {
+  ldc: 'LDC',
+  hlc: 'HLC',
+  convention: 'Convention',
+  assembly: 'Assembly',
+  bethel: 'Bethel',
+  other: 'Other',
+}
+
+db.version(9).stores({}).upgrade(async (tx) => {
+  const logs = await tx.table('timeLogs').toArray()
+  for (const l of logs) {
+    if (l.category === 'ministry' || l.category === 'credit') continue
+    // An unrecognized value (a hand-edited or corrupt restore) still counted as credit under
+    // the old `!== 'ministry'` rule, so it migrates the same way and keeps its own text.
+    const label = PRE_V9_CATEGORY_LABELS[l.category] ?? String(l.category)
+    await tx.table('timeLogs').update(l.id, {
+      category: 'credit',
+      // Never clobber an annotation that somehow already exists.
+      activityNote: l.activityNote ?? label,
+    })
+  }
+
+  // Planned blocks carry a category too (they're logged verbatim on submit), and the same
+  // shrinking list renders them — so a stale 'ldc' block would draw with no color and submit
+  // a row this build can't label.
+  const prefsRows = await tx.table('schedulePrefs').toArray()
+  for (const p of prefsRows) {
+    const fixBlocks = (blocks: { category?: string }[] | undefined) =>
+      blocks?.map((b) => (b.category === 'ministry' ? b : { ...b, category: 'credit' }))
+    const daySchedule = p.daySchedule
+      ? Object.fromEntries(
+          Object.entries(p.daySchedule as Record<string, { blocks?: { category?: string }[]; creditCategory?: string }>).map(
+            ([day, entry]) => [
+              day,
+              {
+                ...entry,
+                ...(entry.blocks ? { blocks: fixBlocks(entry.blocks) } : {}),
+                ...(entry.creditCategory && entry.creditCategory !== 'ministry' ? { creditCategory: 'credit' } : {}),
+              },
+            ]
+          )
+        )
+      : undefined
+    const dateOverrides = p.dateOverrides
+      ? Object.fromEntries(
+          Object.entries(p.dateOverrides as Record<string, { category?: string }[]>).map(([date, blocks]) => [
+            date,
+            fixBlocks(blocks) ?? [],
+          ])
+        )
+      : undefined
+    if (daySchedule || dateOverrides) {
+      await tx.table('schedulePrefs').update(p.id, {
+        ...(daySchedule ? { daySchedule } : {}),
+        ...(dateOverrides ? { dateOverrides } : {}),
+      })
+    }
+  }
 })
 
 /** Sorts house numbers "1, 2, 10, 10A, 10B, 11" the way a person walks a street: by the

@@ -13,16 +13,17 @@ effort **S/M/L** · and dependencies where they matter.
 
 Status markers: ✅ done · 🟡 partly done.
 
-> **Status as of 0.19.0 (2026-09-06).** Phase 0 is largely complete; Epic 1.1 and 1.4 have
+> **Status as of 0.20.0 (2026-09-07).** Phase 0 is largely complete; Epic 1.1 and 1.4 have
 > shipped. Two Phase-0 items are deliberately half-finished and are split below so the
 > remainder isn't lost.
 >
-> **Wave 0 is cleared.** AUDIT F022–F025 all landed in 0.17.1, and F026–F030 landed after. Five
-> audit findings remain open (F008, F009, F010, F017, F018), plus three added by the 2026-09-06
-> review pass (F031–F033). `REVIEW.md` stands at 9 of 20 closed.
+> **Wave 0 is cleared.** AUDIT F022–F025 all landed in 0.17.1, and F026–F030 landed after.
+> F031–F033 (added by the 2026-09-06 review pass) are all closed as of 0.20.0. Five audit
+> findings remain open — F008, F009, F010, F017, F018 — and every one is post-1.0.
+> `REVIEW.md` stands at 14 of 20 closed.
 >
-> **A 1.0 line is drawn** — see the section at the end. It was previously undrawn across ~50
-> items, which is what kept the roadmap from resolving.
+> **The 1.0 line is complete.** All six items shipped in 0.19.1 and 0.20.0 — see the section at
+> the end. What remains in this file is the next release's work, not the current one's.
 
 ---
 
@@ -77,10 +78,12 @@ Status markers: ✅ done · 🟡 partly done.
 - **1.3 One-tap re-export via File System Access API** — remember a file handle so "Back up now"
   overwrites the same file. **[DATA] S–M.** *Bonus: this is the only export path that confirms
   a real write, so it closes AUDIT F016.*
-- **1.4 Restore safety** ✅ *(0.17.1)* — `formatVersion` gate on import (refuses newer-than-app,
-  before any table is touched) and "Restore from Backup" renamed "Restore (replaces current
-  data)". *(AUDIT F024.)* **Not fully closed:** `dbVersion` is recorded and still unread
-  (AUDIT F032), and restore still doesn't clear stale keys (`REVIEW.md` F-B6). Both are 1.0.
+- **1.4 Restore safety** ✅ *(0.17.1, completed 0.19.1)* — `formatVersion` gate on import
+  (refuses newer-than-app, before any table is touched) and "Restore from Backup" renamed
+  "Restore (replaces current data)". *(AUDIT F024.)* The two remaining halves landed in 0.19.1:
+  restore now gates on `dbVersion` too (AUDIT F032) and clears stale `fieldservice_*` keys
+  before writing the file's settings, so a restore leaves the backed-up state rather than the
+  union of two (`REVIEW.md` F-B6).
 - **1.5 Offline geocode queue** — save the record immediately and queue the lookup for retry
   when back online. **[DATA] M.** *Depends on fetch timeouts (Epic 8); the minimal version of the
   same problem shipped as AUDIT F022.*
@@ -201,16 +204,19 @@ Status markers: ✅ done · 🟡 partly done.
 ## The 1.0 line
 
 The test: *would a first public release be **wrong**, rather than merely unfinished, without
-this?* Six items pass it. Nothing else does.
+this?* Six items passed it. Nothing else did. **All six have shipped.**
 
-| Item | Source | Why it can't wait | Size |
+| Item | Source | Why it couldn't wait | Shipped |
 |---|---|---|---|
-| Ministry/Credit + migration, incl. the `'other'` copy fix | `REVIEW.md` §4, F-A6, ADR-0001 | Field ministry is being logged as capped Credit today, by design of the copy. A release is a promise you can't quietly re-migrate later. | L |
-| Fetch timeouts + abort (6 sites) | `REVIEW.md` F-C1 | The only remaining defect that leaves the app visibly stuck with no recovery — and it fires on exactly the flaky rural connection this app is used on. | S |
-| Goal `NaN` guard in `timeStats.ts` | `REVIEW.md` F-C3 | A legacy or restored `weeklyHours` renders every goal ring broken on both Schedule and Reports. | S |
-| Share string + nested-array caps | `REVIEW.md` F-B5, AUDIT F033 | Closes the last hole in the app's only untrusted-input boundary, which is also the one surface a stranger can hand you. | S |
-| Restore clears stale keys + checks `dbVersion` | `REVIEW.md` F-B6, AUDIT F032 | Restore is the whole safety net of a no-backend app; it should leave the device in a known state, not the union of two. | S |
-| Doc reconciliation | AUDIT F031 | Three docs currently disagree about what the app is. Cheapest item here, and the one that makes the rest legible. | S |
+| Ministry/Credit + migration, incl. the `'other'` copy fix | `REVIEW.md` §4, F-A6, ADR-0001 | Field ministry was being logged as capped Credit, by design of the copy. A release is a promise you can't quietly re-migrate later. | ✅ 0.20.0 |
+| Fetch timeouts + abort (6 sites) | `REVIEW.md` F-C1 | The only remaining defect that left the app visibly stuck with no recovery — and it fires on exactly the flaky rural connection this app is used on. | ✅ 0.19.1 |
+| Goal `NaN` guard in `timeStats.ts` | `REVIEW.md` F-C3 | A legacy or restored `weeklyHours` rendered every goal ring broken on both Schedule and Reports. | ✅ 0.19.1 |
+| Share string + nested-array caps | `REVIEW.md` F-B5, AUDIT F033 | Closed the last hole in the app's only untrusted-input boundary, which is also the one surface a stranger can hand you. | ✅ 0.19.1 |
+| Restore clears stale keys + checks `dbVersion` | `REVIEW.md` F-B6, AUDIT F032 | Restore is the whole safety net of a no-backend app; it should leave the device in a known state, not the union of two. | ✅ 0.19.1 |
+| Doc reconciliation | AUDIT F031 | Three docs disagreed about what the app is. Cheapest item here, and the one that made the rest legible. | ✅ 0.19.1–0.20.0 |
+
+**1.0 is unblocked.** What's left below is the next release's work. The remaining call is a
+release decision (store listing, the accessibility question in F0.2b), not an engineering one.
 
 **Everything else is post-1.0**, including the five remaining audit findings. F008 is
 maintainability, not a defect; F009, F010, F017 and F018 are all real and none of them changes

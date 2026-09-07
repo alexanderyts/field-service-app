@@ -399,21 +399,22 @@ function buildTimeLogs(rng: () => number, start: Date, end: Date): TimeLog[] {
 
   // Circuit assemblies (1 day) near the start and end of each service year (Sept–Aug);
   // the big convention (3 days) once, leading up to summer, each calendar year.
-  const special = new Map<string, TimeCategory>()
-  const mark = (d: Date, cat: TimeCategory) => special.set(d.toDateString(), cat)
-  mark(new Date(2024, 9, 18), 'assembly') // early in service year 2025 (Sept 2024 – Aug 2025)
-  mark(new Date(2025, 6, 19), 'assembly') // late in service year 2025, before the Aug close-out
-  mark(new Date(2025, 9, 17), 'assembly') // early in service year 2026 (Sept 2025 – Aug 2026)
-  for (const d of [new Date(2025, 5, 5), new Date(2025, 5, 6), new Date(2025, 5, 7)]) mark(d, 'convention')
-  for (const d of [new Date(2026, 5, 4), new Date(2026, 5, 5), new Date(2026, 5, 6)]) mark(d, 'convention')
+  // All of these are Credit time; what kind is an Activity Note, not a category.
+  const special = new Map<string, string>()
+  const mark = (d: Date, activity: string) => special.set(d.toDateString(), activity)
+  mark(new Date(2024, 9, 18), 'Assembly') // early in service year 2025 (Sept 2024 – Aug 2025)
+  mark(new Date(2025, 6, 19), 'Assembly') // late in service year 2025, before the Aug close-out
+  mark(new Date(2025, 9, 17), 'Assembly') // early in service year 2026 (Sept 2025 – Aug 2026)
+  for (const d of [new Date(2025, 5, 5), new Date(2025, 5, 6), new Date(2025, 5, 7)]) mark(d, 'Convention')
+  for (const d of [new Date(2026, 5, 4), new Date(2026, 5, 5), new Date(2026, 5, 6)]) mark(d, 'Convention')
 
   // LDC is available year-round but concentrated in a couple of build-focus months per year.
   const ldcFocusMonths: Record<number, number[]> = { 2024: [9, 10], 2025: [2, 8], 2026: [2] }
 
   for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
-    const specialCat = special.get(d.toDateString())
-    if (specialCat && d <= end) {
-      logs.push({ id: id++, date: atNoon(d), minutes: randInt(rng, 360, 420), category: specialCat })
+    const specialActivity = special.get(d.toDateString())
+    if (specialActivity && d <= end) {
+      logs.push({ id: id++, date: atNoon(d), minutes: randInt(rng, 360, 420), category: 'credit', activityNote: specialActivity })
       continue
     }
 
@@ -427,7 +428,8 @@ function buildTimeLogs(rng: () => number, start: Date, end: Date): TimeLog[] {
         id: id++,
         date: atNoon(d),
         minutes: round15(randInt(rng, isFocusMonth ? 180 : 90, isFocusMonth ? 300 : 180)),
-        category: 'ldc',
+        category: 'credit',
+        activityNote: 'LDC',
         note: rng() < 0.4 ? pick(rng, LDC_NOTES) : undefined,
       })
       continue
@@ -447,8 +449,8 @@ function buildTimeLogs(rng: () => number, start: Date, end: Date): TimeLog[] {
 //   April 2025 — 24h ministry + 64h credit (convention/ldc/hlc) -> capped at 55h applied,
 //                with the 33h overage still counted in the year's raw total, not lost.
 function injectCapExampleMonths(logs: TimeLog[], nextId: () => number) {
-  const add = (y: number, m: number, day: number, minutes: number, category: TimeCategory) =>
-    logs.push({ id: nextId(), date: atNoon(new Date(y, m, day)), minutes, category })
+  const add = (y: number, m: number, day: number, minutes: number, category: TimeCategory, activityNote?: string) =>
+    logs.push({ id: nextId(), date: atNoon(new Date(y, m, day)), minutes, category, activityNote })
 
   const kept = logs.filter((l) => {
     const d = new Date(l.date)
@@ -462,11 +464,11 @@ function injectCapExampleMonths(logs: TimeLog[], nextId: () => number) {
   for (const day of [3, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28]) add(2025, 2, day, 6 * 60, 'ministry') // 12 x 6h = 72h
 
   for (const day of [2, 7, 14, 21]) add(2025, 3, day, 6 * 60, 'ministry') // 4 x 6h = 24h
-  add(2025, 3, 4, 7 * 60, 'convention')
-  add(2025, 3, 5, 7 * 60, 'convention')
-  add(2025, 3, 6, 6 * 60, 'convention') // 7+7+6 = 20h
-  for (const day of [9, 11, 16, 18]) add(2025, 3, day, 6 * 60, 'ldc') // 4 x 6h = 24h
-  for (const day of [23, 24, 25, 28]) add(2025, 3, day, 5 * 60, 'hlc') // 4 x 5h = 20h
+  add(2025, 3, 4, 7 * 60, 'credit', 'Convention')
+  add(2025, 3, 5, 7 * 60, 'credit', 'Convention')
+  add(2025, 3, 6, 6 * 60, 'credit', 'Convention') // 7+7+6 = 20h
+  for (const day of [9, 11, 16, 18]) add(2025, 3, day, 6 * 60, 'credit', 'LDC') // 4 x 6h = 24h
+  for (const day of [23, 24, 25, 28]) add(2025, 3, day, 5 * 60, 'credit', 'HLC') // 4 x 5h = 20h
 }
 
 // Tops up a completed service year with extra ministry entries (on otherwise-blank

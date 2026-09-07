@@ -42,7 +42,7 @@ function removeRaw(key: string): void {
   } catch { /* nothing to clear if it's unreachable */ }
 }
 
-/** Whether the credit-hour categories (LDC, HLC, Convention, …) are offered when logging
+/** Whether the Credit category (LDC, HLC, Bethel, conventions/assemblies) is offered when logging
     time. Stored as the literal 'yes'/'no' strings this key has always used. */
 export function creditHoursEnabled(): boolean {
   return readRaw(KEY.creditHours) === 'yes'

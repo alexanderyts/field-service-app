@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Appointment, type DayScheduleBlock, type SchedulePrefs, type TimeCategory, type TimeLog } from '../db'
-import { CATEGORY_LABELS, CATEGORY_ORDER } from '../categories'
+import { CATEGORY_LABELS, CATEGORY_ORDER, CREDIT_ACTIVITY_SUGGESTIONS } from '../categories'
 import { animateBankValue, collectAndFlyToMinuteBank } from '../minuteBankFly'
 import { creditHoursEnabled, setCreditHoursEnabled } from '../settings'
 import {
@@ -9,6 +9,7 @@ import {
   fmtDuration,
   isCredit,
   monthTotals,
+  quickLogStrategy,
   serviceYearLabel,
   serviceYearRangeLabel,
   serviceYearlyApplied,
@@ -526,7 +527,8 @@ function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => 
         <div className="card">
           <h4>Would you like to count credit hours?</h4>
           <p className="muted" style={{ marginTop: -6 }}>
-            LDC, HLC, Convention, Assembly, Bethel, and Other — in addition to ministry time.
+            LDC, HLC, Bethel and qualifying convention or assembly time — counted alongside
+            ministry time, up to a combined 55 hours a month.
           </p>
           <div className="row">
             <button className={creditYes === true ? '' : 'secondary'} onClick={() => setCreditYes(true)}>Yes</button>
@@ -1197,15 +1199,19 @@ function ScheduleMain({
   // AddTime's own save/banking rules (1-29 leftover minutes bank automatically; 30-59
   // asks to round up) so time logged this way is never treated differently.
   const [quickLogConfirm, setQuickLogConfirm] = useState<
-    { date: Date; hours: number; minutes: number; category: TimeCategory; otherNote: string; originEl?: HTMLElement } | null
+    { date: Date; hours: number; minutes: number; category: TimeCategory; activityNote: string; originEl?: HTMLElement } | null
   >(null)
 
-  async function saveQuickLog(date: Date, totalMin: number, category: TimeCategory, otherNote: string) {
+  async function saveQuickLog(date: Date, totalMin: number, category: TimeCategory, activityNote: string) {
     if (totalMin <= 0) return
     const d = new Date(date)
     d.setHours(12, 0, 0, 0)
-    const note = category === 'other' && otherNote.trim() ? otherNote.trim() : undefined
-    await db.timeLogs.add({ date: d.getTime(), minutes: totalMin, category, note } as TimeLog)
+    await db.timeLogs.add({
+      date: d.getTime(),
+      minutes: totalMin,
+      category,
+      activityNote: activityNote.trim() || undefined,
+    } as TimeLog)
   }
 
   // Logs a scheduled day's planned blocks as real time entries (one per block, by category), then
@@ -1277,7 +1283,7 @@ function ScheduleMain({
     h: number,
     m: number,
     category: TimeCategory,
-    otherNote: string,
+    activityNote: string,
     minutesFieldEl?: HTMLElement
   ) {
     const before = getMinuteBank()
@@ -1292,9 +1298,11 @@ function ScheduleMain({
     if (autoHour) {
       const d = new Date(date)
       d.setHours(12, 0, 0, 0)
+      // `category` is always 'ministry' here — quickLogTime logs credit whole and never
+      // reaches the bank (F-A6) — so the rolled-over hour can't be misattributed.
       await db.timeLogs.add({ date: d.getTime(), minutes: 60, category, note: 'Added from minute bank' } as TimeLog)
     }
-    if (h > 0) await saveQuickLog(date, h * 60, category, otherNote)
+    if (h > 0) await saveQuickLog(date, h * 60, category, activityNote)
     saveMinuteBank(bank)
     // Keep the modal open through the gather (so the field's glow is visible), then close it
     // once the ball has launched from the field's captured position.
@@ -1308,24 +1316,27 @@ function ScheduleMain({
     h: number,
     m: number,
     category: TimeCategory,
-    otherNote: string,
+    activityNote: string,
     originEl?: HTMLElement
   ) {
-    if (h === 0 && m === 0) return
-    if (m === 0) {
-      saveQuickLog(date, h * 60, category, otherNote)
+    // The bank's admission rule lives in `quickLogStrategy` (AUDIT F-A6) — credit is logged
+    // whole and never enters the bank, so the hour it rolls over can't be misattributed.
+    const strategy = quickLogStrategy(category, h, m)
+    if (strategy === 'none') return
+    if (strategy === 'whole') {
+      saveQuickLog(date, h * 60 + m, category, activityNote)
       closeDayModalSmoothly()
       return
     }
-    if (m >= 30) {
-      setQuickLogConfirm({ date, hours: h, minutes: m, category, otherNote, originEl })
+    if (strategy === 'confirm') {
+      setQuickLogConfirm({ date, hours: h, minutes: m, category, activityNote, originEl })
       return
     }
     // Fade the modal's other fields while the minutes field gathers into the ball; the modal
     // itself is morphed shut by bankQuickLogMinutes once the ball has launched (so the gather
     // is visible and the ball originates from the field's real position).
     setDayModalClosing(true)
-    bankQuickLogMinutes(date, h, m, category, otherNote, originEl)
+    bankQuickLogMinutes(date, h, m, category, activityNote, originEl)
   }
 
   // Pioneer weekly bar fills against the calendar-derived weekly need (not the raw weeklyHours).
@@ -1341,8 +1352,10 @@ function ScheduleMain({
 
   // Tapping the pill lets someone cash in banked minutes early instead of waiting for
   // them to reach a full hour naturally — logged as ministry time, same as an automatic
-  // bank-to-hour conversion. Counts the bank down to 0 (instead of snapping) and then
-  // plays the reverse of the pill's opening animation, mirroring how it appeared.
+  // bank-to-hour conversion. Ministry is now the *correct* category rather than a guess:
+  // only ministry minutes can enter the bank (F-A6). Counts the bank down to 0 (instead of
+  // snapping) and then plays the reverse of the pill's opening animation, mirroring how it
+  // appeared.
   async function redeemMinuteBank() {
     setConfirmBankRoundUp(false)
     const startValue = displayedBank
@@ -1855,8 +1868,10 @@ function ScheduleMain({
               <li key={l.id} className="list-item">
                 <div className="visit-info">
                   <span className={`cat-dot ${isCredit(l.category) ? 'credit' : 'ministry'}`} />
+                  {/* The Activity Note is what makes the two-category model readable: a
+                      pre-0.20 LDC entry now reads "Credit — LDC", not a bare "Credit". */}
                   <strong>{fmtDuration(l.minutes)}</strong> · {CATEGORY_LABELS[l.category]}
-                  {l.note ? ` — ${l.note}` : ''}
+                  {[l.activityNote, l.note].filter(Boolean).map((t) => ` — ${t}`).join('')}
                   <div className="muted">
                     {new Date(l.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                   </div>
@@ -1904,7 +1919,7 @@ function ScheduleMain({
           onSaveBlocks={(blocks, repeatWeekly) => saveDayBlocks(dayModalFor, blocks, repeatWeekly)}
           onRemoveDay={() => removeDaySchedule(dayModalFor)}
           onClearAllDays={clearAllSuggestedDays}
-          onLogTime={(h, m, category, otherNote, originEl) => quickLogTime(dayModalFor, h, m, category, otherNote, originEl)}
+          onLogTime={(h, m, category, activityNote, originEl) => quickLogTime(dayModalFor, h, m, category, activityNote, originEl)}
           onSubmitScheduled={() => submitScheduledTime(dayModalFor)}
           onSubmitBlock={(i) => submitScheduledBlock(dayModalFor, i)}
           onDeleteBlock={(i) => deleteScheduledBlock(dayModalFor, i)}
@@ -1923,16 +1938,16 @@ function ScheduleMain({
           cancelLabel="No, bank the minutes"
           tone="primary"
           onConfirm={() => {
-            const { date, hours, category, otherNote } = quickLogConfirm
+            const { date, hours, category, activityNote } = quickLogConfirm
             setQuickLogConfirm(null)
-            saveQuickLog(date, (hours + 1) * 60, category, otherNote)
+            saveQuickLog(date, (hours + 1) * 60, category, activityNote)
             closeDayModalSmoothly()
           }}
           onCancel={() => {
-            const { date, hours, minutes, category, otherNote, originEl } = quickLogConfirm
+            const { date, hours, minutes, category, activityNote, originEl } = quickLogConfirm
             setQuickLogConfirm(null)
             setDayModalClosing(true)
-            bankQuickLogMinutes(date, hours, minutes, category, otherNote, originEl)
+            bankQuickLogMinutes(date, hours, minutes, category, activityNote, originEl)
           }}
         />
       )}
@@ -1972,6 +1987,7 @@ function EditLogModal({ log, onClose }: { log: TimeLog; onClose: () => void }) {
   const [minutes, setMinutes] = useState(String(log.minutes % 60))
   const [category, setCategory] = useState<TimeCategory>(log.category)
   const [note, setNote] = useState(log.note ?? '')
+  const [activityNote, setActivityNote] = useState(log.activityNote ?? '')
 
   const totalMin = (parseInt(hours, 10) || 0) * 60 + (parseInt(minutes, 10) || 0)
 
@@ -1986,6 +2002,7 @@ function EditLogModal({ log, onClose }: { log: TimeLog; onClose: () => void }) {
       minutes: totalMin,
       category,
       note: note.trim() || undefined,
+      activityNote: activityNote.trim() || undefined,
     })
     onClose()
   }
@@ -2019,6 +2036,14 @@ function EditLogModal({ log, onClose }: { log: TimeLog; onClose: () => void }) {
                 <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
               ))}
             </select>
+          </label>
+          <label className="field">
+            <span className="field-label">What was it? (optional)</span>
+            <input
+              value={activityNote}
+              onChange={(e) => setActivityNote(e.target.value)}
+              placeholder={category === 'credit' ? 'e.g. LDC, Circuit assembly…' : 'e.g. Cart witnessing, Letter writing…'}
+            />
           </label>
           <label className="field">
             <span className="field-label">Note (optional)</span>
@@ -2215,7 +2240,7 @@ function DayActionModal({
   onSaveBlocks: (blocks: DayScheduleBlock[], repeatWeekly: boolean) => void
   onRemoveDay: () => void
   onClearAllDays: () => void
-  onLogTime: (hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
+  onLogTime: (hours: number, minutes: number, category: TimeCategory, activityNote: string, originEl?: HTMLElement) => void
   onSubmitScheduled: () => void
   onSubmitBlock: (blockIndex: number) => void
   onDeleteBlock: (blockIndex: number) => void
@@ -2245,14 +2270,16 @@ function DayActionModal({
   const [hours, setHours] = useState('0')
   const [minutes, setMinutes] = useState('0')
   const [category, setCategory] = useState<TimeCategory>('ministry')
-  const [otherNote, setOtherNote] = useState('')
+  const [activityNote, setActivityNote] = useState('')
   const [numPad, setNumPad] = useState<'hours' | 'minutes' | null>(null)
   const minutesBtnRef = useRef<HTMLButtonElement>(null)
 
+  // Credit off means Ministry only. (Before the two-category model, 'other' was offered even
+  // with credit switched off — and `isCredit('other')` was true, so time logged under a
+  // control labelled "Type of ministry" was silently counted as capped credit. That control
+  // is now an Activity Note on a Ministry log, which is what it always described.)
   const creditEnabled = creditHoursEnabled()
-  const availableCats: TimeCategory[] = creditEnabled
-    ? ['ministry', 'ldc', 'hlc', 'convention', 'assembly', 'bethel', 'other']
-    : ['ministry', 'other']
+  const availableCats: TimeCategory[] = creditEnabled ? ['ministry', 'credit'] : ['ministry']
   const effectiveCategory = availableCats.includes(category) ? category : 'ministry'
 
   function blockDuration(b: EditableBlock): number {
@@ -2475,14 +2502,34 @@ function DayActionModal({
                   ))}
                 </div>
               </div>
-              {effectiveCategory === 'other' && (
-                <label className="field">
-                  <span className="field-label">Type of ministry</span>
-                  <input value={otherNote} onChange={(e) => setOtherNote(e.target.value)} placeholder="e.g. Letter writing, Cart witnessing…" />
-                </label>
-              )}
+              {/* The Activity Note. Offered on both categories — Credit gets quick-picks for
+                  the common kinds, Ministry just the free text, because "cart witnessing" and
+                  "letter writing" are field ministry that people still want named on the
+                  entry. It annotates the log and nothing else: no total, no cap, no goal. */}
+              <div className="field">
+                <span className="field-label">What was it? (optional)</span>
+                {effectiveCategory === 'credit' && (
+                  <div className="cat-pills">
+                    {CREDIT_ACTIVITY_SUGGESTIONS.map((s) => (
+                      <button
+                        key={s}
+                        className={`chip${activityNote === s ? ' active' : ''}`}
+                        onClick={() => setActivityNote(activityNote === s ? '' : s)}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <input
+                  value={activityNote}
+                  onChange={(e) => setActivityNote(e.target.value)}
+                  aria-label="What this time was (optional)"
+                  placeholder={effectiveCategory === 'credit' ? 'e.g. LDC, Circuit assembly…' : 'e.g. Cart witnessing, Letter writing…'}
+                />
+              </div>
               <button
-                onClick={() => onLogTime(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, otherNote, minutesBtnRef.current ?? undefined)}
+                onClick={() => onLogTime(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, activityNote, minutesBtnRef.current ?? undefined)}
                 disabled={Number(hours) === 0 && Number(minutes) === 0}
               >
                 Submit Time
@@ -2613,7 +2660,7 @@ function ScheduleCalendarView({
   onSaveBlocks: (date: Date, blocks: DayScheduleBlock[], repeatWeekly: boolean) => void
   onRemoveDay: (date: Date) => void
   onClearAllDays: () => void
-  onLogTime: (date: Date, hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) => void
+  onLogTime: (date: Date, hours: number, minutes: number, category: TimeCategory, activityNote: string, originEl?: HTMLElement) => void
   onSubmitScheduled: (date: Date, blocks: DayScheduleBlock[]) => void
   onSubmitBlock: (date: Date, blockIndex: number) => void
   onDeleteBlock: (date: Date, blockIndex: number) => void
@@ -2735,8 +2782,8 @@ function ScheduleCalendarView({
     onClearAllDays()
     closeTapModal()
   }
-  function handleLogTime(hours: number, minutes: number, category: TimeCategory, otherNote: string, originEl?: HTMLElement) {
-    if (tapDate) onLogTime(tapDate, hours, minutes, category, otherNote, originEl)
+  function handleLogTime(hours: number, minutes: number, category: TimeCategory, activityNote: string, originEl?: HTMLElement) {
+    if (tapDate) onLogTime(tapDate, hours, minutes, category, activityNote, originEl)
     closeTapModal()
   }
 

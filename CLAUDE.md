@@ -51,7 +51,7 @@ src/
   scripture.ts         # Scripture reference formatter + autocorrect
   usStates.ts          # State name/abbreviation expansion
   contactStatus.ts     # ContactStatus labels + display order
-  categories.ts        # TimeCategory labels/emoji/order
+  categories.ts        # TimeCategory labels/emoji/order + credit activity quick-picks
   useGeolocation.ts    # GPS hook wrapping navigator.geolocation
   timeStats.ts         # Credit-hour cap (55h/mo), monthly/yearly + service-year helpers
   goalSegments.ts      # Day goal-ring arc math for the Schedule calendar
@@ -147,8 +147,12 @@ Call { id, personId, date, notHome?, notes?, scriptures?,
 
 **`timeLogs`** — time tracking entries
 ```ts
-TimeLog { id, date, minutes, category: TimeCategory, note? }
-TimeCategory = 'ministry' | 'ldc' | 'hlc' | 'convention' | 'assembly' | 'bethel' | 'other'
+TimeLog { id, date, minutes, category: TimeCategory, note?, activityNote? }
+TimeCategory = 'ministry' | 'credit'
+// activityNote = free text naming what it was ("LDC", "Cart witnessing"). Annotation only:
+// it touches no total, no cap and no goal, and is not a reportable field. The seven-category
+// model collapsed to these two in 0.20.0 (db v9 upgrade backfills activityNote from the old
+// label); `isCredit` has always been `!== 'ministry'`, so no month's applied total moved.
 ```
 
 **`appointments`** — return visits / scheduled follow-ups
@@ -308,6 +312,8 @@ brand/category/tag hues are brightened per dark theme for contrast.
   `type="date"`/`type="number"` here — intentional for mobile UX).
 - **Round-up dialog** when minutes > 30; leftover minutes go to the **minute bank**
   (`fieldservice_minute_bank`) which auto-adds a 1-hour ministry entry at 60, with a fly-to-pill animation.
+  The bank holds **ministry minutes only** — credit is logged whole, so the hour it rolls over
+  (and the one "cash in now" adds) can't be misattributed at the 55h cap.
 - Category **pills** (not a dropdown). Per-day planning uses `DayScheduleBlock`s; goal rings via
   `goalSegments.ts`.
 

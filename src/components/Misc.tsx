@@ -10,6 +10,7 @@ import { APP_VERSION } from '../version'
 import { COPYRIGHT_SUMMARY, NOT_AFFILIATED, DEVELOPER_NAME, DEVELOPER_EMAIL } from '../legal'
 import { getProfileName, saveProfileName } from '../profile'
 import { creditHoursEnabled, setCreditHoursEnabled, getTheme, setTheme as saveTheme, getLastBackupAt, type Theme } from '../settings'
+import { CREDIT_ACTIVITY_SUGGESTIONS } from '../categories'
 import { formatTimeAgo } from '../timeAgo'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
 import {
@@ -22,15 +23,6 @@ import {
   setNotifyLeadMinutes,
   type NotifyLeadMinutes,
 } from '../notifications'
-
-const CREDIT_CAT_LABELS: Record<string, string> = {
-  ldc: 'LDC (Construction)',
-  hlc: 'HLC',
-  convention: 'Convention',
-  assembly: 'Assembly',
-  bethel: 'Bethel',
-  other: 'Other',
-}
 
 export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTutorial: () => void; onImportEncoded?: (encoded: string) => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -349,14 +341,16 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
               <div>
                 <strong>Count credit hours</strong>
                 <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
-                  Adds LDC, HLC, Convention, Assembly, Bethel, and Other categories when logging time.
+                  Adds a Credit category when logging time — LDC, HLC, Bethel and qualifying
+                  convention or assembly time, capped at 55 hours a month. You can note which
+                  one it was on the entry.
                 </p>
               </div>
             </label>
             {creditEnabled && (
               <div className="cat-pills" style={{ marginTop: 2 }}>
-                {Object.entries(CREDIT_CAT_LABELS).map(([k, v]) => (
-                  <span key={k} className="chip" style={{ fontSize: 12, padding: '5px 12px' }}>{v}</span>
+                {CREDIT_ACTIVITY_SUGGESTIONS.map((s) => (
+                  <span key={s} className="chip" style={{ fontSize: 12, padding: '5px 12px' }}>{s}</span>
                 ))}
               </div>
             )}

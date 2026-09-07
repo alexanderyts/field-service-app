@@ -154,9 +154,10 @@ export default function Reports() {
     body += `Total Hours: ${fmtDuration(totalMin)}\n`
     if (ministryMin) body += `  Ministry: ${fmtDuration(ministryMin)}\n`
     if (creditMin) body += `  Credit Hours: ${fmtDuration(creditMin)}\n`
-    for (const [cat, min] of catEntries) {
-      if (cat !== 'ministry') body += `  ${CATEGORY_LABELS[cat]}: ${fmtDuration(min)}\n`
-    }
+    // Deliberately no breakdown of credit by type. The congregation's Service Report has no
+    // field for it — credit is submitted as a single figure regardless of what earned it, and
+    // anything descriptive belongs in the report's remarks (see CONTEXT.md). The Activity Note
+    // is for the person's own records, which is what the Reports tab itself shows.
     if (returnVisits) body += `\nReturn Visits Scheduled: ${returnVisits}\n`
     if (newContacts.length) body += `New Contacts Added: ${newContacts.length}\n`
     if (atHomeCalls) body += `Conversations: ${atHomeCalls}\n`

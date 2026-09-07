@@ -8,6 +8,7 @@ import {
   serviceYearBounds,
   serviceYearlyApplied,
   monthlyGoalFromWeekly,
+  quickLogStrategy,
 } from './timeStats'
 
 const H = 60 // minutes per hour
@@ -18,9 +19,16 @@ function log(hours: number, category: TimeCategory, date = 0): TimeLog {
 describe('isCredit', () => {
   it('treats everything except ministry as credit', () => {
     expect(isCredit('ministry')).toBe(false)
-    for (const c of ['ldc', 'hlc', 'convention', 'assembly', 'bethel', 'other'] as TimeCategory[]) {
-      expect(isCredit(c)).toBe(true)
-    }
+    expect(isCredit('credit')).toBe(true)
+  })
+
+  // This rule is why the v9 migration cannot move any month's applied total: every one of the
+  // seven pre-0.20 categories was ALREADY credit under this same `!== 'ministry'` test, so
+  // rewriting them to 'credit' changes the label and nothing else. Asserted with a runtime
+  // cast because the type no longer admits those values — which is the point.
+  it('still counts a pre-0.20 category as credit, so the migration is total-preserving', () => {
+    const legacy: string[] = ['ldc', 'hlc', 'convention', 'assembly', 'bethel', 'other']
+    for (const c of legacy) expect(isCredit(c as TimeCategory)).toBe(true)
   })
 })
 
@@ -32,7 +40,7 @@ describe('monthTotals — the 55h credit cap', () => {
 
   it('caps ministry+credit at 55h once any credit is used', () => {
     // 24h ministry + 64h credit = 88h raw, but only 55h counts
-    const t = monthTotals([log(24, 'ministry'), log(64, 'ldc')])
+    const t = monthTotals([log(24, 'ministry'), log(64, 'credit')])
     expect(t.total).toBe(88 * H)
     expect(t.creditUsed).toBe(true)
     expect(t.applied).toBe(55 * H)
@@ -40,12 +48,12 @@ describe('monthTotals — the 55h credit cap', () => {
 
   it('never lets the cap drop applied below what ministry alone earned', () => {
     // 60h ministry already exceeds the 55h cap; adding 10h credit must not reduce it
-    const t = monthTotals([log(60, 'ministry'), log(10, 'ldc')])
+    const t = monthTotals([log(60, 'ministry'), log(10, 'credit')])
     expect(t.applied).toBe(60 * H)
   })
 
   it('applies everything when under the cap', () => {
-    const t = monthTotals([log(10, 'ministry'), log(5, 'ldc')])
+    const t = monthTotals([log(10, 'ministry'), log(5, 'credit')])
     expect(t.applied).toBe(15 * H)
     expect(t.creditUsed).toBe(true)
   })
@@ -84,11 +92,39 @@ describe('service year (Sept 1 – Aug 31, labeled by ending year)', () => {
   it('sums applied per-month with the cap, excluding out-of-year logs', () => {
     const logs: TimeLog[] = [
       log(24, 'ministry', new Date(2025, 9, 15).getTime()), // Oct 2025: 24h ministry
-      log(64, 'ldc', new Date(2025, 9, 20).getTime()), //      + 64h credit -> capped to 55h
+      log(64, 'credit', new Date(2025, 9, 20).getTime()), //   + 64h credit -> capped to 55h
       log(10, 'ministry', new Date(2025, 10, 10).getTime()), // Nov 2025: 10h -> 10h
       log(100, 'ministry', new Date(2025, 7, 15).getTime()), // Aug 2025: BEFORE the year, excluded
     ]
     expect(serviceYearlyApplied(logs, 2026)).toBe(55 * H + 10 * H)
+  })
+})
+
+describe('quickLogStrategy — what the minute bank is allowed to hold (F-A6)', () => {
+  it('banks a ministry remainder under 30 minutes', () => {
+    expect(quickLogStrategy('ministry', 2, 20)).toBe('bank')
+  })
+
+  it('asks about rounding up a ministry remainder of 30+ minutes', () => {
+    expect(quickLogStrategy('ministry', 2, 45)).toBe('confirm')
+  })
+
+  it('logs a whole ministry hour with no remainder directly', () => {
+    expect(quickLogStrategy('ministry', 2, 0)).toBe('whole')
+  })
+
+  // The fix itself: credit never enters the bank, at any remainder. Before this, 20 minutes of
+  // credit went into the same pot as ministry minutes and came back out as whichever category
+  // happened to fill it — misfiling time exactly where the 55h cap makes the split decisive.
+  it('logs credit whole at every remainder, so the bank stays ministry-only', () => {
+    expect(quickLogStrategy('credit', 2, 20)).toBe('whole')
+    expect(quickLogStrategy('credit', 2, 45)).toBe('whole')
+    expect(quickLogStrategy('credit', 0, 20)).toBe('whole')
+  })
+
+  it('does nothing for a zero duration', () => {
+    expect(quickLogStrategy('ministry', 0, 0)).toBe('none')
+    expect(quickLogStrategy('credit', 0, 0)).toBe('none')
   })
 })
 
