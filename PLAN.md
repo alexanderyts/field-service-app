@@ -13,13 +13,14 @@ effort **S/M/L** · and dependencies where they matter.
 
 Status markers: ✅ done · 🟡 partly done.
 
-> **Status as of 0.20.1 (2026-09-07).** Phase 0 is largely complete; Epic 1.1 and 1.4 have
+> **Status as of 0.20.2 (2026-09-07).** Phase 0 is largely complete; Epic 1.1 and 1.4 have
 > shipped. Two Phase-0 items are deliberately half-finished and are split below so the
 > remainder isn't lost.
 >
 > **Wave 0 is cleared.** AUDIT F022–F025 all landed in 0.17.1, and F026–F030 landed after.
-> F031–F033 (added by the 2026-09-06 review pass) are all closed as of 0.20.0, and F010 in
-> 0.20.1. Four audit findings remain open — F008, F009, F017, F018 — every one post-1.0.
+> F031–F033 (added by the 2026-09-06 review pass) are all closed as of 0.20.0, F010 in
+> 0.20.1, and F008 in 0.20.2. Three audit findings remain open — F009, F017, F018 — every
+> one post-1.0.
 > `REVIEW.md` stands at 19 of 20 closed, 1 waived: nothing in it is open.
 >
 > **The 1.0 line is complete.** All six items shipped in 0.19.1 and 0.20.0 — see the section at
@@ -218,9 +219,8 @@ this?* Six items passed it. Nothing else did. **All six have shipped.**
 **1.0 is unblocked.** What's left below is the next release's work. The remaining call is a
 release decision (store listing, the accessibility question in F0.2b), not an engineering one.
 
-**Everything else is post-1.0**, including the five remaining audit findings. F008 is
-maintainability, not a defect; F009, F010, F017 and F018 are all real and none of them changes
-what a user's data does. Epics 2–9 are the next release's features — calling them 1.0 blockers is
+**Everything else is post-1.0**, including the three remaining audit findings — F009, F017
+and F018 — all real, none of which changes what a user's data does. Epics 2–9 are the next release's features — calling them 1.0 blockers is
 what kept this line undrawn.
 
 **Waves after 1.0.**
@@ -229,4 +229,4 @@ what kept this line undrawn.
   the `REVIEW.md` §3 reframe.
 - **Wave 3 — depth.** Epic 3, then Epic 4.
 - **Wave 4 — system polish & perf.** Epic 6 (rest) + Epic 8. Measure Reports here; decide F0.4.
-- **Wave 5 — privacy & delight.** Epic 7.1 + Epic 9. Then AUDIT F008.
+- **Wave 5 — privacy & delight.** Epic 7.1 + Epic 9. *(AUDIT F008 was pulled forward and landed in 0.20.2.)*

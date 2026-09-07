@@ -66,16 +66,22 @@ src/
   roadSnap.ts          # Snap traced waypoints onto real OSM road geometry (Overpass)
   territoryImage.ts    # Schematic canvas rendering of traced streets (no map tiles → no tainted canvas)
   devSeed.ts           # Demo/seed data (loaded from More tab)
+  localDate.ts         # parse/format YYYY-MM-DD + HH:mm as LOCAL time (never toISOString — it shifts the date west of UTC)
   components/
     Onboarding.tsx     # SplashScreen + PrivacyGate + ProfileGate (+ hasAcceptedPolicy/hasSeenProfilePrompt)
     Tutorial.tsx       # Guided tour + first-run TutorialPrompt
     InstallPrompt.tsx  # "Add to Home Screen" banner
-    Contacts.tsx       # THE MINISTRY TAB: People/Streets/Territories sub-views, contact form/detail, call logger
+    Contacts.tsx       # THE MINISTRY TAB root: People/Streets/Territories segmented control + list (289 lines)
+    contacts/          # ContactForm, ContactDetail, CallLogger, ReturnVisitEditor; geocode.ts (Nominatim lookups, pure)
     StreetEntries.tsx  # Streets sub-view: street list, StreetDetail, house-number pad
     Territories.tsx    # Territories sub-view: grouped-territory list + detail
     Territory.tsx      # Map-side custom-territory manager: trace/draw modal, send-to-ministry, grouping
     MapView.tsx        # Leaflet map: contact pins, territory traces, satellite toggle, place search
-    Schedule.tsx       # Survey, week/calendar views, Add Time (calendar+numpad), return visits (~3k lines)
+    Schedule.tsx       # THE SCHEDULE TAB root: survey-or-main switch only (56 lines)
+    schedule/          # dates.ts / plan.ts / animate.ts (pure, no React) + one file per piece: ScheduleMain
+                       #   (week view, logging, minute bank — the hub, 1.3k), ScheduleCalendarView, DayActionModal,
+                       #   Survey, EditLogModal, EditAppointmentModal, TimeInputModal, NumPad, InfoTip, HourGoalBar,
+                       #   MonthlyParticipationBox, AuxPioneeringBox, ContactPicker, ReturnVisits
     Reports.tsx        # On-demand monthly report + service-year figures
     ServiceYearReview.tsx # Animated end-of-service-year summary
     Misc.tsx           # More tab: support, theme, profile, notifications, backup/restore, clear data
@@ -235,8 +241,8 @@ Each key should have exactly **one owning module** — never read or write one a
 literal from a component. Owners: `settings.ts` (theme, credit-hours, last-backup),
 `profile.ts` (name + prompt flag), `notifications.ts` (notify\_\*), `auxPioneering.ts` (aux),
 `minuteBankFly.ts` (animation toggle), `Onboarding.tsx` (privacy), `Tutorial.tsx` (tour seen).
-Two keys are still module-locals inside `Schedule.tsx` (`_minute_bank`,
-`_participated_months`) — move them to an owner rather than adding a second reader.
+Every key now has one; the last two module-locals (`_minute_bank`, `_participated_months`)
+moved into `settings.ts` in 0.20.2.
 
 | Key | Purpose | Owner |
 |---|---|---|
@@ -245,11 +251,11 @@ Two keys are still module-locals inside `Schedule.tsx` (`_minute_bank`,
 | `fieldservice_first_name` / `_last_name` | User's own name (share attribution, personalization) | `profile.ts` |
 | `fieldservice_tutorial_seen` | `'yes'` once the guided-tour prompt was shown | `Tutorial.tsx` |
 | `fieldservice_credit_hours` | `'yes'` when credit-hour categories are enabled | `settings.ts` |
-| `fieldservice_minute_bank` | Integer minutes accumulated toward the next auto-hour | `Schedule.tsx` (local) |
+| `fieldservice_minute_bank` | Integer minutes accumulated toward the next auto-hour (ministry minutes only — credit logs whole) | `settings.ts` |
 | `fieldservice_theme` | `'light' | 'dark' | 'pastel' | 'mark'` | `settings.ts` |
 | `fieldservice_dark_mode` | Legacy boolean, read as a fallback for `_theme`; cleared on any theme write | `settings.ts` |
 | `fieldservice_last_backup_at` | Epoch ms of the last completed backup export; absent = never. Blocklisted, so it never travels inside a backup | `settings.ts` |
-| `fieldservice_participated_months` | Months the user marked as "participated in ministry" | `Schedule.tsx` (local) |
+| `fieldservice_participated_months` | Months the user marked as "participated in ministry" | `settings.ts` |
 | `fieldservice_notify_enabled` / `_notify_lead_min` / `_notify_sent_ids` | Return-visit reminder settings + dedupe | `notifications.ts` |
 | `fieldservice_aux_*` | Auxiliary-pioneer config (see `auxPioneering.ts`) | `auxPioneering.ts` |
 

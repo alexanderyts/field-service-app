@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.20.1`.** History runs from the initial scaffold forward.
+**Current version: `0.20.2`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -177,6 +177,11 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **A very old upgrade no longer hides a failure.** The early visits→calls conversion used to swallow any error and carry on with the history missing; it now only skips a genuinely absent table and otherwise stops so nothing is silently lost (F-B7)
 - Dependabot now opens a weekly pull request when a dependency has a fix, so security advisories can't accumulate unnoticed again (F010)
 - New tests: 3 added (168 → 171) covering the schedule-override cleanup
+
+## 0.20.2 — The two giant files are split up · 2026-09-07
+- **No visible change.** `Schedule.tsx` (3,477 lines) and `Contacts.tsx` (1,214) are now a short root file each over a folder of small, single-purpose files — the pure date and planning logic in files with no React in them at all. Nothing about how the app works changed; every test, the build, and a real-browser check of the Schedule tab all pass as before (F008)
+- The two files each had their own copy of the same date helpers; there is one now (`localDate.ts`)
+- The minute bank and "participated this month" settings now go through the same typed settings module as every other setting, with tests
 
 ---
 

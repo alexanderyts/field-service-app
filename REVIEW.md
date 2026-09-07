@@ -11,7 +11,7 @@ from the versions reviewed and have since drifted — use the symbol names._
 > **Every finding in this review is resolved.** The 1.0 line in `PLAN.md` is complete. What
 > remains of this file is §3, the one part that still describes unbuilt work; `AUDIT.md` is
 > authoritative for finding status and still carries four open low-severity items of its own
-> (F008, F009, F017, F018).
+> (F009, F017, F018).
 
 ---
 
@@ -238,5 +238,6 @@ are logged as **Ministry** with an Activity Note.
    F-C1, F-C3, F-B5 + AUDIT F033 and F-B6 + AUDIT F032 landed in 0.19.1; §4 with its migration
    and the `'other'` copy fix (resolving F-A6) landed in 0.20.0.
 3. ✅ **Done (0.20.1).** F-B7, F-C2, F-C4, F-C5, F-C6, plus AUDIT F010.
-4. **⬅ Next: post-1.0.** The §3 reframe, then AUDIT F008 — which pays for itself across
+4. ✅ **Done (0.20.2).** AUDIT F008 — pulled forward, since it pays for itself across
    everything after it.
+5. **⬅ Next: post-1.0.** The §3 reframe.
