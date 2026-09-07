@@ -193,9 +193,22 @@ function StreetEntryForm({
   const [notes, setNotes] = useState(existing?.notes ?? '')
   const [error, setError] = useState(false)
   const [dupConfirm, setDupConfirm] = useState(false)
+  // Same guard the contact form and call logger already use: the duplicate check below is an
+  // await, so two fast taps could both pass it and add the street twice (REVIEW.md F-C2).
+  const [saving, setSaving] = useState(false)
 
   async function save(force = false) {
+    if (saving) return
     if (!name.trim()) { setError(true); return }
+    setSaving(true)
+    try {
+      await saveInner(force)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveInner(force: boolean) {
     const record = {
       name: name.trim(),
       city: city.trim() || undefined,
@@ -254,7 +267,7 @@ function StreetEntryForm({
           </label>
           {error && <p className="error">Please enter a street name.</p>}
           <div className="row">
-            <button onClick={() => save()}>{existing ? 'Save Changes' : 'Save Street'}</button>
+            <button onClick={() => save()} disabled={saving}>{existing ? 'Save Changes' : 'Save Street'}</button>
             <button className="secondary" onClick={onClose}>Cancel</button>
           </div>
         </div>

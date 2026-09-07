@@ -2271,6 +2271,10 @@ function DayActionModal({
   const [minutes, setMinutes] = useState('0')
   const [category, setCategory] = useState<TimeCategory>('ministry')
   const [activityNote, setActivityNote] = useState('')
+  // One-way: every path out of Submit Time (log whole, bank, or the round-up dialog's two
+  // answers) ends with this modal unmounting, so a second tap during the ~620ms collect
+  // animation — or the 180ms close morph — must not write a second entry (REVIEW.md F-C2).
+  const [submitted, setSubmitted] = useState(false)
   const [numPad, setNumPad] = useState<'hours' | 'minutes' | null>(null)
   const minutesBtnRef = useRef<HTMLButtonElement>(null)
 
@@ -2529,8 +2533,12 @@ function DayActionModal({
                 />
               </div>
               <button
-                onClick={() => onLogTime(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, activityNote, minutesBtnRef.current ?? undefined)}
-                disabled={Number(hours) === 0 && Number(minutes) === 0}
+                onClick={() => {
+                  if (submitted) return
+                  setSubmitted(true)
+                  onLogTime(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, activityNote, minutesBtnRef.current ?? undefined)
+                }}
+                disabled={(Number(hours) === 0 && Number(minutes) === 0) || submitted || closing}
               >
                 Submit Time
               </button>
