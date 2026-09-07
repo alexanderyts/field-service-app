@@ -154,6 +154,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - Running the dev server? The share screen now warns when a link points at `localhost`, which can only ever open on the machine that made it
 
 ## 0.19.1 — Hardening for 1.0 · 2026-09-07
+*(Committed separately; released together with 0.20.0 below, which is the version stamp.)*
 - **Meleo no longer hangs waiting on a lookup that will never answer.** Address search, the map's place search, the street "Matching to street…" step and the aux-pioneer slip all had no time limit, so on a weak signal they could sit there indefinitely with no way out but closing the window. Each now gives up after a sensible wait and tells you, instead of spinning (F-C1)
 - **A broken goal can't blank out your progress rings.** If a restored or older backup carried an unreadable weekly-hours figure, every ring on Schedule and Reports drew as empty. The goal now falls back to zero cleanly (F-C3)
 - **Restoring a backup now leaves your device exactly as the backup had it.** Settings the backup didn't mention used to survive the restore and mix in, so you ended up with a blend of the old and new state rather than the one you restored (F-B6). Restore also refuses a file written by a newer *database* version, the same way it already refused a newer file format (F032)
