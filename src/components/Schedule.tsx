@@ -22,6 +22,7 @@ export default function Schedule({ onGoToContact }: { onGoToContact: (personId: 
         onSkip={async () => {
           const blank: Omit<SchedulePrefs, 'id'> = {
             completedSurvey: true,
+            role: 'publisher',
             isPioneer: false,
             daysOut: [],
             daySchedule: {},

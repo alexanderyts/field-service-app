@@ -106,6 +106,10 @@ export interface SchedulePrefs {
       simplified day-based one. Missing on records saved before this field existed —
       treat as `true` there, since the old survey WAS the pioneer survey. */
   isPioneer?: boolean
+  /** Publisher / auxiliary pioneer / regular pioneer — the intake's one deciding question
+      (0.21.0). `isPioneer` is kept in sync (`role === 'pioneer'`) for every older read; a row
+      without `role` is derived from `isPioneer` + the aux config by `schedulePrefsRole.ts`. */
+  role?: 'publisher' | 'auxiliary' | 'pioneer'
   daysOut: number[]
   weeklyHours: number
   yearlyHours: number

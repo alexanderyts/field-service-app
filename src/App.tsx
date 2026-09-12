@@ -50,7 +50,7 @@ function nextPhase(): Phase {
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'contacts', label: 'Ministry', icon: '◎' },
-  { key: 'schedule', label: 'Schedule', icon: '◫' },
+  { key: 'schedule', label: 'Service', icon: '◫' },
   { key: 'map', label: 'Map', icon: '◈' },
   { key: 'reports', label: 'Reports', icon: '▦' },
   { key: 'misc', label: 'More', icon: '⋯' },

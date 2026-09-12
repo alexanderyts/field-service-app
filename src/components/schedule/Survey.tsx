@@ -1,267 +1,235 @@
 import { useState } from 'react'
 import { db, type SchedulePrefs } from '../../db'
 import { creditHoursEnabled, setCreditHoursEnabled } from '../../settings'
-import { DAYS, DAY_NAMES_FULL, fmtTime, weeklyFromYearly, minutesToTimeInput, timeInputToMinutes } from './dates'
-import { TimeInputModal } from './TimeInputModal'
+import { type AuxConfig, type AuxMode, auxMonthKey, getAuxConfig, saveAuxConfig, suggestedWeeklyHours } from '../../auxPioneering'
+import { type Role, deriveRole } from '../../schedulePrefsRole'
+import { weeklyFromYearly } from './dates'
+import { AuxMonthTargets } from './AuxMonthTargets'
 
+const AUX_OFF: AuxConfig = { enabled: false, mode: null, targetHours: 30, weeklyHours: 7, months: [], monthTargets: {} }
+
+/** Shown once, only for a device with no schedulePrefs record yet — a way past the intake
+    for someone who hasn't decided what they want to track. */
 export function SurveyIntro({ onTakeSurvey, onSkip }: { onTakeSurvey: () => void; onSkip: () => void }) {
   return (
     <div className="view">
-      <h2 className="applet-title">Plan Your Schedule</h2>
+      <h2 className="applet-title">Set your goal</h2>
       <div className="card">
         <p>
-          Would you like to take a short survey to build a custom ministry schedule? It's
-          optional — you can always retake it later from the Schedule tab.
+          Tell Meleo what you're aiming for and it will show your progress toward it every time
+          you log time. Takes about 20 seconds, and you can change it any time.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-          <button onClick={onTakeSurvey}>Take the Survey</button>
+          <button onClick={onTakeSurvey}>Set my goal</button>
           <button className="secondary" onClick={onSkip}>Skip for now</button>
         </div>
       </div>
     </div>
   )
 }
+
+/**
+ * The intake. One question decides everything else: are you a publisher, an auxiliary
+ * pioneer, or a regular pioneer? Days and time windows are never asked here — planning a
+ * week is optional and lives on the Service tab (docs/tracking-first-plan.md, Wave 1).
+ *
+ * On a redo, `daysOut`/`daySchedule`/`dateOverrides` are left exactly as they were.
+ */
 export function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => void }) {
-  // Matches db.ts's documented default: a legacy record that predates this field is
-  // treated as a pioneer everywhere else in the app, so redoing the survey on one
-  // should start pre-answered the same way instead of looking unanswered. A brand-new
-  // user (no existing record at all) gets no default — they must answer explicitly.
-  const [isPioneer, setIsPioneer] = useState<boolean | null>(existing ? (existing.isPioneer ?? true) : null)
-  const [creditYes, setCreditYes] = useState<boolean | null>(
-    existing ? creditHoursEnabled() : null
-  )
-  // Days start unselected either way — this is a plan the person builds, not a default
-  // guessed on their behalf.
-  const [daysOut, setDaysOut] = useState<number[]>(existing?.daysOut ?? [])
-  // Same shape as SchedulePrefs.daySchedule — the survey writes simple {start,end}
-  // ministry windows (normalized into blocks at read time), but redoing the survey must
-  // round-trip any block-style entries built later from the Weekly Schedule untouched.
-  const [daySchedule, setDaySchedule] = useState<NonNullable<SchedulePrefs['daySchedule']>>(existing?.daySchedule ?? {})
-  const [editingDay, setEditingDay] = useState<number | null>(null)
-  const [yearlyHours, setYearlyHours] = useState(String(existing?.yearlyHours ?? 600))
-  const [weeklyHours, setWeeklyHours] = useState(() => (existing ? String(existing.weeklyHours) : weeklyFromYearly(600)))
-  // Once the person types into "hours per week" directly, stop overwriting it whenever
-  // the yearly goal changes — otherwise their manual edit would keep getting clobbered.
-  const [weeklyTouched, setWeeklyTouched] = useState(!!existing)
+  const initialAux = getAuxConfig()
+  const [role, setRole] = useState<Role | null>(existing ? deriveRole(existing, initialAux) : null)
+
+  // Pioneer
+  const [yearlyHours, setYearlyHours] = useState(String(existing?.yearlyHours || 600))
+  const [creditYes, setCreditYes] = useState<boolean | null>(existing ? creditHoursEnabled() : null)
+
+  // Auxiliary
+  const [auxMode, setAuxMode] = useState<AuxMode | null>(initialAux.enabled ? initialAux.mode : null)
+  const [targetHours, setTargetHours] = useState<15 | 30>(initialAux.targetHours)
+  const [months, setMonths] = useState<string[]>(initialAux.months)
+  const [monthTargets, setMonthTargets] = useState<Record<string, 15 | 30>>(initialAux.monthTargets)
+
+  // Publisher
   const [goalPeriod, setGoalPeriod] = useState<'none' | 'weekly' | 'monthly' | 'yearly'>(existing?.goalPeriod ?? 'none')
-  // A directly-entered monthly figure, only used when goalPeriod === 'monthly'. Seeded from
-  // an existing monthly goal, else from whatever the weekly target implies (×4.3).
-  const [monthlyHours, setMonthlyHours] = useState(() =>
-    String(existing?.monthlyHours ?? (Math.round((existing?.weeklyHours ?? 0) * 4.3) || 40))
-  )
+  const [weeklyHours, setWeeklyHours] = useState(String(existing?.weeklyHours || 2))
+  const [monthlyHours, setMonthlyHours] = useState(String(existing?.monthlyHours ?? (Math.round((existing?.weeklyHours ?? 0) * 4.3) || 10)))
+  const [pubYearlyHours, setPubYearlyHours] = useState(String(existing?.yearlyHours || 100))
 
-  function handleYearlyChange(v: string) {
-    setYearlyHours(v)
-    if (!weeklyTouched) setWeeklyHours(weeklyFromYearly(Number(v) || 0))
+  function setMonthTarget(key: string, hours: 15 | 30) {
+    setMonths((prev) => (prev.includes(key) ? prev : [...prev, key].sort()))
+    setMonthTargets((prev) => ({ ...prev, [key]: hours }))
+  }
+  function removeMonth(key: string) {
+    setMonths((prev) => prev.filter((k) => k !== key))
+    setMonthTargets((prev) => { const next = { ...prev }; delete next[key]; return next })
   }
 
-  function handleWeeklyChange(v: string) {
-    setWeeklyHours(v)
-    setWeeklyTouched(true)
-  }
-
-  function saveDayWindow(startTime: string, endTime?: string) {
-    if (editingDay == null) return
-    setDaysOut((prev) => (prev.includes(editingDay) ? prev : [...prev, editingDay].sort()))
-    setDaySchedule((prev) => ({
-      ...prev,
-      [editingDay]: { start: timeInputToMinutes(startTime), end: endTime ? timeInputToMinutes(endTime) : undefined },
-    }))
-    setEditingDay(null)
-  }
-
-  function removeDay() {
-    if (editingDay == null) return
-    setDaysOut((prev) => prev.filter((x) => x !== editingDay))
-    setDaySchedule((prev) => {
-      const next = { ...prev }
-      delete next[editingDay]
-      return next
-    })
-    setEditingDay(null)
-  }
-
-  const collectsSchedule = isPioneer === true || (isPioneer === false && goalPeriod !== 'none')
+  const ready =
+    role === 'pioneer' ? creditYes !== null
+    : role === 'auxiliary' ? auxMode !== null && (auxMode !== 'multiple-months' || months.length > 0)
+    : role === 'publisher'
 
   async function save() {
-    if (isPioneer == null) return
-    // A weekly figure is always stored (it sizes the calendar goal rings and the
-    // week-schedule planning line). For a monthly goal it's derived from the entered
-    // monthly figure (÷4.3); otherwise it's the weekly field directly.
-    const effectiveWeekly =
-      !collectsSchedule ? 0
-      : isPioneer === true ? Number(weeklyFromYearly(Number(yearlyHours) || 0))
-      : goalPeriod === 'monthly' ? Math.round(((Number(monthlyHours) || 0) / 4.3) * 10) / 10
-      : Number(weeklyHours) || 0
-    const record: Omit<SchedulePrefs, 'id'> = {
-      completedSurvey: true,
-      isPioneer,
-      daysOut: collectsSchedule ? daysOut : [],
-      daySchedule: collectsSchedule ? daySchedule : {},
-      weeklyHours: effectiveWeekly,
-      yearlyHours: isPioneer || goalPeriod === 'yearly' ? Number(yearlyHours) || 0 : 0,
-      goalPeriod: isPioneer ? 'none' : goalPeriod,
-      monthlyHours: !isPioneer && goalPeriod === 'monthly' ? Number(monthlyHours) || 0 : undefined,
-    }
-    // Non-pioneers never count credit hours; pioneers answered the question above.
-    setCreditHoursEnabled(!!(isPioneer && creditYes))
-    if (existing) {
-      await db.schedulePrefs.update(existing.id, record)
+    if (!role || !ready) return
+    let record: Partial<SchedulePrefs>
+    if (role === 'pioneer') {
+      const yearly = Number(yearlyHours) || 600
+      record = {
+        role, isPioneer: true,
+        yearlyHours: yearly,
+        weeklyHours: Number(weeklyFromYearly(yearly)),
+        goalPeriod: 'none', monthlyHours: undefined,
+      }
+      saveAuxConfig(AUX_OFF)
+      setCreditHoursEnabled(!!creditYes)
+    } else if (role === 'auxiliary') {
+      const now = new Date()
+      const target: 15 | 30 = auxMode === 'continuous' ? 30 : targetHours
+      const finalMonths = auxMode === 'multiple-months' ? months : [auxMonthKey(now.getFullYear(), now.getMonth())]
+      saveAuxConfig({
+        enabled: true, mode: auxMode!, targetHours: target,
+        weeklyHours: suggestedWeeklyHours(target),
+        months: finalMonths,
+        monthTargets: auxMode === 'multiple-months' ? monthTargets : {},
+      })
+      record = { role, isPioneer: false, yearlyHours: 0, weeklyHours: suggestedWeeklyHours(target), goalPeriod: 'none', monthlyHours: undefined }
+      setCreditHoursEnabled(false)
     } else {
-      await db.schedulePrefs.add(record as SchedulePrefs)
+      const weekly =
+        goalPeriod === 'weekly' ? Number(weeklyHours) || 0
+        : goalPeriod === 'monthly' ? Math.round(((Number(monthlyHours) || 0) / 4.3) * 10) / 10
+        : goalPeriod === 'yearly' ? Number(weeklyFromYearly(Number(pubYearlyHours) || 0))
+        : 0
+      record = {
+        role, isPioneer: false,
+        goalPeriod,
+        weeklyHours: weekly,
+        yearlyHours: goalPeriod === 'yearly' ? Number(pubYearlyHours) || 0 : 0,
+        monthlyHours: goalPeriod === 'monthly' ? Number(monthlyHours) || 0 : undefined,
+      }
+      saveAuxConfig(AUX_OFF)
+      setCreditHoursEnabled(false)
+    }
+    if (existing) {
+      await db.schedulePrefs.update(existing.id, { ...record, completedSurvey: true })
+    } else {
+      await db.schedulePrefs.add({ ...record, completedSurvey: true, daysOut: [], daySchedule: {} } as SchedulePrefs)
     }
     onDone()
   }
 
-  const readyToShowRest = isPioneer === false || (isPioneer === true && creditYes !== null)
+  const roleBtn = (r: Role, label: string, hint: string) => (
+    <button className={role === r ? '' : 'secondary'} aria-pressed={role === r} onClick={() => setRole(r)} style={{ textAlign: 'left' }}>
+      <strong style={{ display: 'block' }}>{label}</strong>
+      <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.85 }}>{hint}</span>
+    </button>
+  )
 
   return (
     <div className="view">
-      <h2 className="applet-title">Plan Your Schedule</h2>
-      <p className="subtitle">Answer a few questions and we'll build your weekly schedule for you.</p>
+      <h2 className="applet-title">Set your goal</h2>
+      <p className="subtitle">What you pick here decides what the Service tab counts for you.</p>
 
       <div className="card">
-        <h4>Are you regular pioneering?</h4>
-        <div className="row">
-          <button className={isPioneer === true ? '' : 'secondary'} onClick={() => setIsPioneer(true)}>
-            Yes, I'm a pioneer
-          </button>
-          <button className={isPioneer === false ? '' : 'secondary'} onClick={() => { setIsPioneer(false); setCreditYes(null) }}>
-            Not right now
-          </button>
+        <h4>Which best describes you?</h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {roleBtn('publisher', 'Publisher', 'Report whether you shared in the ministry each month. Set an hour goal if you want one.')}
+          {roleBtn('auxiliary', 'Auxiliary pioneer', '15 or 30 hours a month, for the months you choose.')}
+          {roleBtn('pioneer', 'Regular pioneer', '600 hours a service year, with credit hours if they apply.')}
         </div>
       </div>
 
-      {isPioneer === true && (
-        <div className="card">
-          <h4>Would you like to count credit hours?</h4>
-          <p className="muted" style={{ marginTop: -6 }}>
-            LDC, HLC, Bethel and qualifying convention or assembly time — counted alongside
-            ministry time, up to a combined 55 hours a month.
-          </p>
-          <div className="row">
-            <button className={creditYes === true ? '' : 'secondary'} onClick={() => setCreditYes(true)}>Yes</button>
-            <button className={creditYes === false ? '' : 'secondary'} onClick={() => setCreditYes(false)}>No</button>
-          </div>
-        </div>
-      )}
-
-      {readyToShowRest && isPioneer === false && (
-        <div className="card">
-          <h4>
-            Set a personal goal? <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(optional)</span>
-          </h4>
-          <div className="row">
-            <button className={goalPeriod === 'none' ? '' : 'secondary'} onClick={() => setGoalPeriod('none')}>No goal</button>
-            <button className={goalPeriod === 'weekly' ? '' : 'secondary'} onClick={() => setGoalPeriod('weekly')}>Weekly</button>
-            <button className={goalPeriod === 'monthly' ? '' : 'secondary'} onClick={() => setGoalPeriod('monthly')}>Monthly</button>
-            <button className={goalPeriod === 'yearly' ? '' : 'secondary'} onClick={() => setGoalPeriod('yearly')}>Yearly</button>
-          </div>
-        </div>
-      )}
-
-      {readyToShowRest && collectsSchedule && (
-        <div className="card">
-          <h4>Which days do you want to go out in service?</h4>
-          <p className="muted" style={{ marginTop: -6 }}>Tap a day to set (or change) what time you want to start.</p>
-          <div className="day-toggle">
-            {DAYS.map((d, i) => {
-              // Chip caption: the day's earliest start — first block for block-style
-              // entries (built on the Weekly Schedule), legacy top-level start otherwise.
-              const entry = daySchedule[i]
-              const startMin = entry?.blocks?.length ? entry.blocks[0].start : entry?.start
-              return (
-                <button key={i} className={daysOut.includes(i) ? 'chip active' : 'chip'} onClick={() => setEditingDay(i)}>
-                  {d}
-                  {daysOut.includes(i) && startMin != null && (
-                    <span style={{ display: 'block', fontSize: 10, fontWeight: 500 }}>{fmtTime(startMin)}</span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {readyToShowRest && isPioneer === true && (
-        <div className="card">
-          <h4>How much time do you need for the year?</h4>
-          <label className="field">
-            <span className="field-label">Yearly goal (hrs)</span>
-            <input type="number" min="0" value={yearlyHours} onChange={(e) => handleYearlyChange(e.target.value)} />
-          </label>
-          <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
-            We'll work out how many hours you need each week from this, based on how many weeks are
-            left in the month — no need to set a weekly figure yourself.
-          </p>
-        </div>
-      )}
-
-      {readyToShowRest && isPioneer === false && goalPeriod !== 'none' && (
-        <div className="card">
-          <h4>
-            {goalPeriod === 'weekly'
-              ? 'How much time do you want each week?'
-              : goalPeriod === 'monthly'
-                ? 'How much time do you want each month?'
-                : 'How much time do you want for the year?'}
-          </h4>
-          <div className="field-row">
-            {goalPeriod === 'weekly' && (
-              <label className="field">
-                <span className="field-label">Hours per week</span>
-                <input type="number" min="0" value={weeklyHours} onChange={(e) => handleWeeklyChange(e.target.value)} />
-              </label>
-            )}
-            {goalPeriod === 'monthly' && (
-              <label className="field">
-                <span className="field-label">Hours per month</span>
-                <input type="number" min="0" value={monthlyHours} onChange={(e) => setMonthlyHours(e.target.value)} />
-              </label>
-            )}
-            {goalPeriod === 'yearly' && (
-              <>
-                <label className="field">
-                  <span className="field-label">Yearly goal (hrs)</span>
-                  <input type="number" min="0" value={yearlyHours} onChange={(e) => handleYearlyChange(e.target.value)} />
-                </label>
-                <label className="field">
-                  <span className="field-label">Hours per week</span>
-                  <input type="number" min="0" value={weeklyHours} onChange={(e) => handleWeeklyChange(e.target.value)} />
-                </label>
-              </>
-            )}
-          </div>
-          {goalPeriod === 'yearly' && (
-            <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
-              Weekly hours are suggested from your yearly goal — feel free to adjust.
-            </p>
-          )}
-        </div>
-      )}
-
-      {readyToShowRest && (
+      {role === 'pioneer' && (
         <>
-          {collectsSchedule && daysOut.length === 0 && (
-            <p className="muted" style={{ fontSize: 13, margin: '-4px 0 6px' }}>
-              No days picked — that's fine, you can build a schedule later. For now this'll just track your hours.
+          <div className="card">
+            <h4>Hours for the service year</h4>
+            <label className="field">
+              <span className="field-label">Yearly goal (hrs)</span>
+              <input type="number" min="0" value={yearlyHours} onChange={(e) => setYearlyHours(e.target.value)} />
+            </label>
+            <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
+              Meleo works out what each month and week needs from this, and adjusts as you go.
             </p>
-          )}
-          <button onClick={save}>Build My Schedule</button>
+          </div>
+          <div className="card">
+            <h4>Count credit hours?</h4>
+            <p className="muted" style={{ marginTop: -6 }}>
+              LDC, HLC, Bethel and qualifying convention or assembly time — counted alongside
+              ministry time, up to a combined 55 hours a month.
+            </p>
+            <div className="row">
+              <button className={creditYes === true ? '' : 'secondary'} aria-pressed={creditYes === true} onClick={() => setCreditYes(true)}>Yes</button>
+              <button className={creditYes === false ? '' : 'secondary'} aria-pressed={creditYes === false} onClick={() => setCreditYes(false)}>No</button>
+            </div>
+          </div>
         </>
       )}
 
-      {editingDay != null && (
-        <TimeInputModal
-          title={`What time range works for ${DAY_NAMES_FULL[editingDay]}?`}
-          subtitle="You'll be able to customize this further later, on the Weekly Schedule."
-          initialStart={minutesToTimeInput(daySchedule[editingDay]?.start ?? 9 * 60)}
-          initialEnd={minutesToTimeInput(daySchedule[editingDay]?.end ?? 15 * 60)}
-          showEnd
-          onSave={saveDayWindow}
-          onRemove={daysOut.includes(editingDay) ? removeDay : undefined}
-          onClose={() => setEditingDay(null)}
-        />
+      {role === 'auxiliary' && (
+        <div className="card">
+          <h4>For how long?</h4>
+          <div className="row">
+            <button className={auxMode === 'this-month' ? '' : 'secondary'} aria-pressed={auxMode === 'this-month'} onClick={() => setAuxMode('this-month')}>This month</button>
+            <button className={auxMode === 'multiple-months' ? '' : 'secondary'} aria-pressed={auxMode === 'multiple-months'} onClick={() => setAuxMode('multiple-months')}>Chosen months</button>
+            <button className={auxMode === 'continuous' ? '' : 'secondary'} aria-pressed={auxMode === 'continuous'} onClick={() => setAuxMode('continuous')}>Continuous</button>
+          </div>
+          {auxMode === 'this-month' && (
+            <div className="field" style={{ marginTop: 10 }}>
+              <span className="field-label">Monthly target</span>
+              <div className="row">
+                <button className={targetHours === 15 ? '' : 'secondary'} aria-pressed={targetHours === 15} onClick={() => setTargetHours(15)}>15 hours</button>
+                <button className={targetHours === 30 ? '' : 'secondary'} aria-pressed={targetHours === 30} onClick={() => setTargetHours(30)}>30 hours</button>
+              </div>
+            </div>
+          )}
+          {auxMode === 'continuous' && (
+            <p className="muted" style={{ margin: '10px 0 0' }}>Continuous auxiliary pioneers aim for 30 hours a month.</p>
+          )}
+          {auxMode === 'multiple-months' && (
+            <div style={{ marginTop: 10 }}>
+              <AuxMonthTargets months={months} monthTargets={monthTargets} onSet={setMonthTarget} onRemove={removeMonth} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {role === 'publisher' && (
+        <div className="card">
+          <h4>
+            Set a personal hour goal? <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(optional)</span>
+          </h4>
+          <p className="muted" style={{ marginTop: -6 }}>
+            Without one, Meleo just tracks whether you shared in the ministry each month.
+          </p>
+          <div className="row">
+            <button className={goalPeriod === 'none' ? '' : 'secondary'} aria-pressed={goalPeriod === 'none'} onClick={() => setGoalPeriod('none')}>Just participation</button>
+            <button className={goalPeriod === 'weekly' ? '' : 'secondary'} aria-pressed={goalPeriod === 'weekly'} onClick={() => setGoalPeriod('weekly')}>Weekly</button>
+            <button className={goalPeriod === 'monthly' ? '' : 'secondary'} aria-pressed={goalPeriod === 'monthly'} onClick={() => setGoalPeriod('monthly')}>Monthly</button>
+            <button className={goalPeriod === 'yearly' ? '' : 'secondary'} aria-pressed={goalPeriod === 'yearly'} onClick={() => setGoalPeriod('yearly')}>Yearly</button>
+          </div>
+          {goalPeriod === 'weekly' && (
+            <label className="field" style={{ marginTop: 10 }}>
+              <span className="field-label">Hours per week</span>
+              <input type="number" min="0" value={weeklyHours} onChange={(e) => setWeeklyHours(e.target.value)} />
+            </label>
+          )}
+          {goalPeriod === 'monthly' && (
+            <label className="field" style={{ marginTop: 10 }}>
+              <span className="field-label">Hours per month</span>
+              <input type="number" min="0" value={monthlyHours} onChange={(e) => setMonthlyHours(e.target.value)} />
+            </label>
+          )}
+          {goalPeriod === 'yearly' && (
+            <label className="field" style={{ marginTop: 10 }}>
+              <span className="field-label">Hours per service year</span>
+              <input type="number" min="0" value={pubYearlyHours} onChange={(e) => setPubYearlyHours(e.target.value)} />
+            </label>
+          )}
+        </div>
+      )}
+
+      {role && (
+        <button onClick={save} disabled={!ready}>Start tracking</button>
       )}
     </div>
   )

@@ -102,7 +102,7 @@ only one with a veto window.
 Each wave is one or more commits and one version cut. Cut order: 0.20.5, 0.21.0, 0.22.0,
 0.23.0, 0.24.0, 0.24.x. Do not merge waves.
 
-### Wave 0 — Hardening (0.20.5)
+### Wave 0 — Hardening (0.20.5) ✅ shipped 2026-09-12
 
 Goal: close the highs from the 2026-09-12 review before touching the tab, so the reframe is
 built on safe write paths. Findings are registered as **AUDIT.md F034–F041**; each closes only
@@ -143,7 +143,7 @@ red Delete pills replaced by a per-row overflow or swipe (Wave 3 for Recent Entr
 Return Visits); Map controls collapsed over the map and the legend behind a toggle (Wave 5);
 City/State/Zip on one row and the duplicate "Date & time" heading dropped (Wave 0).
 
-### Wave 1 — Intake and copy (0.21.0)
+### Wave 1 — Intake and copy (0.21.0) ✅ shipped 2026-09-12
 
 Goal: the first five minutes tell the user the app counts their time.
 

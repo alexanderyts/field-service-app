@@ -4,7 +4,7 @@ import { getProfileName } from '../../profile'
 import { type AuxConfig, type AuxMode, auxMonthKey, suggestedWeeklyHours } from '../../auxPioneering'
 import ConfirmDialog from '../ConfirmDialog'
 import ModalPortal from '../../ModalPortal'
-import { currentYearMonths } from './dates'
+import { AuxMonthTargets } from './AuxMonthTargets'
 
 const EMPTY_MONTH_TARGETS: Record<string, 15 | 30> = {}
 
@@ -188,45 +188,7 @@ export function AuxPioneeringBox({ config, onChange }: { config: AuxConfig; onCh
               )}
 
               {mode === 'multiple-months' && (
-                <>
-                  <p className="muted" style={{ margin: '0 0 8px' }}>Tap each month into the target that applies to it.</p>
-                  <div className="field" style={{ marginBottom: 10 }}>
-                    <span className="field-label">15 hours/month</span>
-                    <div className="day-toggle">
-                      {currentYearMonths().map(({ year, month, label }) => {
-                        const key = auxMonthKey(year, month)
-                        const active = months.includes(key) && monthTargets[key] === 15
-                        return (
-                          <button
-                            key={key}
-                            className={active ? 'chip active' : 'chip'}
-                            onClick={() => (active ? removeMonth(key) : setMonthTarget(key, 15))}
-                          >
-                            {label.slice(0, 3)}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  <div className="field" style={{ marginBottom: 10 }}>
-                    <span className="field-label">30 hours/month</span>
-                    <div className="day-toggle">
-                      {currentYearMonths().map(({ year, month, label }) => {
-                        const key = auxMonthKey(year, month)
-                        const active = months.includes(key) && monthTargets[key] === 30
-                        return (
-                          <button
-                            key={key}
-                            className={active ? 'chip active' : 'chip'}
-                            onClick={() => (active ? removeMonth(key) : setMonthTarget(key, 30))}
-                          >
-                            {label.slice(0, 3)}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </>
+                <AuxMonthTargets months={months} monthTargets={monthTargets} onSet={setMonthTarget} onRemove={removeMonth} />
               )}
 
               <label className="field" style={{ marginBottom: 10 }}>

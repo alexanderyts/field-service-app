@@ -8,6 +8,7 @@ import { effectiveMonthlyGoalMin, fmtDuration, isCredit, monthTotals, quickLogSt
 import { StepperNav, GoalRing } from '../SharedBits'
 import { daySegments } from '../../goalSegments'
 import { type AuxConfig, auxTargetHoursFor, getAuxConfig, isAuxMonth, saveAuxConfig, weeklyHoursNeeded } from '../../auxPioneering'
+import { deriveRole, roleTracksHours } from '../../schedulePrefsRole'
 import ConfirmDialog from '../ConfirmDialog'
 import { DAYS, DAY_RANGE, dayTrackPct, fmtTime, startOfWeek, fmtDayMonth, fmtDayMonthFull, calendarWeekNumber, MONTH_NAMES_LONG, monthsTouchedByRange, monthLogsFor, daysLeftInMonth, monthElapsedPct, MONTH_NAMES } from './dates'
 import { fmtLocalDate } from '../../localDate'
@@ -190,8 +191,9 @@ export function ScheduleMain({
     setHighlightTs(next.date)
   }
 
-  const isPioneer = prefs.isPioneer ?? true // missing on records saved before this field existed
   const [auxConfig, setAuxConfigState] = useState<AuxConfig>(() => getAuxConfig())
+  const role = deriveRole(prefs, auxConfig)
+  const isPioneer = role === 'pioneer'
   function updateAuxConfig(next: AuxConfig) {
     setAuxConfigState(next)
     saveAuxConfig(next)
@@ -204,7 +206,7 @@ export function ScheduleMain({
   // Whether TODAY (not whatever week is navigated below) is a month this non-pioneer is
   // auxiliary pioneering — decides whether Add Time or the simple monthly checkbox shows.
   const currentlyAux = !isPioneer && isAuxMonth(auxConfig, now.getFullYear(), now.getMonth())
-  const nonPioneerTracksHours = !isPioneer && (prefs.goalPeriod === 'weekly' || prefs.goalPeriod === 'monthly' || prefs.goalPeriod === 'yearly' || currentlyAux)
+  const nonPioneerTracksHours = !isPioneer && roleTracksHours(role, prefs, auxConfig, now.getFullYear(), now.getMonth())
 
   // Hours still needed THIS week to hit the current month's auxiliary target by month
   // end, given what's already logged — recomputed fresh on every render from real
@@ -690,8 +692,7 @@ export function ScheduleMain({
   return (
     <div className="view">
       <div className="view-header">
-        <h2 className="applet-title">Schedule</h2>
-        <button className="secondary small" onClick={onRedo}>Redo survey</button>
+        <h2 className="applet-title">Service</h2>
       </div>
 
       <div className="card highlight" ref={progressCardRef}>
@@ -887,11 +888,7 @@ export function ScheduleMain({
             Service Schedule
             {weeklyGoalMin > 0 && (
               <InfoTip
-                text={`Your scheduled ministry days and times, plus anything logged this week. Planned this week: ${fmtDuration(suggestedWeeklyMin)} of ${fmtDuration(weeklyGoalMin)} goal${
-                  suggestedWeeklyMin >= weeklyGoalMin
-                    ? ' — 🎉 goal covered'
-                    : ` — ${fmtDuration(weeklyGoalMin - suggestedWeeklyMin)} more to schedule`
-                }. Logged so far: ${fmtDuration(weekTotal)}.`}
+                text={`Optional: days and times you plan to be out. Planned this week: ${fmtDuration(suggestedWeeklyMin)}. Logged so far: ${fmtDuration(weekTotal)} of ${fmtDuration(weeklyGoalMin)}.`}
               />
             )}
           </h4>
@@ -1223,6 +1220,10 @@ export function ScheduleMain({
           />
           {editingLog && <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} />}
         </div>
+
+      <div className="row" style={{ justifyContent: 'center', marginTop: 4 }}>
+        <button className="secondary small" onClick={onRedo}>Change my goal</button>
+      </div>
 
       {dayModalFor != null && (
         <DayActionModal

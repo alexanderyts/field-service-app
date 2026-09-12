@@ -70,8 +70,8 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     icon: '◫',
-    title: 'Schedule · Your week',
-    body: "Block out when you'll be out, then watch each day fill toward your goal as you log time.",
+    title: 'Service · Your week',
+    body: "Log your time and watch the week fill toward your goal. Planning days out is optional — the bars show what you actually did.",
     tab: 'schedule',
     highlight: '[data-tutorial="tab-schedule"]',
     image: scheduleWeekShot,
@@ -79,8 +79,8 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     icon: '◫',
-    title: 'Schedule · The month',
-    body: "Zoom out to the whole month — each day's ring shows its share of your weekly goal, planned and done at a glance.",
+    title: 'Service · The month',
+    body: "Zoom out to the whole month — each day's ring fills as you log time, so the month you're having is visible at a glance.",
     tab: 'schedule',
     highlight: '[data-tutorial="tab-schedule"]',
     image: scheduleCalendarShot,

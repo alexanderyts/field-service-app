@@ -58,6 +58,7 @@ src/
   useGeolocation.ts    # GPS hook wrapping navigator.geolocation
   timeStats.ts         # Credit-hour cap (55h/mo), monthly/yearly + service-year helpers
   goalSegments.ts      # Day goal-ring arc math for the Schedule calendar
+  schedulePrefsRole.ts # Role (publisher/auxiliary/pioneer) derivation + whether hours are tracked this month
   minuteBankFly.ts     # The "minute bank" fly-to-pill animation helper
   auxPioneering.ts     # Auxiliary-pioneer config (localStorage) + target-hour math
   auxSlip.ts           # Fills the S-205b auxiliary-pioneer PDF (pdf-lib)
@@ -81,7 +82,7 @@ src/
     Territories.tsx    # Territories sub-view: grouped-territory list + detail
     Territory.tsx      # Map-side custom-territory manager: trace/draw modal, send-to-ministry, grouping
     MapView.tsx        # Leaflet map: contact pins, territory traces, satellite toggle, place search
-    Schedule.tsx       # THE SCHEDULE TAB root: survey-or-main switch only (56 lines)
+    Schedule.tsx       # THE SERVICE TAB root (tab key 'schedule'): intake-or-main switch only
     schedule/          # dates.ts / plan.ts / animate.ts (pure, no React) + one file per piece: ScheduleMain
                        #   (week view, logging, minute bank — the hub, 1.3k), ScheduleCalendarView, DayActionModal,
                        #   Survey, EditLogModal, EditAppointmentModal, TimeInputModal, NumPad, InfoTip, HourGoalBar,
@@ -117,7 +118,7 @@ Phase state (`App.tsx`): `'splash' | 'splash-out' | 'policy' | 'profile' | 'app'
 | Tab | Key | Label | Icon | Component |
 |---|---|---|---|---|
 | Ministry | `contacts` | Ministry | ◎ | `Contacts.tsx` |
-| Schedule | `schedule` | Schedule | ◫ | `Schedule.tsx` |
+| Service | `schedule` | Service | ◫ | `Schedule.tsx` (tab key unchanged; label renamed in 0.21.0) |
 | Map | `map` | Map | ◈ | `MapView.tsx` |
 | Reports | `reports` | Reports | ▦ | `Reports.tsx` |
 | More | `misc` | More | ⋯ | `Misc.tsx` |
@@ -172,8 +173,10 @@ Appointment { id, title, date, durationMinutes, personId?, notes? }
 
 **`schedulePrefs`** — single-row user schedule settings
 ```ts
-SchedulePrefs { id, completedSurvey, isPioneer?, daysOut, weeklyHours, yearlyHours,
+SchedulePrefs { id, completedSurvey, role?, isPioneer?, daysOut, weeklyHours, yearlyHours,
                 daySchedule?, dateOverrides?, goalPeriod?, monthlyHours?, scheduleDefaultExpand? }
+// role = 'publisher' | 'auxiliary' | 'pioneer' (0.21.0). isPioneer stays in sync; a row without
+// role is derived by schedulePrefsRole.ts (missing isPioneer = pioneer; aux enabled = auxiliary).
 DayScheduleBlock { start, end, category }   // per-day planning windows (never auto-logged)
 ```
 
@@ -319,7 +322,16 @@ brand/category/tag hues are brightened per dark theme for contrast.
 - Nominatim/Overpass calls send only address strings / coordinates — never identity.
 - Privacy policy on first boot; `Clear All Data` (More tab) wipes all tables + localStorage and reloads.
 
-### Schedule → Add Time
+### Service tab (key `schedule`)
+
+- **Intake (`Survey.tsx`)** asks one deciding question — Publisher / Auxiliary pioneer / Regular
+  pioneer — then only what that role needs (yearly goal + credit; aux months + target; optional
+  personal goal). Days and time windows are never asked; planning is opt-in on the tab itself.
+  "Change my goal" at the bottom of the tab reopens it and leaves `daysOut`/`daySchedule` untouched.
+- The tab leads with logged time; the planner (Service Schedule card) is optional and its copy
+  never nags about time "to schedule" (docs/tracking-first-plan.md).
+
+### Service → Add Time
 - **Date** opens a custom `CalendarPicker`; **Hours/Minutes** open a custom `NumPad` (no native
   `type="date"`/`type="number"` here — intentional for mobile UX).
 - **Round-up dialog** when minutes > 30; leftover minutes go to the **minute bank**

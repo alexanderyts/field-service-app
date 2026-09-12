@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.20.5`.** History runs from the initial scaffold forward.
+**Current version: `0.21.0`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -186,6 +186,15 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.20.3 — Browser security policy · 2026-09-07
 - **The app now tells the browser exactly what it's allowed to load and run.** Only Meleo's own code can execute — no injected or inline script ever will — and the only outside places it may contact are the map-tile and address-lookup services it already uses. Nothing changes day to day; it closes the door on a whole class of tampering (F009)
 - Checked by opening the real built app in a browser and exercising the map (both tile sources), the Schedule tab and a contact's share code, with no policy refusals
+
+## 0.21.0 — Set your goal: the tab counts your time · 2026-09-12
+- **The intake asks who you are, not when you'll be out.** One question — Publisher, Auxiliary pioneer, or Regular pioneer — then only what that role needs: a pioneer's yearly goal and credit question; an auxiliary's months and 15h/30h target (this month, chosen months, or continuous); a publisher's optional personal goal. Days and time windows are no longer asked anywhere in the intake. The button reads "Start tracking"
+- **Auxiliary pioneering is a first-class choice**, set up in the intake and stored the same way the settings box always stored it, so nothing existing changes
+- **"Redo survey" is now "Change my goal"**, at the bottom of the tab instead of the header. Redoing it leaves your planned days untouched
+- **The tab is called Service.** Its title, the tab bar, and the guided tour say so; the tab's internal key is unchanged so nothing about saved state moves
+- **Day tap leads with logging.** "Log time for this day" comes first, "Plan this day" second. The three "… more to schedule" nudges are gone; the planner's tooltip now just states what is planned and what is logged
+- `SchedulePrefs.role` records the choice; older rows are read as before (`schedulePrefsRole.ts`, tested). No database version bump
+- Verified: 215 tests; the intake driven in the browser for all three roles on the demo data — the aux choice writes the same config the settings box does, switching to pioneer clears it, planned days survive a redo, and the day menu shows the new order
 
 ## 0.20.5 — Hardening before the tracking-first work · 2026-09-12
 - **The street map works again.** CARTO began stamping "API KEY REQUIRED" across its free tiles, so every map and territory preview was defaced. All tiles now come from Esri, which needs no key and was already the satellite source (F047)

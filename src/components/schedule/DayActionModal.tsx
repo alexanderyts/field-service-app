@@ -197,11 +197,11 @@ export function DayActionModal({
                   )}
                 </div>
               )}
-              <button className="secondary" onClick={() => setStep('window')}>
-                {isSuggestedDay ? 'Edit Schedule' : 'Add Scheduled Service Time'}
+              <button onClick={() => setStep('logTime')}>
+                Log time for this day
               </button>
-              <button className="secondary" onClick={() => setStep('logTime')}>
-                Add Service Time for This Day
+              <button className="secondary" onClick={() => setStep('window')}>
+                {isSuggestedDay ? "Edit this day's plan" : 'Plan this day'}
               </button>
             </div>
           )}
@@ -273,10 +273,8 @@ export function DayActionModal({
               )}
               {weeklyGoalMin > 0 && (
                 <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-                  Week total with this day: {fmtDuration(liveWeeklyTotalMin)} / {fmtDuration(weeklyGoalMin)} goal
-                  {liveWeeklyTotalMin >= weeklyGoalMin
-                    ? ' — 🎉 that covers your weekly goal!'
-                    : ` — ${fmtDuration(weeklyGoalMin - liveWeeklyTotalMin)} more to schedule`}
+                  Planned this week with this day: {fmtDuration(liveWeeklyTotalMin)} of your {fmtDuration(weeklyGoalMin)} goal
+                  {liveWeeklyTotalMin >= weeklyGoalMin ? ' — 🎉 that covers it' : ''}
                 </p>
               )}
 
