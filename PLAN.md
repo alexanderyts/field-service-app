@@ -224,8 +224,11 @@ what kept this line undrawn.
 
 **Waves after 1.0.**
 
-- **Wave 2 — the felt wins.** Epic 2 (fast capture) + **9.1** (live timer) + 5.2/5.3 + 6.1, and
-  the `REVIEW.md` §3 reframe.
+- **Wave 2 — the felt wins.** The tracking-first reframe, planned in full in
+  [docs/tracking-first-plan.md](docs/tracking-first-plan.md) (supersedes `REVIEW.md` §3):
+  role-based intake, progress as hero, one-tap Log time (Epic 2.1), **9.1** live timer, and
+  the report's submit box. Then 5.2/5.3 + 6.1.
+
 - **Wave 3 — depth.** Epic 3, then Epic 4.
 - **Wave 4 — system polish & perf.** Epic 6 (rest) + Epic 8. Measure Reports here; decide F0.4.
 - **Wave 5 — privacy & delight.** Epic 7.1 + Epic 9. *(AUDIT F008 was pulled forward and landed in 0.20.2.)*

@@ -120,6 +120,9 @@ share validation.
 
 ## 3. Change plan — from "scheduling-first" to "time-tracking-first"
 
+> **Superseded (2026-09-12)** by [docs/tracking-first-plan.md](docs/tracking-first-plan.md), which
+> goes further than this section: intake, progress card, logging, live timer, report submit box.
+
 **Today** the Schedule tab leads with the Service Schedule planner and repeatedly frames the gap
 between what you've *planned* and your goal ("… more to schedule"). The survey pushes everyone
 toward building a weekly schedule.
