@@ -249,7 +249,7 @@ Goal: real intervals, and a report that matches the form.
 
 ---
 
-### Wave 5 — Polish (0.24.x)
+### Wave 5 — Polish (0.25.0 / 0.25.1) — detailed in [docs/wave5-plan.md](wave5-plan.md), which also carries the owner's three 2026-09-12 observations (launch tab-bar position, Service tab flow, pace copy)
 
 **AUDIT.md F042–F046**, done after the tab work so it is not done twice:
 

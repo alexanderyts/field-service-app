@@ -148,7 +148,8 @@ Status markers: ✅ done · 🟡 partly done.
 
 ## Epic 6 — UI system & polish
 
-- **6.1 Tab-bar VisualViewport fix** — **verify on real iOS + Android**. **[UI] S.**
+- **6.1 Tab-bar launch position** — installed-iOS layout-viewport deficit; port of Iron Log's
+  `viewportDeficit` fix. Spec in [docs/wave5-plan.md](docs/wave5-plan.md) §A. **[UI] S.**
 - **6.2 Motion system + reduced-motion** — refactor onto F0.1a tokens; global
   `prefers-reduced-motion` path. **[UI] M.**
 - **6.3 Spacing/type application** — see **F0.1b**; same blocker. **[UI] M.**
