@@ -299,6 +299,8 @@ surface that attribution and warn before editing a shared item.
 
 ## Backup & Notifications
 
+- **Dropbox:** no integration. The user how-to is `docs/dropbox-sync-guide.md`; an in-app sync is
+  proposed and recommended against for now in `docs/adr/0004-dropbox-sync.md`.
 - **Backup (`backup.ts`, More tab):** full local JSON `exportBackup()` / `importBackup()` (self-describing,
   versioned) + `wipeAllData()`. The only way a tester's data survives a device wipe and the bridge to any
   future native build. Includes all Dexie tables + non-blocklisted `fieldservice_*` keys.

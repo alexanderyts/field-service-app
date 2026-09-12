@@ -188,6 +188,9 @@ Status markers: ✅ done · 🟡 partly done.
 
 ## Epic 9 — OS integration & extras
 
+- **9.0 Dropbox backup sync — proposed, not scheduled.** Spec and recommendation in
+  [docs/adr/0004-dropbox-sync.md](docs/adr/0004-dropbox-sync.md); the manual workflow users can
+  follow today is [docs/dropbox-sync-guide.md](docs/dropbox-sync-guide.md).
 - **9.1 Live start/stop timer** — "heading out" → accrues → stop logs it. **[DATA] M.**
   *Promoted to Wave 2: it's the best product win for the tracking-first direction and is
   independent of nearly everything above.*
