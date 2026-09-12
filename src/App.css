@@ -3766,3 +3766,56 @@ button.small {
   font-size: 15px;
 }
 .icon-btn.row-delete:hover { color: var(--danger); }
+
+/* ---- Live timer (tracking-first, Wave 4) ---- */
+.timer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.timer-card.idle {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.timer-card.idle .timer-start { flex: 0 0 auto; }
+.timer-hint { font-size: 12px; }
+.timer-card.running { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.timer-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.timer-elapsed {
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+.timer-state { font-size: 12px; }
+.timer-actions button { flex: 1; }
+
+/* ---- Reports: the submit box ---- */
+.report-submit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.report-submit-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.report-submit-list li:last-child { border-bottom: none; }
+.report-submit-list strong { font-size: 16px; }

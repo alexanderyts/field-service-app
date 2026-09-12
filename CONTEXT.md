@@ -84,3 +84,7 @@ and never logs time by itself; a plan is a Scheduled Block until the person subm
 
 **Minute Bank** — leftover minutes held aside rather than logged, which convert to a logged
 hour once they reach 60.
+
+**Timer** — the live count of a stretch of service, from Start to Stop. Stopping it produces one
+Time Log (whole minutes, through the same Minute Bank rule as any other log) that also records the
+real start and end for the person's own records.

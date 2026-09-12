@@ -42,7 +42,7 @@ export function ScheduleCalendarView({
   onSaveBlocks: (date: Date, blocks: DayScheduleBlock[], repeatWeekly: boolean) => void
   onRemoveDay: (date: Date) => void
   onClearAllDays: () => void
-  onLogTime: (date: Date, hours: number, minutes: number, category: TimeCategory, activityNote: string, originEl?: HTMLElement) => void
+  onLogTime: (date: Date, hours: number, minutes: number, category: TimeCategory, activityNote: string, originEl?: HTMLElement, interval?: { startedAt: number; endedAt: number }) => void
   onSubmitScheduled: (date: Date, blocks: DayScheduleBlock[]) => void
   onSubmitBlock: (date: Date, blockIndex: number) => void
   onDeleteBlock: (date: Date, blockIndex: number) => void
@@ -164,8 +164,8 @@ export function ScheduleCalendarView({
     onClearAllDays()
     closeTapModal()
   }
-  function handleLogTime(hours: number, minutes: number, category: TimeCategory, activityNote: string, originEl?: HTMLElement) {
-    if (tapDate) onLogTime(tapDate, hours, minutes, category, activityNote, originEl)
+  function handleLogTime(hours: number, minutes: number, category: TimeCategory, activityNote: string, originEl?: HTMLElement, interval?: { startedAt: number; endedAt: number }) {
+    if (tapDate) onLogTime(tapDate, hours, minutes, category, activityNote, originEl, interval)
     closeTapModal()
   }
 

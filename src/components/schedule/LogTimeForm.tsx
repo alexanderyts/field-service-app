@@ -19,18 +19,23 @@ const PRESETS: { label: string; h: number; m: number }[] = [
  * tab's primary "Log time" button share one form and one banking path. `onSubmit` is the
  * hub's `quickLogTime`, which owns the minute-bank rule (AUDIT F-A6, F011).
  */
+export interface LogInterval { startedAt: number; endedAt: number }
+
 export function LogTimeForm({
   closing,
+  initial,
   onSubmit,
 }: {
   /** True while the hub is animating the minutes into the bank — fades the other fields. */
   closing: boolean
-  onSubmit: (hours: number, minutes: number, category: TimeCategory, activityNote: string, minutesEl?: HTMLElement) => void
+  /** Prefill from the live timer: the elapsed time and the real interval it covered. */
+  initial?: { hours: number; minutes: number; category?: TimeCategory; activityNote?: string; interval?: LogInterval }
+  onSubmit: (hours: number, minutes: number, category: TimeCategory, activityNote: string, minutesEl?: HTMLElement, interval?: LogInterval) => void
 }) {
-  const [hours, setHours] = useState('0')
-  const [minutes, setMinutes] = useState('0')
-  const [category, setCategory] = useState<TimeCategory>('ministry')
-  const [activityNote, setActivityNote] = useState('')
+  const [hours, setHours] = useState(String(initial?.hours ?? 0))
+  const [minutes, setMinutes] = useState(String(initial?.minutes ?? 0))
+  const [category, setCategory] = useState<TimeCategory>(initial?.category ?? 'ministry')
+  const [activityNote, setActivityNote] = useState(initial?.activityNote ?? '')
   // One-way: every path out of Submit ends with the host unmounting this form, so a second
   // tap during the ~620ms collect animation must not write a second entry (REVIEW.md F-C2).
   const [submitted, setSubmitted] = useState(false)
@@ -44,6 +49,11 @@ export function LogTimeForm({
 
   return (
     <div className={closing ? 'time-entry-closing' : ''}>
+      {initial?.interval && (
+        <p className="muted" style={{ margin: '0 0 6px', fontSize: 13 }}>
+          From the timer — adjust if needed, then submit.
+        </p>
+      )}
       <div className="field">
         <span className="field-label">How long?</span>
         <div className="cat-pills">
@@ -114,7 +124,7 @@ export function LogTimeForm({
         onClick={() => {
           if (submitted) return
           setSubmitted(true)
-          onSubmit(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, activityNote, minutesBtnRef.current ?? undefined)
+          onSubmit(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, activityNote, minutesBtnRef.current ?? undefined, initial?.interval)
         }}
         disabled={(Number(hours) === 0 && Number(minutes) === 0) || submitted || closing}
       >

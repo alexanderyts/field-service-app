@@ -8,7 +8,9 @@ import ModalPortal from '../../ModalPortal'
 import { DAY_NAMES_FULL, fmtTime, startOfWeek, fmtDayMonth, minutesToTimeInput, timeInputToMinutes } from './dates'
 import { fmtLocalDate } from '../../localDate'
 import { EditAppointmentModal } from './EditAppointmentModal'
-import { LogTimeForm } from './LogTimeForm'
+import { LogTimeForm, type LogInterval } from './LogTimeForm'
+
+type LogTimeFormInitial = NonNullable<Parameters<typeof LogTimeForm>[0]['initial']>
 
 /** A block being edited in the day modal — times as HH:MM strings for the inputs. */
 interface EditableBlock {
@@ -35,6 +37,7 @@ export function DayActionModal({
   onClose,
   closing,
   initialStep = 'menu',
+  initialLog,
 }: {
   date: Date
   isSuggestedDay: boolean
@@ -47,13 +50,15 @@ export function DayActionModal({
   onSaveBlocks: (blocks: DayScheduleBlock[], repeatWeekly: boolean) => void
   onRemoveDay: () => void
   onClearAllDays: () => void
-  onLogTime: (hours: number, minutes: number, category: TimeCategory, activityNote: string, originEl?: HTMLElement) => void
+  onLogTime: (hours: number, minutes: number, category: TimeCategory, activityNote: string, originEl?: HTMLElement, interval?: LogInterval) => void
   onSubmitScheduled: () => void
   onSubmitBlock: (blockIndex: number) => void
   onDeleteBlock: (blockIndex: number) => void
   onClose: () => void
   closing: boolean
   initialStep?: 'menu' | 'logTime'
+  /** Prefill for the time step (from the live timer). */
+  initialLog?: LogTimeFormInitial
 }) {
   const dayLabel = DAY_NAMES_FULL[date.getDay()]
   const dateLabel = date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -268,7 +273,7 @@ export function DayActionModal({
             </>
           )}
 
-          {step === 'logTime' && <LogTimeForm closing={closing} onSubmit={onLogTime} />}
+          {step === 'logTime' && <LogTimeForm closing={closing} initial={initialLog} onSubmit={onLogTime} />}
         </div>
       </div>
 

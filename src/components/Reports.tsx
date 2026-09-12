@@ -15,7 +15,8 @@ import {
   serviceYearlyTotals,
 } from '../timeStats'
 import { getAuxConfig } from '../auxPioneering'
-import { getMinuteBank } from '../settings'
+import { getMinuteBank, getParticipatedMonth } from '../settings'
+import { deriveRole, roleTracksHours } from '../schedulePrefsRole'
 import ServiceYearReview from './ServiceYearReview'
 import { StepperNav } from './SharedBits'
 
@@ -33,21 +34,20 @@ function encouragement(pct: number, totalMin: number): string {
 export default function Reports() {
   const now = new Date()
   const [monthOffset, setMonthOffset] = useState(0)
-  const [ran, setRan] = useState(false)
   const [runKey, setRunKey] = useState(0)
   const [generating, setGenerating] = useState(false)
   const generateTimeoutRef = useRef<number | undefined>(undefined)
 
   useEffect(() => () => window.clearTimeout(generateTimeoutRef.current), [])
 
-  // A deliberate pause before the reveal so the report feels assembled, not instant.
-  function generateReport(markRan: boolean) {
+  // "Re-run" replays the staggered reveal. The report itself is always shown — the figures
+  // the congregation asks for should never sit behind a button (tracking-first D7).
+  function generateReport() {
     setGenerating(true)
     generateTimeoutRef.current = window.setTimeout(() => {
-      if (markRan) setRan(true)
       setRunKey((k) => k + 1)
       setGenerating(false)
-    }, 1000)
+    }, 600)
   }
 
   const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
@@ -154,9 +154,16 @@ export default function Reports() {
   // Leftover ministry minutes not yet logged as an hour — they carry into next month, and the
   // person should see that the figure they submit doesn't include them.
   const bankedMin = getMinuteBank()
+  const reportRole = deriveRole(prefs?.[0] ?? {}, getAuxConfig())
+  const reportTracksHours = roleTracksHours(reportRole, prefs?.[0] ?? {}, getAuxConfig(), targetYear, targetMonth)
+  // Participation is the month's checkbox, or implied by any logged time.
+  const participated = getParticipatedMonth(targetYear, targetMonth) || totalMin > 0
+  const bibleStudies = people.filter((p) => p.status === 'bible-study').length
 
   function reportBody(): string {
     let body = `Meleo Report — ${monthLabel}\n\n`
+    body += `Shared in the ministry: ${participated ? 'Yes' : 'Not marked'}\n`
+    body += `Bible studies: ${bibleStudies}\n`
     body += `Total Hours: ${fmtDuration(totalMin)}\n`
     if (isCurrentMonth && bankedMin > 0) body += `  (${bankedMin}m banked, carried forward)\n`
     if (ministryMin) body += `  Ministry: ${fmtDuration(ministryMin)}\n`
@@ -216,37 +223,6 @@ export default function Reports() {
     }
   }
 
-  if (!ran) {
-    return (
-      <div className="view">
-        <StepperNav
-          className="report-nav"
-          onPrev={() => setMonthOffset((o) => o - 1)}
-          onNext={() => setMonthOffset((o) => o + 1)}
-          nextDisabled={monthOffset >= 0}
-        >
-          <h2 className="applet-title" style={{ margin: 0, textAlign: 'center' }}>{monthLabel}</h2>
-        </StepperNav>
-        <div className="report-run-wrap">
-          {generating ? (
-            <>
-              <div className="report-run-icon spin">📊</div>
-              <h3>Gathering your {monthLabel} summary…</h3>
-              <p className="muted">Just a moment.</p>
-            </>
-          ) : (
-            <>
-              <div className="report-run-icon">📊</div>
-              <h3>Ready when you are</h3>
-              <p className="muted">Tap to see your {monthLabel} summary.</p>
-              <button onClick={() => generateReport(true)}>Run Report</button>
-            </>
-          )}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="view">
       {/* Month navigation — kept symmetric: arrow · centered title · arrow. The Re-run
@@ -261,7 +237,7 @@ export default function Reports() {
         <h2 className="applet-title" style={{ margin: 0, textAlign: 'center' }}>{monthLabel}</h2>
       </StepperNav>
       <div className="report-nav-actions">
-        <button className="secondary small" onClick={() => generateReport(false)} disabled={generating} title="Run again">↺ Re-run</button>
+        <button className="secondary small" onClick={() => generateReport()} disabled={generating} title="Run again">↺ Re-run</button>
         {!isCurrentMonth && (
           <button className="secondary small" onClick={() => setMonthOffset(0)}>Back to this month</button>
         )}
@@ -275,6 +251,41 @@ export default function Reports() {
         </div>
       ) : (
       <div className="report-body" key={runKey}>
+      {/* What the congregation's Service Report actually asks for — first, plainly, and only
+          the figures that belong on it (CONTEXT.md › Reporting). Everything below is for the
+          person's own records. */}
+      <div className="card highlight report-submit">
+        <h4 style={{ marginTop: 0 }}>What to submit for {monthLabel}</h4>
+        <ul className="report-submit-list">
+          <li>
+            <span>Shared in the ministry</span>
+            <strong>{participated ? 'Yes' : 'Not marked'}</strong>
+          </li>
+          <li>
+            <span>Bible studies</span>
+            <strong>{bibleStudies}</strong>
+          </li>
+          {reportTracksHours && (
+            <li>
+              <span>Hours</span>
+              <strong>{fmtDuration(ministryMin)}</strong>
+            </li>
+          )}
+          {reportTracksHours && creditMin > 0 && (
+            <li>
+              <span>Credit hours <span className="muted">(note in remarks)</span></span>
+              <strong>{fmtDuration(creditMin)}</strong>
+            </li>
+          )}
+        </ul>
+        {reportTracksHours && isCurrentMonth && bankedMin > 0 && (
+          <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>{bankedMin}m in the minute bank are not included — they carry forward.</p>
+        )}
+        {!reportTracksHours && (
+          <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>Publishers report participation and Bible studies only; hours below are for you.</p>
+        )}
+      </div>
+
       {/* Encouragement banner */}
       <div className="card report-encourage">
         <p>{encouragement(monthPct, totalMin)}</p>

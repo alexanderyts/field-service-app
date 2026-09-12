@@ -25,6 +25,8 @@ const SETTINGS_BLOCKLIST = new Set([
   'fieldservice_notify_sent_ids',
   'fieldservice_dark_mode',
   LAST_BACKUP_AT_KEY,
+  // A half-run live timer is device state, not a record (timer.ts).
+  'fieldservice_timer',
 ])
 
 export interface BackupFile {

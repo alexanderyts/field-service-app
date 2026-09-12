@@ -61,6 +61,7 @@ src/
   milestones.ts        # Milestone crossing (25/50/75/100) + month pace status/delta (pure, tested)
   schedulePrefsRole.ts # Role (publisher/auxiliary/pioneer) derivation + whether hours are tracked this month
   minuteBankFly.ts     # The "minute bank" fly-to-pill animation helper
+  timer.ts             # Live service timer: pure start/pause/resume/stop arithmetic + its localStorage record (tested)
   auxPioneering.ts     # Auxiliary-pioneer config (localStorage) + target-hour math
   auxSlip.ts           # Fills the S-205b auxiliary-pioneer PDF (pdf-lib)
   tips.ts              # Tip/support link config for the More tab
@@ -159,7 +160,7 @@ Call { id, personId, date, notHome?, notes?, scriptures?,
 
 **`timeLogs`** — time tracking entries
 ```ts
-TimeLog { id, date, minutes, category: TimeCategory, note?, activityNote? }
+TimeLog { id, date, minutes, category: TimeCategory, note?, activityNote?, startedAt?, endedAt? }
 TimeCategory = 'ministry' | 'credit'
 // activityNote = free text naming what it was ("LDC", "Cart witnessing"). Annotation only:
 // it touches no total, no cap and no goal, and is not a reportable field. The seven-category
@@ -263,6 +264,7 @@ moved into `settings.ts` in 0.20.2.
 | `fieldservice_theme` | `'light' | 'dark' | 'pastel' | 'mark'` | `settings.ts` |
 | `fieldservice_dark_mode` | Legacy boolean, read as a fallback for `_theme`; cleared on any theme write | `settings.ts` |
 | `fieldservice_last_backup_at` | Epoch ms of the last completed backup export; absent = never. Blocklisted, so it never travels inside a backup | `settings.ts` |
+| `fieldservice_timer` | The live service timer's state (start timestamp, accumulated ms, category). Blocklisted — device state, not a record | `timer.ts` |
 | `fieldservice_participated_months` | Months the user marked as "participated in ministry" | `settings.ts` |
 | `fieldservice_notify_enabled` / `_notify_lead_min` / `_notify_sent_ids` | Return-visit reminder settings + dedupe | `notifications.ts` |
 | `fieldservice_aux_*` | Auxiliary-pioneer config (see `auxPioneering.ts`) | `auxPioneering.ts` |
@@ -347,8 +349,9 @@ brand/category/tag hues are brightened per dark theme for contrast.
   `goalSegments.ts`.
 
 ### Reports
-- Does NOT auto-run — shows a "Ready when you are" screen with a Run button; cards animate in with a
-  staggered CSS reveal; `↺ Re-run` re-triggers via `runKey`. Includes territory completions and
+- Leads with a **"What to submit"** card — participation, Bible studies, hours and credit for roles
+  that track hours (`schedulePrefsRole.ts`), minutes carried forward — shown immediately (0.24.0);
+  the cards below animate in with a staggered CSS reveal and `↺ Re-run` replays it via `runKey`. Includes territory completions and
   service-year figures; `ServiceYearReview` is the animated year summary.
 
 ### Map

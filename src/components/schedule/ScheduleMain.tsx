@@ -19,6 +19,10 @@ import { HourGoalBar } from './HourGoalBar'
 import { animateHeightScroll } from './animate'
 import { EditLogModal } from './EditLogModal'
 import { DayActionModal } from './DayActionModal'
+import { TimerCard } from './TimerCard'
+import type { LogInterval } from './LogTimeForm'
+
+type DayModalInitialLog = { hours: number; minutes: number; category?: TimeCategory; activityNote?: string; interval?: LogInterval }
 import { ScheduleCalendarView } from './ScheduleCalendarView'
 import { MonthlyParticipationBox } from './MonthlyParticipationBox'
 import { AuxPioneeringBox } from './AuxPioneeringBox'
@@ -75,6 +79,8 @@ export function ScheduleMain({
   // Which step the day modal opens on — 'menu' for a normal day tap, 'logTime' for the
   // header's quick "+ Add time" shortcut (which defaults to today).
   const [dayModalStep, setDayModalStep] = useState<'menu' | 'logTime'>('menu')
+  // Prefill for the time step when the live timer is stopped; cleared on every other open.
+  const [dayModalInitialLog, setDayModalInitialLog] = useState<DayModalInitialLog | undefined>(undefined)
   // Set immediately (before the bank write/collect/fly chain even starts) so the modal's
   // other fields can start fading right away — see .time-entry-closing — while the
   // minutes field is left alone to finish its own collect animation. The modal's actual
@@ -554,10 +560,11 @@ export function ScheduleMain({
   // Opens the shared day-action modal, capturing the tapped element's rect so it can morph
   // back down toward it on close. `step` is 'menu' for a normal day tap, 'logTime' for the
   // header's quick-add shortcut.
-  function openDayModal(date: Date, rect: DOMRect, step: 'menu' | 'logTime' = 'menu') {
+  function openDayModal(date: Date, rect: DOMRect, step: 'menu' | 'logTime' = 'menu', initialLog?: DayModalInitialLog) {
     setDayModalOriginRect(rect)
     setDayModalClosing(false)
     setDayModalStep(step)
+    setDayModalInitialLog(initialLog)
     setDayModalFor(date)
   }
 
@@ -572,7 +579,7 @@ export function ScheduleMain({
 
   // Logging service time for a specific day — leftover ministry minutes always bank; nothing
   // is ever rounded up (tracking-first D5).
-  async function saveQuickLog(date: Date, totalMin: number, category: TimeCategory, activityNote: string) {
+  async function saveQuickLog(date: Date, totalMin: number, category: TimeCategory, activityNote: string, interval?: LogInterval) {
     if (totalMin <= 0) return
     const d = new Date(date)
     d.setHours(12, 0, 0, 0)
@@ -581,6 +588,9 @@ export function ScheduleMain({
       minutes: totalMin,
       category,
       activityNote: activityNote.trim() || undefined,
+      // The live timer's real interval rides along for the person's own records (0.24.0).
+      startedAt: interval?.startedAt,
+      endedAt: interval?.endedAt,
     } as TimeLog)
   }
 
@@ -654,7 +664,8 @@ export function ScheduleMain({
     m: number,
     category: TimeCategory,
     activityNote: string,
-    minutesFieldEl?: HTMLElement
+    minutesFieldEl?: HTMLElement,
+    interval?: LogInterval
   ) {
     const before = getMinuteBank()
     let bank = before + m
@@ -672,7 +683,7 @@ export function ScheduleMain({
       // reaches the bank (F-A6) — so the rolled-over hour can't be misattributed.
       await db.timeLogs.add({ date: d.getTime(), minutes: 60, category, note: 'Added from minute bank' } as TimeLog)
     }
-    if (h > 0) await saveQuickLog(date, h * 60, category, activityNote)
+    if (h > 0) await saveQuickLog(date, h * 60, category, activityNote, interval)
     setMinuteBank(bank)
     // Keep the modal open through the gather (so the field's glow is visible), then close it
     // once the ball has launched from the field's captured position.
@@ -687,14 +698,15 @@ export function ScheduleMain({
     m: number,
     category: TimeCategory,
     activityNote: string,
-    originEl?: HTMLElement
+    originEl?: HTMLElement,
+    interval?: LogInterval
   ) {
     // The bank's admission rule lives in `quickLogStrategy` (AUDIT F-A6) — credit is logged
     // whole and never enters the bank, so the hour it rolls over can't be misattributed.
     const strategy = quickLogStrategy(category, h, m)
     if (strategy === 'none') return
     if (strategy === 'whole') {
-      saveQuickLog(date, h * 60 + m, category, activityNote)
+      saveQuickLog(date, h * 60 + m, category, activityNote, interval)
       closeDayModalSmoothly()
       return
     }
@@ -702,7 +714,7 @@ export function ScheduleMain({
     // itself is morphed shut by bankQuickLogMinutes once the ball has launched (so the gather
     // is visible and the ball originates from the field's real position).
     setDayModalClosing(true)
-    bankQuickLogMinutes(date, h, m, category, activityNote, originEl)
+    bankQuickLogMinutes(date, h, m, category, activityNote, originEl, interval)
   }
 
   // Pioneer weekly bar fills against the calendar-derived weekly need (not the raw weeklyHours).
@@ -747,6 +759,14 @@ export function ScheduleMain({
       >
         ＋ Log time
       </button>
+      <TimerCard
+        onStop={(r, el) =>
+          openDayModal(new Date(r.endedAt), el?.getBoundingClientRect() ?? new DOMRect(0, 0, 0, 0), 'logTime', {
+            hours: r.hours, minutes: r.minutes, category: r.category, activityNote: r.activityNote,
+            interval: { startedAt: r.startedAt, endedAt: r.endedAt },
+          })
+        }
+      />
 
       {/* Progress is the hero: month first, service year second, week pace last, nothing
           behind an "Expand" (docs/tracking-first-plan.md D3). The bars themselves are the
@@ -1243,13 +1263,14 @@ export function ScheduleMain({
           onSaveBlocks={(blocks, repeatWeekly) => saveDayBlocks(dayModalFor, blocks, repeatWeekly)}
           onRemoveDay={() => removeDaySchedule(dayModalFor)}
           onClearAllDays={clearAllSuggestedDays}
-          onLogTime={(h, m, category, activityNote, originEl) => quickLogTime(dayModalFor, h, m, category, activityNote, originEl)}
+          onLogTime={(h, m, category, activityNote, originEl, interval) => quickLogTime(dayModalFor, h, m, category, activityNote, originEl, interval)}
           onSubmitScheduled={() => submitScheduledTime(dayModalFor)}
           onSubmitBlock={(i) => submitScheduledBlock(dayModalFor, i)}
           onDeleteBlock={(i) => deleteScheduledBlock(dayModalFor, i)}
           onClose={closeDayModalSmoothly}
           closing={dayModalClosing}
           initialStep={dayModalStep}
+          initialLog={dayModalInitialLog}
         />
       )}
 

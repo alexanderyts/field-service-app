@@ -88,6 +88,10 @@ export interface TimeLog {
       Cap, any total, or any goal, and it is not a reportable field. Non-indexed, so adding it
       needed no schema change; the v9 upgrade backfills it from the pre-v9 category labels. */
   activityNote?: string
+  /** Real interval when the entry came from the live timer (0.24.0). Informational only:
+      `minutes` is still the figure everything counts. Non-indexed, no schema change. */
+  startedAt?: number
+  endedAt?: number
 }
 
 export interface Appointment {

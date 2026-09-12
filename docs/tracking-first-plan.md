@@ -223,7 +223,7 @@ Goal: logging takes one tap to start and never records time that was not spent.
 5. **Verify:** log 1h 45m ministry → 1h logged, 45m banked, no dialog. Log 2h credit →
    whole. Double-tap Submit → one row.
 
-### Wave 4 — Live timer and the submit box (0.24.0)
+### Wave 4 — Live timer and the submit box (0.24.0) ✅ shipped 2026-09-12
 
 Goal: real intervals, and a report that matches the form.
 

@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.23.0`.** History runs from the initial scaffold forward.
+**Current version: `0.24.0`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -186,6 +186,11 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.20.3 — Browser security policy · 2026-09-07
 - **The app now tells the browser exactly what it's allowed to load and run.** Only Meleo's own code can execute — no injected or inline script ever will — and the only outside places it may contact are the map-tile and address-lookup services it already uses. Nothing changes day to day; it closes the door on a whole class of tampering (F009)
 - Checked by opening the real built app in a browser and exercising the map (both tile sources), the Schedule tab and a contact's share code, with no policy refusals
+
+## 0.24.0 — Live timer, and a report that matches the form · 2026-09-12
+- **A live timer on the Service tab.** Start it when you head out, pause if you need to, and Stop opens the time form already filled with what it counted. It survives the app being closed or the phone being locked — the running time is kept as timestamps, not a ticking counter — and the entry records the real start and end for your own records
+- **Reports leads with "What to submit".** Shared in the ministry, Bible studies, and (for pioneers and auxiliaries) hours and credit hours — the figures the congregation actually asks for — shown first and without a Run button. Minutes still in the bank are called out as carried forward. Copy/email text starts with the same lines
+- Verified: 233 tests (`timer.test.ts` covers pause/resume arithmetic and a stop hours after the app was killed); in the browser the timer starts, survives a reload still counting, and Stop prefills the form; the report opens straight to the submit box
 
 ## 0.23.0 — Log time in one tap, and never round up · 2026-09-12
 - **A big "Log time" button at the top of the Service tab** opens the time form for today. The form has one-tap presets (30m, 1h, 1h 30m, 2h, 3h) above the number pad, and is the same form the day tap uses, so the minute bank behaves identically from either
