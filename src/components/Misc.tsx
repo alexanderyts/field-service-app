@@ -539,7 +539,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
               <span className="misc-privacy-icon" aria-hidden="true">📱</span>
               <div>
                 <strong>Your data stays on your device.</strong>
-                <p>Contacts, call logs, time records, and schedules live only in your browser's local storage (IndexedDB). Nothing is sent to a server — no analytics, tracking, ads, or backend. The developer can't see anything you enter.</p>
+                <p>Contacts, call logs, time records, and schedules live only in your browser's local storage (IndexedDB). Meleo has no server — no analytics, tracking, ads, or backend — and the developer can't see anything you enter. The only outside services are the map ones: address text goes to OpenStreetMap to find a position, traced areas go to Overpass to snap to roads, and Esri serves the map tiles. Never a name or a note.</p>
               </div>
             </div>
 

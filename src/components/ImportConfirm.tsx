@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import ModalPortal from '../ModalPortal'
-import { type SharePayload, decodeSharePayload, describePayload, importSharedPayload } from '../share'
+import { type SharePayload, decodeSharePayload, describePayload } from '../share'
+import { importSharedPayload } from '../records'
 
 /** Confirms and performs an incoming share import — reached both from a scanned deep-link
     (App.tsx reads the URL hash) and from picking a `.meleo` file. Decodes the payload,

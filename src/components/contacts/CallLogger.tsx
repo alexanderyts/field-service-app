@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { db, type Person, type Call, type Appointment } from '../../db'
+import { logCall } from '../../records'
 import { useCurrentLocation } from '../../useGeolocation'
 import { formatScripture } from '../../scripture'
 import { SharedWarning } from '../SharedBits'
@@ -27,13 +28,12 @@ export function CallLogger({
   const [literaturePlaced, setLiteraturePlaced] = useState(existing?.literaturePlaced ?? '')
   const [returnVisitDate, setReturnVisitDate] = useState('')
   const [returnVisitTime, setReturnVisitTime] = useState('10:00')
-  const { getLocation, error: locationError } = useCurrentLocation()
+  const { getLocation } = useCurrentLocation()
   const [saving, setSaving] = useState(false)
 
   async function saveCall() {
     if (saving) return
     setSaving(true)
-    const loc = existing ? undefined : await getLocation()
     const record = {
       personId,
       date: whenDate ? combineDateTime(whenDate, whenTime) : Date.now(),
@@ -44,20 +44,25 @@ export function CallLogger({
       literaturePlaced: notHome ? undefined : literaturePlaced.trim() || undefined,
     }
 
-    if (existing) {
-      await db.calls.update(existing.id, record)
-    } else {
-      await db.calls.add({ ...record, lat: loc?.lat, lng: loc?.lng } as Call)
-    }
-
+    let returnVisit: Omit<Appointment, 'id'> | null = null
     if (returnVisitDate) {
       const person = await db.people.get(personId)
-      await db.appointments.add({
+      returnVisit = {
         title: `Return Visit${person ? ` — ${person.name}` : ''}`,
         date: combineDateTime(returnVisitDate, returnVisitTime),
         durationMinutes: 30,
         personId,
-      } as Appointment)
+      }
+    }
+
+    if (existing) {
+      await db.transaction('rw', db.calls, db.appointments, async () => {
+        await db.calls.update(existing.id, record)
+        if (returnVisit) await db.appointments.add(returnVisit as Appointment)
+      })
+    } else {
+      // Saved before the GPS lookup starts; the position is attached when (if) it arrives.
+      await logCall(record, returnVisit, getLocation)
     }
     setSaving(false)
     onSaved()
@@ -72,7 +77,6 @@ export function CallLogger({
       )}
       <h4>{existing ? 'Edit Call' : 'Log a Call'}</h4>
       <SharedWarning sharedWith={sharedWith} />
-      <p className="field-label">Date &amp; time</p>
       <div className="field-row">
         <label className="field">
           <span className="field-label">Date</span>
@@ -133,7 +137,6 @@ export function CallLogger({
         </label>
       </div>
 
-      {!existing && locationError && <p className="muted" style={{ fontSize: 13 }}>⚠ Couldn't get your location — this call will be saved without a map pin.</p>}
       <div className="row">
         <button onClick={saveCall} disabled={saving}>{existing ? 'Save Changes' : 'Save Call'}</button>
         {onCancel && (

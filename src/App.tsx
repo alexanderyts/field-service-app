@@ -113,8 +113,11 @@ function App() {
   // mid-session still gets caught.
   useEffect(() => {
     if (phase !== 'app') return
-    checkReturnVisitNotifications()
-    const interval = window.setInterval(checkReturnVisitNotifications, 5 * 60 * 1000)
+    // Swallowed on purpose: a reminder that can't be shown must never surface as an
+    // unhandled rejection from a timer (AUDIT F034).
+    const check = () => { checkReturnVisitNotifications().catch(() => {}) }
+    check()
+    const interval = window.setInterval(check, 5 * 60 * 1000)
     return () => window.clearInterval(interval)
   }, [phase])
 

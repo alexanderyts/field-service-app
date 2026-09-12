@@ -20,6 +20,7 @@ codes / files, never a server.
 | Database | Dexie.js 4 + dexie-react-hooks (`useLiveQuery`) → IndexedDB |
 | Map | Leaflet + react-leaflet 5 |
 | Geocoding | Nominatim (OSM) for addresses/reverse-geocode; Overpass API for road-snapping traces — free, no key |
+| Map tiles | Esri (`server.arcgisonline.com`): World Street Map, World Imagery, place labels — keyless. CARTO dropped in 0.20.5 (F047) |
 | Sharing | pako (deflate) + qrcode — compressed payload in a URL hash → QR, link, or `.meleo` file |
 | PDF forms | pdf-lib — fills the real S-205b auxiliary-pioneer AcroForm |
 | Font | Satoshi, **bundled locally** as woff2 (`src/assets/fonts/`, `@font-face` in `index.css`) — works offline |
@@ -46,7 +47,8 @@ src/
   profile.ts           # User's own name (localStorage) — used as the "from" on shares
   settings.ts          # Typed, crash-safe accessors for theme / credit-hours / last-backup keys
   streets.ts           # Street identity: ensureStreetEntry / findStreetTraceMidpoint
-  records.ts           # Multi-table operations, each in one transaction (tested via fake-indexeddb)
+  records.ts           # Multi-table operations, each in one transaction (tested via fake-indexeddb) — incl. logCall + importSharedPayload
+  appointments.ts      # Which return visits are still pending (overdue ones stay visible until followed up / 14 days) + badge label
   address.ts           # Address comparison, so a save knows whether the address really changed
   timeAgo.ts           # "3 days ago" formatter (now injected, for testability)
   scripture.ts         # Scripture reference formatter + autocorrect
@@ -67,7 +69,7 @@ src/
   roadSnap.ts          # Snap traced waypoints onto real OSM road geometry (Overpass)
   territoryImage.ts    # Schematic canvas rendering of traced streets (no map tiles → no tainted canvas)
   devSeed.ts           # Demo/seed data (loaded from More tab)
-  localDate.ts         # parse/format YYYY-MM-DD + HH:mm as LOCAL time (never toISOString — it shifts the date west of UTC)
+  localDate.ts         # parse/format YYYY-MM-DD + HH:mm as LOCAL time (never toISOString — it shifts the date west of UTC); fmtDateTime (no seconds)
   csp.ts               # Content-Security-Policy + the build-only Vite plugin that injects it (see section below)
   components/
     Onboarding.tsx     # SplashScreen + PrivacyGate + ProfileGate (+ hasAcceptedPolicy/hasSeenProfilePrompt)
@@ -282,7 +284,8 @@ and put in a deep-link URL **hash** (`#i=…`). That one URL travels by three tr
 in `ShareModal`: a scannable **QR** (≤ `MAX_QR_URL_LEN`, face-to-face only — the receiver scans with their
 phone's *camera app*; there is no scanner inside Meleo), a tappable **link** to send or copy
 (≤ `MAX_LINK_URL_LEN`, via `canShareAsLink`), and a `.meleo` **file** via the OS share sheet, which is the
-only transport with no size ceiling. `App.tsx` captures the hash at load and offers `ImportConfirm`. Imports always create **new**
+only transport with no size ceiling. `App.tsx` captures the hash at load and offers `ImportConfirm`. `decodeSharePayload` types every field
+(AUDIT F039) and `importSharedPayload` lives in `records.ts` as one transaction (F040). Imports always create **new**
 records tagged `receivedFrom`; the owner's copy accumulates `sharedWith`. `SharedBadge`/`SharedWarning`
 surface that attribution and warn before editing a shared item.
 
@@ -294,7 +297,8 @@ surface that attribution and warn before editing a shared item.
   versioned) + `wipeAllData()`. The only way a tester's data survives a device wipe and the bridge to any
   future native build. Includes all Dexie tables + non-blocklisted `fieldservice_*` keys.
 - **Notifications (`notifications.ts`):** return-visit reminders fire **only while the app is open** (no
-  backend to wake the device). Configurable lead time; `checkReturnVisitNotifications()` runs on reaching
+  backend to wake the device). Shown through the service-worker registration where one exists — Chrome for
+  Android refuses page-context `new Notification()` (AUDIT F034). Configurable lead time; `checkReturnVisitNotifications()` runs on reaching
   the app and every 5 min after.
 
 ---
@@ -384,7 +388,8 @@ dev server needs its HMR WebSocket and injects its own client.
 
 - `script-src 'self'` — nothing inline, no eval, no other host. This is the part that matters.
 - Every outside host is named: `nominatim.openstreetmap.org`, `overpass-api.de` (connect);
-  `*.basemaps.cartocdn.com`, `server.arcgisonline.com` (map tiles, img).
+  `server.arcgisonline.com` (all map tiles, img — Esri street, imagery, and labels; CARTO was
+  dropped in 0.20.5 when it began watermarking keyless tiles, AUDIT F047).
 - `data:` is allowed for `img-src` and `connect-src` on purpose — QR codes are `data:` PNGs and
   `ShareModal` `fetch()`es that URL to build a shareable file. Removing either breaks sharing
   silently.

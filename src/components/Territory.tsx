@@ -243,10 +243,9 @@ export function TerritoryDrawModal({
           <div style={{ touchAction: 'none', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
             <MapContainer center={[editCenter.lat, editCenter.lng]} zoom={16} style={{ height: 'min(52vh, 440px)', width: '100%' }}>
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                subdomains="abcd"
-                maxZoom={20}
+                attribution='Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+                maxZoom={19}
                 crossOrigin="anonymous"
               />
               <TerritoryPlaceLayer
@@ -662,10 +661,9 @@ export function TerritoryMiniMap({ streets }: { streets: TerritoryStreet[] }) {
     <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
       <MapContainer center={center} zoom={15} style={{ height: 340, width: '100%' }}>
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={20}
+          attribution='Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+          maxZoom={19}
         />
         {drawn.map((s, i) => (
           <Polyline

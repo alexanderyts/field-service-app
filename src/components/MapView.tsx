@@ -147,7 +147,8 @@ export default function MapView({
   // The map's current center, updated as the user pans/zooms — used so drawing starts on the
   // area they're viewing, not their GPS location.
   const [mapView, setMapView] = useState<{ lat: number; lng: number } | null>(null)
-  // Base map style — street (CARTO Voyager) or satellite (Esri imagery + street-label overlay).
+  // Base map style — street (Esri World Street Map) or satellite (Esri imagery + place-label overlay).
+  // All Esri: keyless, and one host in the CSP. CARTO started watermarking keyless tiles (AUDIT F047).
   const [baseLayer, setBaseLayer] = useState<'street' | 'satellite'>('street')
   // Place / address search that flies the map to a result.
   const [search, setSearch] = useState('')
@@ -260,10 +261,9 @@ export default function MapView({
           {baseLayer === 'street' ? (
             <TileLayer
               key="street"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
-              maxZoom={20}
+              attribution='Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+              maxZoom={19}
             />
           ) : (
             <>
@@ -277,9 +277,8 @@ export default function MapView({
               />
               <TileLayer
                 key="satellite-labels"
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
-                subdomains="abcd"
-                maxZoom={20}
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+                maxZoom={19}
               />
             </>
           )}

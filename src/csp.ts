@@ -21,8 +21,9 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
   'script-src': ["'self'"],
   'style-src': ["'self'", "'unsafe-inline'"],
   // data: — QR codes render to a data: PNG; also the inline SVGs in index.css.
-  // tiles — CartoDB Voyager (street map + labels) and Esri World Imagery (satellite).
-  'img-src': ["'self'", 'data:', 'https://*.basemaps.cartocdn.com', 'https://server.arcgisonline.com'],
+  // tiles — Esri only (World Street Map, World Imagery, place labels), all keyless. CARTO was
+  // dropped when it began watermarking keyless tiles "API KEY REQUIRED" (AUDIT F047).
+  'img-src': ["'self'", 'data:', 'https://server.arcgisonline.com'],
   'font-src': ["'self'"],
   // data: — ShareModal turns the QR data: URL into a File via fetch(), which connect-src governs.
   'connect-src': ["'self'", 'data:', 'https://nominatim.openstreetmap.org', 'https://overpass-api.de'],

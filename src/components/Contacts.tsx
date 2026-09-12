@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type ContactStatus } from '../db'
+import { fmtDateTime } from '../localDate'
+import { isOverdue, nextPendingByPerson, visitBadgeLabel } from '../appointments'
 import { STATUS_LABELS, STATUS_ORDER } from '../contactStatus'
 import { deleteContacts } from '../records'
-import { SharedBadge } from './SharedBits'
+import { SharedBadge, pressable } from './SharedBits'
 import { readMeleoFile } from '../share'
 import ConfirmDialog from './ConfirmDialog'
 import ModalPortal from '../ModalPortal'
@@ -29,6 +31,7 @@ export default function Contacts({
 }) {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const appointments = useLiveQuery(() => db.appointments.toArray(), []) ?? []
+  const calls = useLiveQuery(() => db.calls.toArray(), []) ?? []
   // Counts shown on the segmented control so each list's size reads at a glance. Territories
   // counts only the *grouped* (durable) ones — the active draft isn't a "created" territory.
   const streetCount = useLiveQuery(() => db.streetEntries.count(), []) ?? 0
@@ -88,13 +91,8 @@ export default function Contacts({
   }, [openContactId])
 
   const now = Date.now()
-  const nextAppointment = new Map<number, number>()
-  for (const a of appointments) {
-    if (a.personId && a.date >= now) {
-      const cur = nextAppointment.get(a.personId)
-      if (cur === undefined || a.date < cur) nextAppointment.set(a.personId, a.date)
-    }
-  }
+  // Overdue visits stay on the row until followed up or stale (AUDIT F036).
+  const nextAppointment = nextPendingByPerson(appointments, calls, now)
 
   const filtered = people.filter((p) => {
     if (filterStatus !== 'all' && p.status !== filterStatus) return false
@@ -135,9 +133,9 @@ export default function Contacts({
       {/* People vs. Streets — contacts are individual householders; streets track the
           house numbers worked on a road (and are auto-created from temporary territories). */}
       <div className="segmented">
-        <button className={view === 'people' ? 'active' : ''} onClick={() => setView('people')}>People{people.length > 0 ? ` (${people.length})` : ''}</button>
-        <button className={view === 'streets' ? 'active' : ''} onClick={() => setView('streets')}>Streets{streetCount > 0 ? ` (${streetCount})` : ''}</button>
-        <button className={view === 'territories' ? 'active' : ''} onClick={() => setView('territories')}>Territories{territoryCount > 0 ? ` (${territoryCount})` : ''}</button>
+        <button className={view === 'people' ? 'active' : ''} aria-pressed={view === 'people'} onClick={() => setView('people')}>People{people.length > 0 ? ` (${people.length})` : ''}</button>
+        <button className={view === 'streets' ? 'active' : ''} aria-pressed={view === 'streets'} onClick={() => setView('streets')}>Streets{streetCount > 0 ? ` (${streetCount})` : ''}</button>
+        <button className={view === 'territories' ? 'active' : ''} aria-pressed={view === 'territories'} onClick={() => setView('territories')}>Territories{territoryCount > 0 ? ` (${territoryCount})` : ''}</button>
       </div>
 
       {view === 'people' ? (
@@ -145,6 +143,7 @@ export default function Contacts({
           <input
             className="full"
             placeholder="Search name, street, city, zip..."
+            aria-label="Search contacts"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -193,18 +192,28 @@ export default function Contacts({
               <li
                 key={p.id}
                 className="list-item clickable"
-                onClick={() => (editMode ? toggleSelect(p.id) : setSelectedId(p.id))}
+                {...pressable(() => (editMode ? toggleSelect(p.id) : setSelectedId(p.id)))}
               >
                 {editMode && (
-                  <input type="checkbox" checked={selectedIds.has(p.id)} readOnly style={{ marginRight: 10, flexShrink: 0 }} />
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(p.id)}
+                    onChange={() => toggleSelect(p.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Select ${p.name}`}
+                    style={{ marginRight: 10, flexShrink: 0 }}
+                  />
                 )}
                 <div>
                   <strong>{p.name}</strong>
                   <span className={`badge status-${p.status}`}>{STATUS_LABELS[p.status]}</span>
                   <SharedBadge sharedWith={p.sharedWith} receivedFrom={p.receivedFrom} />
                   {nextAppointment.has(p.id) && (
-                    <span className="badge appt-badge" title={new Date(nextAppointment.get(p.id)!).toLocaleString()}>
-                      📅 {new Date(nextAppointment.get(p.id)!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    <span
+                      className={`badge appt-badge${isOverdue({ date: nextAppointment.get(p.id)! }, now) ? ' overdue' : ''}`}
+                      title={fmtDateTime(nextAppointment.get(p.id)!)}
+                    >
+                      📅 {visitBadgeLabel(nextAppointment.get(p.id)!, now)}
                     </span>
                   )}
                   <div className="muted">{[p.street, p.city, p.state, p.zip].filter(Boolean).join(', ') || 'No address'}</div>

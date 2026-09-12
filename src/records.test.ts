@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { db, type Person, type Call, type Appointment, type Territory, type TerritoryStreet } from './db'
-import { deleteContacts, groupStreetsIntoTerritory, sendStreetToMinistry, completeTerritory } from './records'
+import { deleteContacts, groupStreetsIntoTerritory, sendStreetToMinistry, completeTerritory, logCall } from './records'
 
 // These run against a real IndexedDB implementation (fake-indexeddb), not a mock, so they
 // exercise the actual Dexie transactions — including whether a transaction's scope survives
@@ -177,5 +177,40 @@ describe('completeTerritory', () => {
   it('writes nothing for a territory that no longer exists', async () => {
     await completeTerritory(9999)
     expect(await db.territoryCompletions.count()).toBe(0)
+  })
+})
+
+describe('logCall (AUDIT F035)', () => {
+  // Dexie stamps the primary key onto the object it was handed, so each insert gets a fresh copy.
+  const call = () => ({ personId: 1, date: Date.now(), notHome: false, notes: 'hi' })
+
+  it('commits the call before the location lookup resolves, then patches the position on', async () => {
+    let resolveLoc!: (v: { lat: number; lng: number } | null) => void
+    const locate = () => new Promise<{ lat: number; lng: number } | null>((r) => { resolveLoc = r })
+    const id = await logCall(call(), null, locate)
+    const before = await db.calls.get(id)
+    expect(before?.notes).toBe('hi')
+    expect(before?.lat).toBeUndefined()
+    resolveLoc({ lat: 32.3, lng: -90 })
+    await new Promise((r) => setTimeout(r, 0))
+    const after = await db.calls.get(id)
+    expect(after?.lat).toBe(32.3)
+    expect(after?.lng).toBe(-90)
+  })
+
+  it('keeps the row when the lookup fails or returns nothing', async () => {
+    const id = await logCall(call(), null, () => Promise.reject(new Error('denied')))
+    await new Promise((r) => setTimeout(r, 0))
+    expect((await db.calls.get(id))?.notes).toBe('hi')
+    const id2 = await logCall(call(), null, () => Promise.resolve(null))
+    await new Promise((r) => setTimeout(r, 0))
+    expect((await db.calls.get(id2))?.lat).toBeUndefined()
+  })
+
+  it('writes the return visit in the same transaction as the call', async () => {
+    const visit = { title: 'Return Visit — A', date: Date.now() + 86400000, durationMinutes: 30, personId: 1 }
+    await logCall(call(), visit, () => Promise.resolve(null))
+    expect(await db.calls.count()).toBe(1)
+    expect(await db.appointments.count()).toBe(1)
   })
 })

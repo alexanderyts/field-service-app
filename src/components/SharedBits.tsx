@@ -1,3 +1,4 @@
+import type React from 'react'
 import type { ReactNode } from 'react'
 import type { ShareRef } from '../db'
 import type { RingSeg } from '../goalSegments'
@@ -116,4 +117,22 @@ export function SharedWarning({ sharedWith }: { sharedWith?: ShareRef[] }) {
       {others > 0 ? ` (and ${others} other${others === 1 ? '' : 's'})` : ''}. Editing here won't update their copy.
     </div>
   )
+}
+
+/** Props that make a non-button element (a list row) behave like one for keyboard and
+    switch users: focusable, announced as a button, and activated by Enter or Space as well
+    as a tap (AUDIT F038). Spread onto the `<li>`. */
+export function pressable(onActivate: () => void) {
+  return {
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: onActivate,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.target !== e.currentTarget) return
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        onActivate()
+      }
+    },
+  }
 }

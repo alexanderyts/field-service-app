@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Person, type Appointment } from '../../db'
 import { STATUS_LABELS } from '../../contactStatus'
+import { fmtDateTime } from '../../localDate'
+import { isOverdue, pendingAppointments } from '../../appointments'
 import { SharedBadge, SharedWarning } from '../SharedBits'
 import { buildContactPayload } from '../../share'
 import ConfirmDialog from '../ConfirmDialog'
@@ -59,7 +61,8 @@ export function ContactDetail({ personId, onClose, onGoToMap }: {
       : null
 
   const now = Date.now()
-  const upcoming = appointments.filter((a) => a.date >= now).sort((a, b) => a.date - b.date)
+  // Overdue visits stay here until a later call is logged or they go stale (AUDIT F036).
+  const upcoming = pendingAppointments(appointments, calls, now)
   const sortedCalls = [...calls].sort((a, b) => (callSort === 'newest' ? b.date - a.date : a.date - b.date))
   const household = householdSummary(person)
 
@@ -98,7 +101,7 @@ export function ContactDetail({ personId, onClose, onGoToMap }: {
           )}
           {person.notes && <p className="muted contact-line">{person.notes}</p>}
 
-          <p className="muted contact-line">Met {new Date(person.dateMet).toLocaleString()}</p>
+          <p className="muted contact-line">Met {fmtDateTime(person.dateMet)}</p>
         </div>
 
         <div className="row">
@@ -121,12 +124,13 @@ export function ContactDetail({ personId, onClose, onGoToMap }: {
 
         {upcoming.length > 0 && (
           <div className="card appt-card">
-            <h4>Upcoming Return Visit{upcoming.length === 1 ? '' : 's'}</h4>
+            <h4>Return Visit{upcoming.length === 1 ? '' : 's'}</h4>
             {upcoming.map((a) => (
               <div key={a.id} className="appt-row">
                 <div>
                   <strong>{a.title}</strong>
-                  <div className="muted">{new Date(a.date).toLocaleString()}</div>
+                  {isOverdue(a, now) && <span className="badge appt-badge overdue">Overdue</span>}
+                  <div className="muted">{fmtDateTime(a.date)}</div>
                   {a.notes && <div>{a.notes}</div>}
                 </div>
                 <button className="secondary small" onClick={() => setEditingAppt(a)}>Edit</button>
@@ -164,7 +168,7 @@ export function ContactDetail({ personId, onClose, onGoToMap }: {
             <li key={c.id} className="list-item">
               <div>
                 <div className="muted">
-                  {new Date(c.date).toLocaleString()} {c.notHome && <span className="badge not-home-badge">Not Home</span>}
+                  {fmtDateTime(c.date)} {c.notHome && <span className="badge not-home-badge">Not Home</span>}
                 </div>
                 {c.notes && <div>{c.notes}</div>}
                 {c.scriptures && <div>Scriptures: {c.scriptures}</div>}

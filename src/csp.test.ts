@@ -13,7 +13,8 @@ describe('Content-Security-Policy', () => {
   it('names every outside host the app actually talks to, and nothing broader', () => {
     expect(CSP_DIRECTIVES['connect-src']).toContain('https://nominatim.openstreetmap.org')
     expect(CSP_DIRECTIVES['connect-src']).toContain('https://overpass-api.de')
-    expect(CSP_DIRECTIVES['img-src']).toContain('https://*.basemaps.cartocdn.com')
+    // F047: CARTO is gone on purpose — a tile host that watermarks keyless requests must not creep back.
+    expect(CSP_DIRECTIVES['img-src']).not.toContain('https://*.basemaps.cartocdn.com')
     expect(CSP_DIRECTIVES['img-src']).toContain('https://server.arcgisonline.com')
     for (const sources of Object.values(CSP_DIRECTIVES)) {
       expect(sources).not.toContain('*')

@@ -367,3 +367,10 @@ a.link-button {
   text-decoration: none;
   font-size: 15px;
 }
+
+/* Keyboard focus must be visible on every control, including list rows that act as
+   buttons (AUDIT F038). Inputs keep their own focus border above; this covers the rest. */
+:where(button, a, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

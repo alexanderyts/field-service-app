@@ -401,7 +401,16 @@ const PRE_V9_CATEGORY_LABELS: Record<string, string> = {
   other: 'Other',
 }
 
-db.version(9).stores({}).upgrade(async (tx) => {
+/** Anything with a `table(name)` — a Dexie upgrade `tx`, or `db` itself inside a transaction. */
+interface TableSource { table(name: string): Dexie.Table }
+
+/**
+ * The 0.20.0 rewrite of legacy time categories, as a function so it can run in two places:
+ * the v9 schema upgrade (on open), and a backup restore whose file predates v9 (AUDIT F041) —
+ * `bulkAdd` writes rows verbatim and never triggers an upgrade, so without this a restored
+ * 0.19.x file reintroduced the exact `'ldc'`/`'other'` rows the migration exists to remove.
+ */
+export async function migrateLegacyRows(tx: TableSource): Promise<void> {
   const logs = await tx.table('timeLogs').toArray()
   for (const l of logs) {
     if (l.category === 'ministry' || l.category === 'credit') continue
@@ -451,7 +460,9 @@ db.version(9).stores({}).upgrade(async (tx) => {
       })
     }
   }
-})
+}
+
+db.version(9).stores({}).upgrade((tx) => migrateLegacyRows(tx))
 
 /** Sorts house numbers "1, 2, 10, 10A, 10B, 11" the way a person walks a street: by the
     leading numeric part first, then any suffix (unit letter, "-B", etc.) as a tiebreak.

@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.20.4`.** History runs from the initial scaffold forward.
+**Current version: `0.20.5`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -186,6 +186,18 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.20.3 — Browser security policy · 2026-09-07
 - **The app now tells the browser exactly what it's allowed to load and run.** Only Meleo's own code can execute — no injected or inline script ever will — and the only outside places it may contact are the map-tile and address-lookup services it already uses. Nothing changes day to day; it closes the door on a whole class of tampering (F009)
 - Checked by opening the real built app in a browser and exercising the map (both tile sources), the Schedule tab and a contact's share code, with no policy refusals
+
+## 0.20.5 — Hardening before the tracking-first work · 2026-09-12
+- **The street map works again.** CARTO began stamping "API KEY REQUIRED" across its free tiles, so every map and territory preview was defaced. All tiles now come from Esri, which needs no key and was already the satellite source (F047)
+- **Return-visit reminders now fire on Android.** They were created in a way Chrome for Android refuses; the error was swallowed, so the toggle said "on" while nothing ever appeared (F034). Needs a real-device check — noted in AUDIT
+- **Saving a call no longer waits for GPS.** The call is written immediately and the position is attached when the phone finds it, instead of the Save button hanging up to ten seconds at the door (F035)
+- **Missed return visits no longer vanish.** A visit whose time has passed stays on the contact row, the contact card, and the Schedule list, marked **Overdue**, until a later call to that person is logged or two weeks pass (F036). The row badge now reads "Today", "Tomorrow", or the date
+- **Shares are checked field by field** — a coordinate that is not a number, a street with bad points, or a bogus status is refused instead of stored and crashing the Map tab on every visit; the sender name is bounded; imported streets get fresh ids (F039). A territory import is one transaction, so a failure leaves nothing behind (F040)
+- **Restoring an old backup migrates it.** A 0.19 backup restored on 0.20 kept its legacy time categories; restore now applies the same rewrite the schema upgrade does (F041)
+- **The privacy policy says what the map services receive** — address text to Nominatim, traced areas to Overpass, the viewed area to Esri, and the directions address to Google. Never a name or a note. The More tab summary matches (F037)
+- **Keyboard users can open contacts, streets, and territories.** List rows are focusable and respond to Enter and Space; the People/Streets/Territories and street filters announce which is selected; every popup is named after its heading; keyboard focus is visible everywhere (F038)
+- Timestamps no longer show seconds; City, State, and Zip sit on one row; the call form lost a duplicate "Date & time" heading (F048, part)
+- Verified: 209 tests (new: `appointments.test.ts`, `localDate.test.ts`, share wrong-type and transaction cases, restore-migration case, `logCall` cases) plus the built app driven in a browser — Esri tiles load with no watermark, overdue badges show on the demo data, rows carry `role="button"`
 
 ## 0.20.4 — Popups work from the keyboard · 2026-09-07
 - **Every popup can now be used without a mouse or touch.** Opening one moves the keyboard focus inside it, Tab moves between its controls without escaping to the page behind, and Esc closes it — the same as tapping outside. When it closes, focus goes back to where you were; with a confirm on top of another popup, back to the popup underneath (F018)

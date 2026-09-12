@@ -82,6 +82,15 @@ export default function ModalPortal({ children, onClose }: { children: ReactNode
     const host = hostRef.current!
     const layer: Layer = { host, closeRef, restoreTo: document.activeElement as HTMLElement | null }
     layers.push(layer)
+
+    // Name the dialog after its first heading so a screen reader announces "Delete this
+    // contact?" rather than a bare "dialog" (AUDIT F038). Done on the DOM because every modal
+    // supplies its own heading markup; none had to know about ids.
+    const heading = host.querySelector<HTMLElement>('h1, h2, h3, h4')
+    if (heading) {
+      if (!heading.id) heading.id = `dlg-${Math.random().toString(36).slice(2, 9)}`
+      host.setAttribute('aria-labelledby', heading.id)
+    }
     // A modal that autoFocuses an input has already placed focus; don't take it away.
     if (!host.contains(document.activeElement)) host.focus()
 

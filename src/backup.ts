@@ -1,4 +1,4 @@
-import { db } from './db'
+import { db, migrateLegacyRows } from './db'
 import { APP_VERSION } from './version'
 import { setLastBackupAt, LAST_BACKUP_AT_KEY } from './settings'
 
@@ -148,7 +148,7 @@ export async function importBackup(file: File): Promise<ImportSummary> {
   }
   // `app` stays the internal 'field-service' tag (predates the Meleo rename) so backups
   // exported before the rename still import correctly — this is a format id, not branding.
-  if (!data || data.app !== 'field-service' || typeof data.tables !== 'object') {
+  if (!data || data.app !== 'field-service' || typeof data.tables !== 'object' || data.tables === null) {
     throw new Error("That doesn't look like a Meleo backup file.")
   }
 
@@ -188,6 +188,9 @@ export async function importBackup(file: File): Promise<ImportSummary> {
       if (rows.length) await table.bulkAdd(rows as unknown as never[])
       counts[name] = rows.length
     }
+    // Rows from an older schema were written verbatim; give them the same rewrite a schema
+    // upgrade would have (AUDIT F041). Inside the transaction, so a failure restores nothing.
+    if (fileDbVersion < 9) await migrateLegacyRows(db)
   })
 
   // Restore should leave the device in exactly the backed-up state, not the union of the old

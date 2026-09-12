@@ -264,7 +264,7 @@ export function ContactForm({ onClose, existing, prefill }: { onClose: () => voi
               )}
             </div>
           </label>
-          <div className="field-row">
+          <div className="field-row stay-row address-row">
             <label className="field">
               <span className="field-label">City</span>
               <input value={city} onChange={(e) => { setCity(e.target.value); setCoords(null) }} />

@@ -1,4 +1,5 @@
-import { db, uniqueStreetName, type Call, type Person, type StreetEntry, type Territory, type TerritoryStreet } from './db'
+import { db, type Call, type Person, type StreetEntry, type Territory } from './db'
+import { STATUS_ORDER } from './contactStatus'
 
 // Cross-device sharing of a single contact / street / territory. The payload is compressed
 // (pako, lazy-loaded) and base64url-encoded, then carried in a deep-link URL *hash* — the
@@ -60,6 +61,9 @@ const MAX_STR = 10_000
 // alone before MAX_LIST gets a look. Real shares are single-digit KB inflated; 4 MB is far
 // above anything legitimate and far below a level that could wedge a phone.
 const MAX_INFLATED_LEN = 4 * 1024 * 1024
+// The sender's name rides outside `data`, so the depth walk never saw it; it lands in
+// `receivedFrom.name` and is rendered on every list row that carries the badge (AUDIT F039).
+const MAX_FROM_LEN = 200
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
@@ -99,21 +103,49 @@ function assertBoundedDepth(v: unknown): void {
 }
 
 /** Rejects a decoded payload whose data isn't shaped like the kind it claims to be, so
-    importSharedPayload only ever spreads the expected fields into the local database. */
+    importSharedPayload only ever spreads the expected fields into the local database.
+
+    Every field a renderer will do arithmetic or `.map` on is typed here, not just `name`:
+    a `lat` of "abc" or a `points` of [null] used to pass, get stored, and then throw inside
+    Leaflet on every visit to the Map tab until the row was found and deleted (AUDIT F039). */
 function assertValidPayload(p: SharePayload): void {
   const bad = () => { throw new Error('This share is malformed and was not imported.') }
   const d = p.data as Record<string, unknown>
   if (!isObject(d)) bad()
   assertBoundedDepth(d)
   const okList = (v: unknown) => v == null || (Array.isArray(v) && v.length <= MAX_LIST)
+  const okStr = (v: unknown) => v == null || typeof v === 'string'
+  const okNum = (v: unknown) => v == null || (typeof v === 'number' && Number.isFinite(v))
+  // A coordinate is either absent on both axes or a finite number on both.
+  const okCoords = (o: Record<string, unknown>) => {
+    if (!okNum(o.lat) || !okNum(o.lng)) return false
+    return (o.lat == null) === (o.lng == null)
+  }
+  const okPoints = (v: unknown) =>
+    okList(v) && (v == null || (v as unknown[]).every((pt) => isObject(pt) && typeof pt.lat === 'number' && Number.isFinite(pt.lat) && typeof pt.lng === 'number' && Number.isFinite(pt.lng)))
+  const okAddress = (o: Record<string, unknown>) => okStr(o.street) && okStr(o.city) && okStr(o.state) && okStr(o.zip)
+
   if (p.kind === 'contact') {
     const person = (d as { person?: unknown }).person
     if (!isObject(person) || typeof person.name !== 'string') bad()
-    if (!okList((d as { calls?: unknown }).calls)) bad()
+    const pr = person as Record<string, unknown>
+    if (!okCoords(pr) || !okAddress(pr) || !okStr(pr.phone) || !okStr(pr.notes) || !okNum(pr.dateMet)) bad()
+    if (pr.status != null && !(STATUS_ORDER as string[]).includes(pr.status as string)) bad()
+    const calls = (d as { calls?: unknown }).calls
+    if (!okList(calls)) bad()
+    for (const c of (calls as unknown[] | undefined) ?? []) {
+      if (!isObject(c) || !okNum(c.date) || !okCoords(c) || !okStr(c.notes) || !okStr(c.scriptures)) bad()
+    }
   } else if (p.kind === 'street') {
-    if (typeof d.name !== 'string' || !okList(d.houses)) bad()
+    if (typeof d.name !== 'string' || !okList(d.houses) || !okPoints(d.points) || !okAddress(d)) bad()
+    for (const h of (d.houses as unknown[] | undefined) ?? []) {
+      if (!isObject(h) || typeof h.number !== 'string' || !okStr(h.note)) bad()
+    }
   } else if (p.kind === 'territory') {
     if (typeof d.name !== 'string' || !Array.isArray(d.streets) || d.streets.length > MAX_LIST) bad()
+    for (const st of d.streets as unknown[]) {
+      if (!isObject(st) || typeof st.name !== 'string' || !okPoints(st.points) || !okAddress(st) || !okNum(st.entryId)) bad()
+    }
   } else {
     bad()
   }
@@ -196,6 +228,10 @@ export async function decodeSharePayload(encoded: string): Promise<SharePayload>
   }
   const parsed = JSON.parse(json) as SharePayload
   if (parsed?.v !== 1 || !parsed.kind || !parsed.data) throw new Error('Not a valid Meleo share.')
+  // `from` is attribution, never required: a missing or non-string one becomes anonymous, an
+  // absurdly long one is hostile and the whole share is refused (AUDIT F039).
+  if (typeof parsed.from !== 'string') parsed.from = ''
+  if (parsed.from.length > MAX_FROM_LEN) throw new Error('This share is malformed and was not imported.')
   assertValidPayload(parsed)
   return parsed
 }
@@ -322,69 +358,5 @@ export async function shareEncodedFile(encoded: string, baseName: string): Promi
   return 'downloaded'
 }
 
-// ── Importing a received payload as NEW records ──────────────────────────────
-
-/** Writes a decoded payload as brand-new local records (never clobbering existing rows —
-    unlike backup restore), tagging each with `receivedFrom` for attribution. A territory
-    also gets empty StreetEntry mirrors per street so the per-street "Houses" affordance
-    works, matching what the map draw-flow creates. */
-export async function importSharedPayload(payload: SharePayload): Promise<void> {
-  const receivedFrom = { name: payload.from || 'a Meleo user', at: Date.now() }
-
-  if (payload.kind === 'contact') {
-    const { person, calls } = payload.data as ContactPayload
-    const personId = (await db.people.add({
-      ...stripInjectedKeys(person),
-      createdAt: Date.now(),
-      receivedFrom,
-    } as Person)) as number
-    for (const c of calls) {
-      await db.calls.add({ ...stripInjectedKeys(c), personId } as Call)
-    }
-    return
-  }
-
-  if (payload.kind === 'street') {
-    const data = payload.data as StreetPayload
-    await db.streetEntries.add({ ...stripInjectedKeys(data), createdAt: Date.now(), receivedFrom } as StreetEntry)
-    return
-  }
-
-  const data = payload.data as TerritoryPayload
-  // Back each imported street with its own new StreetEntry (carrying the trace points), linked via
-  // entryId — so imported territory streets are managed identically to standalone ones and show up
-  // in the Streets list. Same-named streets stay distinct (a new one gets a "(2)"/"(3)" suffix);
-  // the only streets that share an entry are ones that pointed at the SAME sender entry, deduped
-  // via `bySenderEntry` so a genuinely-single shared street isn't split in two.
-  const existingNames = (await db.streetEntries.toArray()).map((e) => e.name)
-  const bySenderEntry = new Map<number, number>()
-  const streets: TerritoryStreet[] = []
-  for (const s of data.streets) {
-    let entryId = s.entryId != null ? bySenderEntry.get(s.entryId) : undefined
-    if (entryId == null) {
-      const name = uniqueStreetName(s.name, existingNames)
-      existingNames.push(name)
-      entryId = (await db.streetEntries.add({
-        name,
-        city: s.city,
-        state: s.state,
-        zip: s.zip,
-        houses: [],
-        points: s.points,
-        createdAt: Date.now(),
-      })) as number
-      if (s.entryId != null) bySenderEntry.set(s.entryId, entryId)
-    }
-    // `id` is kept: on a TerritoryStreet it's an identifier scoped to this territory's own
-    // array (a React key, not a database primary key), so it can't collide with a stored row.
-    streets.push({ ...s, entryId })
-  }
-  await db.territories.add({
-    ...stripInjectedKeys(data),
-    streets,
-    createdAt: Date.now(),
-    completed: false,
-    grouped: true,
-    receivedFrom,
-  } as Territory)
-}
+// Importing a received payload lives in records.ts (`importSharedPayload`): it writes several
+// tables, so it belongs with the other transactional multi-table operations (AUDIT F040).

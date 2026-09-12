@@ -8,7 +8,7 @@ import { ensureStreetEntry } from '../streets'
 import { completeTerritory } from '../records'
 import { StreetSnapshotModal, TerritoryMiniMap } from './Territory'
 import ShareModal from './ShareModal'
-import { SharedBadge, SharedWarning } from './SharedBits'
+import { SharedBadge, SharedWarning, pressable } from './SharedBits'
 import { buildTerritoryPayload } from '../share'
 
 /**
@@ -56,8 +56,10 @@ export default function Territories({
         {grouped.map((t) => {
           const location = commonLocationLabel(t.streets)
           return (
-            <li key={t.id} className="list-item clickable" onClick={() => (editMode ? toggleSelect(t.id) : setSelectedId(t.id))}>
-              {editMode && <input type="checkbox" checked={selectedIds.has(t.id)} readOnly style={{ marginRight: 10, flexShrink: 0 }} />}
+            <li key={t.id} className="list-item clickable" {...pressable(() => (editMode ? toggleSelect(t.id) : setSelectedId(t.id)))}>
+              {editMode && (
+                <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} onClick={(ev) => ev.stopPropagation()} aria-label={`Select ${t.name}`} style={{ marginRight: 10, flexShrink: 0 }} />
+              )}
               <div>
                 <strong>{t.name}</strong>
                 <span className="badge">{t.streets.length} street{t.streets.length === 1 ? '' : 's'}</span>

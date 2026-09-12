@@ -26,3 +26,16 @@ export function combineDateTime(dateStr: string, timeStr: string): number {
   d.setHours(h, m, 0, 0)
   return d.getTime()
 }
+
+/** A timestamp for reading, not editing: "8/5/2025, 2:25 PM" — date plus hour and minute, never
+    seconds. Bare `toLocaleString()` prints "2:25:39 PM", which no call, visit, or "met" line
+    needs (AUDIT F048). `locale` is only for tests; the UI always uses the device's. */
+export function fmtDateTime(ts: number, locale?: string): string {
+  return new Date(ts).toLocaleString(locale, {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}

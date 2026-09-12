@@ -1811,6 +1811,16 @@ button.small {
   min-width: 0;
 }
 
+/* Three short text fields that read as one line — City wide, State and Zip narrow. Text inputs
+   shrink fine (the phone-width stacking above exists for native date/time inputs), so this row
+   stays a row (AUDIT F048). */
+.field-row.stay-row {
+  flex-direction: row;
+}
+.field-row.address-row .field:nth-child(1) { flex: 2 1 0; }
+.field-row.address-row .field:nth-child(2) { flex: 0 0 4.5em; }
+.field-row.address-row .field:nth-child(3) { flex: 1 1 0; }
+
 .field input,
 .field select,
 .field textarea {
@@ -2099,6 +2109,11 @@ button.small {
 .badge.appt-badge {
   background: var(--visit-soft);
   color: var(--visit);
+}
+/* A missed visit (AUDIT F036) — same badge, danger hue, so it reads as "needs attention". */
+.badge.appt-badge.overdue {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .badge.not-home-badge {

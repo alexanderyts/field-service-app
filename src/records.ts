@@ -1,4 +1,5 @@
-import { db, type Territory, type TerritoryCompletion, type TerritoryStreet } from './db'
+import { db, uniqueStreetName, type Appointment, type Call, type Person, type StreetEntry, type Territory, type TerritoryCompletion, type TerritoryStreet } from './db'
+import { stripInjectedKeys, type ContactPayload, type SharePayload, type StreetPayload, type TerritoryPayload } from './share'
 import { ensureStreetEntry } from './streets'
 
 // The multi-table operations that used to live inline in components. Each one spans more than
@@ -123,5 +124,105 @@ export async function completeTerritory(territoryId: number): Promise<void> {
       streetCount: fresh.streets.length,
     } as TerritoryCompletion)
     await db.territories.delete(territoryId)
+  })
+}
+
+/**
+ * Log a call (and, optionally, the return visit scheduled from it), then attach the phone's
+ * position afterwards.
+ *
+ * The write comes first, on purpose. The old flow awaited a high-accuracy GPS fix — up to ten
+ * seconds at a door with poor signal, plus the OS permission prompt on first use — before
+ * touching the database, so "Save Call" sat dead exactly when the person was standing on a
+ * porch (AUDIT F035). Now the row is durable before `locate` is even called; the fix, if one
+ * arrives, is patched onto it and nothing waits for it. The call and its appointment share one
+ * transaction so an interruption can't leave a visit scheduled for a call that was never saved.
+ *
+ * Resolves to the new call id as soon as the rows are committed.
+ */
+export async function logCall(
+  call: Omit<Call, 'id' | 'lat' | 'lng'>,
+  returnVisit: Omit<Appointment, 'id'> | null,
+  locate: () => Promise<{ lat: number; lng: number } | null>
+): Promise<number> {
+  const id = await db.transaction('rw', db.calls, db.appointments, async () => {
+    const callId = (await db.calls.add(call as Call)) as number
+    if (returnVisit) await db.appointments.add(returnVisit as Appointment)
+    return callId
+  })
+  void locate()
+    .then((loc) => (loc ? db.calls.update(id, { lat: loc.lat, lng: loc.lng }) : undefined))
+    .catch(() => {})
+  return id
+}
+
+/**
+ * Write a decoded share as brand-new local records (never clobbering existing rows — unlike
+ * backup restore), tagging each with `receivedFrom` for attribution. A territory also gets a
+ * StreetEntry per street so it is managed identically to one drawn here.
+ *
+ * One transaction per import. A territory used to add N street entries and then the
+ * territory outside any transaction, so a failure part-way left orphan entries and "try
+ * again" created another set (AUDIT F040). Sender-assigned `TerritoryStreet.id`s are replaced:
+ * two streets arriving with the same id made every toggle hit both (AUDIT F039).
+ */
+export async function importSharedPayload(payload: SharePayload): Promise<void> {
+  const receivedFrom = { name: payload.from || 'a Meleo user', at: Date.now() }
+
+  await db.transaction('rw', db.people, db.calls, db.streetEntries, db.territories, async () => {
+    if (payload.kind === 'contact') {
+      const { person, calls } = payload.data as ContactPayload
+      const personId = (await db.people.add({
+        ...stripInjectedKeys(person),
+        createdAt: Date.now(),
+        receivedFrom,
+      } as Person)) as number
+      for (const c of calls ?? []) {
+        await db.calls.add({ ...stripInjectedKeys(c), personId } as Call)
+      }
+      return
+    }
+
+    if (payload.kind === 'street') {
+      const data = payload.data as StreetPayload
+      await db.streetEntries.add({ ...stripInjectedKeys(data), createdAt: Date.now(), receivedFrom } as StreetEntry)
+      return
+    }
+
+    const data = payload.data as TerritoryPayload
+    // Back each imported street with its own new StreetEntry (carrying the trace points),
+    // linked via entryId. Same-named streets stay distinct (a new one gets a "(2)"/"(3)"
+    // suffix); the only streets that share an entry are ones that pointed at the SAME sender
+    // entry, deduped via `bySenderEntry` so a genuinely-single shared street isn't split.
+    const existingNames = (await db.streetEntries.toArray()).map((e) => e.name)
+    const bySenderEntry = new Map<number, number>()
+    const streets: TerritoryStreet[] = []
+    let n = 0
+    for (const s of data.streets) {
+      let entryId = s.entryId != null ? bySenderEntry.get(s.entryId) : undefined
+      if (entryId == null) {
+        const name = uniqueStreetName(s.name, existingNames)
+        existingNames.push(name)
+        entryId = (await db.streetEntries.add({
+          name,
+          city: s.city,
+          state: s.state,
+          zip: s.zip,
+          houses: [],
+          points: s.points,
+          createdAt: Date.now(),
+        })) as number
+        if (s.entryId != null) bySenderEntry.set(s.entryId, entryId)
+      }
+      streets.push({ ...s, id: `imp-${Date.now().toString(36)}-${n++}`, entryId })
+    }
+    await db.territories.add({
+      ...stripInjectedKeys(data),
+      streets,
+      createdAt: Date.now(),
+      completed: false,
+      grouped: true,
+      receivedFrom,
+    } as Territory)
   })
 }

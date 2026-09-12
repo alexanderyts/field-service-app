@@ -42,6 +42,27 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   return Notification.requestPermission()
 }
 
+/** Shows a notification the way each platform allows. Chrome for Android refuses the page-
+    context `new Notification()` constructor outright ("Illegal constructor") — an installed
+    PWA there can only notify through its service-worker registration — so that path is tried
+    first wherever a registration exists, and the constructor is the fallback for browsers
+    that still support it (AUDIT F034). Returns whether anything was shown. */
+async function showNotification(title: string, options: NotificationOptions): Promise<boolean> {
+  try {
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : undefined
+    if (reg) {
+      await reg.showNotification(title, options)
+      return true
+    }
+  } catch { /* fall through to the constructor */ }
+  try {
+    new Notification(title, options)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function getSentIds(): Set<number> {
   try { return new Set(JSON.parse(localStorage.getItem(SENT_KEY) ?? '[]')) } catch { return new Set() }
 }
@@ -72,7 +93,7 @@ export async function checkReturnVisitNotifications() {
     if (a.date - now > leadMs) continue // still too far out
     if (sent.has(a.id)) continue
 
-    new Notification('Upcoming return visit', {
+    const shown = await showNotification('Upcoming return visit', {
       body: `${a.title} — ${new Date(a.date).toLocaleString(undefined, {
         weekday: 'short',
         month: 'short',
@@ -82,8 +103,12 @@ export async function checkReturnVisitNotifications() {
       })}`,
       tag: `visit-${a.id}`,
     })
-    sent.add(a.id)
-    changed = true
+    // Only remember it as sent if it was actually shown — otherwise a platform that refused
+    // once would silence that visit forever.
+    if (shown) {
+      sent.add(a.id)
+      changed = true
+    }
   }
 
   // Forget ids whose appointment has already passed — they can never re-enter the lead

@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Appointment } from '../../db'
 import ConfirmDialog from '../ConfirmDialog'
-import { parseLocalDate } from '../../localDate'
+import { parseLocalDate, fmtDateTime } from '../../localDate'
+import { isOverdue, pendingAppointments } from '../../appointments'
 import { ContactPicker } from './ContactPicker'
 
 export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: number) => void }) {
   const appointments = useLiveQuery(() => db.appointments.orderBy('date').toArray(), []) ?? []
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
+  const calls = useLiveQuery(() => db.calls.toArray(), []) ?? []
   const [open, setOpen] = useState(false)
   const [date, setDate] = useState('')
   const [time, setTime] = useState('10:00')
@@ -34,12 +36,14 @@ export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: numb
     setOpen(false)
   }
 
-  const upcoming = appointments.filter((a) => a.date >= Date.now())
+  const now = Date.now()
+  // Missed visits stay listed, marked overdue, until followed up or stale (AUDIT F036).
+  const upcoming = pendingAppointments(appointments, calls, now)
 
   return (
     <div className="card">
       <button className="collapse-header" onClick={() => setOpen((o) => !o)}>
-        <strong>Upcoming Return Visits</strong>
+        <strong>Return Visits</strong>
         <span className="add-plus">{open ? '×' : '+'}</span>
       </button>
 
@@ -76,7 +80,8 @@ export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: numb
             <li key={a.id} className="list-item visit-item">
               <div className="visit-info">
                 <strong>{person?.name ?? a.title}</strong>
-                <div className="muted">{new Date(a.date).toLocaleString()}</div>
+                {isOverdue(a, now) && <span className="badge appt-badge overdue">Overdue</span>}
+                <div className="muted">{fmtDateTime(a.date)}</div>
                 {a.notes && <div className="muted">{a.notes}</div>}
               </div>
               <div className="visit-actions">

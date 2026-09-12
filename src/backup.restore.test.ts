@@ -65,3 +65,31 @@ describe('importBackup — settings restore (AUDIT F-B6)', () => {
     expect(localStorage.getItem('fieldservice_tutorial_seen')).toBe('true')
   })
 })
+
+describe('restoring a pre-v9 file (AUDIT F041)', () => {
+  it('rewrites legacy time categories the way the schema upgrade would', async () => {
+    const body: BackupFile = {
+      app: 'field-service',
+      formatVersion: 1,
+      appVersion: '0.19.1',
+      dbVersion: 8,
+      exportedAt: new Date().toISOString(),
+      tables: {
+        timeLogs: [
+          { id: 1, date: Date.now(), minutes: 60, category: 'ldc' },
+          { id: 2, date: Date.now(), minutes: 30, category: 'ministry' },
+        ],
+      },
+      settings: {},
+    }
+    await importBackup({ text: async () => JSON.stringify(body) } as unknown as File)
+    const logs = await db.timeLogs.orderBy('id').toArray()
+    expect(logs.map((l) => l.category)).toEqual(['credit', 'ministry'])
+    expect(logs[0].activityNote).toBe('LDC')
+  })
+
+  it('refuses a file whose tables field is null with the friendly error', async () => {
+    const file = { text: async () => JSON.stringify({ app: 'field-service', tables: null }) } as unknown as File
+    await expect(importBackup(file)).rejects.toThrow(/Meleo backup/)
+  })
+})

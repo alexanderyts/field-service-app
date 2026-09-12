@@ -6,9 +6,9 @@ import {
   encodeSharePayload,
   decodeSharePayload,
   stripInjectedKeys,
-  importSharedPayload,
   type SharePayload,
 } from './share'
+import { importSharedPayload } from './records'
 
 function toBase64Url(bytes: Uint8Array): string {
   let bin = ''
@@ -269,5 +269,57 @@ describe('importSharedPayload — what reaches the database', () => {
     expect(await db.streetEntries.count()).toBe(1)
     const streets = (await db.territories.toArray())[0].streets
     expect(streets[0].entryId).toBe(streets[1].entryId)
+  })
+})
+
+describe('decodeSharePayload — field types (AUDIT F039)', () => {
+  const enc = (p: unknown) => encodeSharePayload(p as SharePayload)
+  const contact = (person: Record<string, unknown>, calls: unknown[] = []) =>
+    ({ v: 1, kind: 'contact', from: 'x', data: { person: { name: 'A', ...person }, calls } })
+
+  it('rejects a non-numeric coordinate on a contact', async () => {
+    await expect(decodeSharePayload(await enc(contact({ lat: 'abc', lng: 'abc' })))).rejects.toThrow(/malformed/i)
+    await expect(decodeSharePayload(await enc(contact({ lat: 1 })))).rejects.toThrow(/malformed/i)
+  })
+  it('rejects a call that is not an object', async () => {
+    await expect(decodeSharePayload(await enc(contact({}, [null])))).rejects.toThrow(/malformed/i)
+  })
+  it('rejects an unknown contact status', async () => {
+    await expect(decodeSharePayload(await enc(contact({ status: 'vip' })))).rejects.toThrow(/malformed/i)
+  })
+  it('rejects territory streets whose points are not {lat,lng} numbers', async () => {
+    const t = (streets: unknown[]) => ({ v: 1, kind: 'territory', from: 'x', data: { name: 'T', streets } })
+    await expect(decodeSharePayload(await enc(t([{ id: '1', name: 'S', points: [null], done: false }])))).rejects.toThrow(/malformed/i)
+    await expect(decodeSharePayload(await enc(t([{ id: '1', name: 'S', points: 'abc', done: false }])))).rejects.toThrow(/malformed/i)
+    await expect(decodeSharePayload(await enc(t([null])))).rejects.toThrow(/malformed/i)
+  })
+  it('makes a non-string `from` anonymous and refuses an absurd one', async () => {
+    const ok = await decodeSharePayload(await enc({ ...contact({}), from: [{}] }))
+    expect(ok.from).toBe('')
+    await expect(decodeSharePayload(await enc({ ...contact({}), from: 'x'.repeat(201) }))).rejects.toThrow(/malformed/i)
+  })
+})
+
+describe('importSharedPayload — transaction (AUDIT F040)', () => {
+  beforeEach(async () => {
+    await db.open()
+    await db.transaction('rw', db.tables, async () => { for (const t of db.tables) await t.clear() })
+  })
+  it('leaves nothing behind when a territory import fails part-way', async () => {
+    const payload = {
+      v: 1, kind: 'territory', from: 'x',
+      data: { name: 'T', streets: [{ id: '1', name: 'Good St', points: [], done: false }, null] },
+    } as unknown as SharePayload
+    await expect(importSharedPayload(payload)).rejects.toThrow()
+    expect(await db.streetEntries.count()).toBe(0)
+    expect(await db.territories.count()).toBe(0)
+  })
+  it('gives imported streets fresh ids so two with the same sender id stay distinct', async () => {
+    await importSharedPayload({
+      v: 1, kind: 'territory', from: 'x',
+      data: { name: 'T', streets: [{ id: '1', name: 'A', points: [], done: false }, { id: '1', name: 'B', points: [], done: false }] },
+    } as SharePayload)
+    const t = (await db.territories.toArray())[0]
+    expect(new Set(t.streets.map((s) => s.id)).size).toBe(2)
   })
 })

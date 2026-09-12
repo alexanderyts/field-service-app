@@ -88,8 +88,9 @@ export function PrivacyGate({ onAccept }: { onAccept: () => void }) {
             <p>
               All data you enter — including contacts, addresses, phone numbers, call logs, time records, and
               schedules — is stored exclusively on your device using your browser's built-in local storage
-              (IndexedDB). <strong>No data is ever transmitted to any server, cloud service, or third party.</strong>{' '}
-              The developer has no access to any information you enter into this App.
+              (IndexedDB). <strong>The App has no server of its own, and the developer has no access to anything
+              you enter.</strong> Nothing you record is uploaded or synced anywhere; sharing between devices
+              happens only by a QR code, link, or file you choose to send.
             </p>
           </section>
 
@@ -109,7 +110,14 @@ export function PrivacyGate({ onAccept }: { onAccept: () => void }) {
             <p>
               This App does not collect, process, sell, or share any personal data about you or the contacts you
               create. There are no analytics, tracking scripts, advertising networks, or backend infrastructure of
-              any kind.
+              any kind. The map features do talk to outside map services, and it is only fair to say exactly what
+              they receive: when you save an address or type one in, the <strong>address text</strong> (never a
+              name, phone number, or note) is sent to OpenStreetMap's Nominatim service to find its position;
+              when you trace a street, the <strong>area's coordinates</strong> are sent to the Overpass API to snap
+              the line to a real road; and the map tiles you look at are fetched from Esri, which therefore sees
+              the <strong>area being viewed</strong>. "Get Directions" opens the address in Google Maps. Each of
+              these also sees your device's IP address, as any web request does. If you never enter an address
+              and never open the Map tab, none of them are contacted.
             </p>
           </section>
 

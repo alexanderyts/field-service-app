@@ -5,7 +5,7 @@ import { expandState } from '../usStates'
 import ModalPortal from '../ModalPortal'
 import ConfirmDialog from './ConfirmDialog'
 import ShareModal from './ShareModal'
-import { SharedBadge, SharedWarning } from './SharedBits'
+import { SharedBadge, SharedWarning, pressable } from './SharedBits'
 import { buildStreetPayload } from '../share'
 import { findStreetTraceMidpoint } from '../streets'
 
@@ -100,15 +100,16 @@ export default function StreetEntries({
       <input
         className="full"
         placeholder="Search street, city, zip…"
+        aria-label="Search streets"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
 
       {anyInTerritory && (
         <div className="segmented">
-          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All</button>
-          <button className={filter === 'standalone' ? 'active' : ''} onClick={() => setFilter('standalone')}>Standalone</button>
-          <button className={filter === 'territory' ? 'active' : ''} onClick={() => setFilter('territory')}>In a territory</button>
+          <button className={filter === 'all' ? 'active' : ''} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All</button>
+          <button className={filter === 'standalone' ? 'active' : ''} aria-pressed={filter === 'standalone'} onClick={() => setFilter('standalone')}>Standalone</button>
+          <button className={filter === 'territory' ? 'active' : ''} aria-pressed={filter === 'territory'} onClick={() => setFilter('territory')}>In a territory</button>
         </div>
       )}
 
@@ -137,8 +138,10 @@ export default function StreetEntries({
         {filtered.map((e) => {
           const address = [e.city, e.state, e.zip].filter(Boolean).join(', ')
           return (
-            <li key={e.id} className="list-item clickable" onClick={() => (editMode ? toggleSelect(e.id) : setSelectedId(e.id))}>
-              {editMode && <input type="checkbox" checked={selectedIds.has(e.id)} readOnly style={{ marginRight: 10, flexShrink: 0 }} />}
+            <li key={e.id} className="list-item clickable" {...pressable(() => (editMode ? toggleSelect(e.id) : setSelectedId(e.id)))}>
+              {editMode && (
+                <input type="checkbox" checked={selectedIds.has(e.id)} onChange={() => toggleSelect(e.id)} onClick={(ev) => ev.stopPropagation()} aria-label={`Select ${e.name}`} style={{ marginRight: 10, flexShrink: 0 }} />
+              )}
               <div>
                 <strong>{e.name}</strong>
                 <span className="badge">{e.houses.length} house{e.houses.length === 1 ? '' : 's'}</span>
