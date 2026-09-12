@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import ErrorBoundary from './ErrorBoundary.tsx'
 import { getTheme } from './settings'
+import { installViewportFix } from './viewportFix'
 
 // Applied before first paint so a non-light theme doesn't flash light on load. `getTheme`
 // is total — it swallows a throwing localStorage (Safari "Block All Cookies", managed
@@ -13,6 +14,10 @@ import { getTheme } from './settings'
 // carries no attribute.
 const theme = getTheme()
 if (theme !== 'light') document.documentElement.dataset.theme = theme
+
+// Corrects the installed-iOS launch-viewport shortfall so bottom-fixed chrome (tab bar,
+// toast) lands at the true screen edge on first paint instead of settling on first scroll.
+installViewportFix()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

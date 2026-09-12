@@ -9,7 +9,7 @@ import { StepperNav, GoalRing } from '../SharedBits'
 import { daySegments } from '../../goalSegments'
 import { type AuxConfig, auxTargetHoursFor, getAuxConfig, isAuxMonth, saveAuxConfig, weeklyHoursNeeded } from '../../auxPioneering'
 import { deriveRole, roleTracksHours } from '../../schedulePrefsRole'
-import { milestoneReached, paceDeltaMin, paceStatus, type Pace } from '../../milestones'
+import { milestoneReached, paceDeltaMin, paceStatus, perDayToGoal, type Pace } from '../../milestones'
 import ConfirmDialog from '../ConfirmDialog'
 import { DAYS, DAY_RANGE, dayTrackPct, fmtTime, startOfWeek, fmtDayMonth, fmtDayMonthFull, calendarWeekNumber, MONTH_NAMES_LONG, monthsTouchedByRange, monthLogsFor, daysLeftInMonth, monthElapsedPct, MONTH_NAMES } from './dates'
 import { fmtLocalDate } from '../../localDate'
@@ -25,14 +25,17 @@ import type { LogInterval } from './LogTimeForm'
 type DayModalInitialLog = { hours: number; minutes: number; category?: TimeCategory; activityNote?: string; interval?: LogInterval }
 import { ScheduleCalendarView } from './ScheduleCalendarView'
 import { MonthlyParticipationBox } from './MonthlyParticipationBox'
+import { EntriesModal } from './EntriesModal'
 import { AuxPioneeringBox } from './AuxPioneeringBox'
 import { ReturnVisits } from './ReturnVisits'
 
+// No "Behind pace" chip on purpose: being short is shown as a forward plan (hours to go,
+// per-day amount), never as a label that just names the shortfall (owner note, Wave 5 §C).
 const PACE_LABEL: Record<Pace, string> = {
   done: 'Goal reached',
   ahead: 'Ahead of pace',
   'on-pace': 'On pace',
-  behind: 'Behind pace',
+  behind: '',
   'not-started': '',
 }
 
@@ -73,7 +76,8 @@ export function ScheduleMain({
   const [highlightTs, setHighlightTs] = useState<number | null>(null)
   const [confirmDeleteLogId, setConfirmDeleteLogId] = useState<number | null>(null)
   const [editingLog, setEditingLog] = useState<TimeLog | null>(null)
-  const [visibleLogCount, setVisibleLogCount] = useState(4)
+  const RECENT_LOG_COUNT = 3
+  const [showAllEntries, setShowAllEntries] = useState(false)
   const [dayModalFor, setDayModalFor] = useState<Date | null>(null)
   const [dayModalOriginRect, setDayModalOriginRect] = useState<DOMRect | null>(null)
   // Which step the day modal opens on — 'menu' for a normal day tap, 'logTime' for the
@@ -134,7 +138,7 @@ export function ScheduleMain({
 
   function progressScrollTarget(): number {
     const headerH = (document.querySelector('.app-header') as HTMLElement | null)?.offsetHeight ?? 0
-    // The planner now sits below Recent Entries, so an expand pins the planner card itself.
+    // Expanding the planner pins the planner card itself just under the header.
     const pc = schedCardRef.current
     if (!pc) return window.scrollY
     return Math.max(0, window.scrollY + pc.getBoundingClientRect().top - headerH - 10)
@@ -381,13 +385,19 @@ export function ScheduleMain({
   // Pace against the elapsed share of the month — only meaningful for the month you're in.
   const pace = isCurrentMonthShown ? paceStatus(monthProgress.applied, monthProgress.goalMin, monthElapsedPctVal) : 'not-started'
   const paceDelta = paceDeltaMin(monthProgress.applied, monthProgress.goalMin, monthElapsedPctVal)
+  const daysWord = `${monthDaysLeft} day${monthDaysLeft === 1 ? '' : 's'} left`
+  const remainingMin = Math.max(0, monthProgress.goalMin - monthProgress.applied)
+  const perDay = perDayToGoal(monthProgress.applied, monthProgress.goalMin, monthDaysLeft)
+  // Behind and not-yet-started both point forward: what's left, and roughly how much a day
+  // gets there — never a label about falling short (Wave 5 §C).
   const paceText = !isCurrentMonthShown
     ? `${monthProgress.pct}% of the goal`
     : pace === 'done' ? '🎉 Goal reached for this month'
-    : pace === 'ahead' ? `${fmtDuration(paceDelta)} ahead of pace · ${monthDaysLeft} day${monthDaysLeft === 1 ? '' : 's'} left`
-    : pace === 'behind' ? `${fmtDuration(-paceDelta)} behind pace · ${monthDaysLeft} day${monthDaysLeft === 1 ? '' : 's'} left`
-    : pace === 'on-pace' ? `On pace · ${monthDaysLeft} day${monthDaysLeft === 1 ? '' : 's'} left`
-    : `${monthDaysLeft} day${monthDaysLeft === 1 ? '' : 's'} to go`
+    : pace === 'ahead' ? `${fmtDuration(paceDelta)} ahead of pace · ${daysWord}`
+    : pace === 'on-pace' ? `On pace · ${daysWord}`
+    : monthProgress.goalMin > 0
+      ? `${fmtDuration(remainingMin)} to go · ${daysWord} · about ${fmtDuration(perDay)} a day`
+      : `${daysWord}`
 
   // Milestone moments (25/50/75/100% of the month, 100% of the service year). Compared against
   // the previous render's totals for the *current* month, so every write path — quick log, bank
@@ -768,6 +778,25 @@ export function ScheduleMain({
         }
       />
 
+        {/* The minute bank lives here now (moved off the Service Schedule header to declutter
+            it). Its own row keeps the arrival pulse clear of the title/button; the anchor is
+            always rendered so the fly has a stable landing target. */}
+        <div className="minute-bank-row">
+          <span className="minute-bank-anchor" aria-hidden="true" />
+          {(displayedBank > 0 || bankCollapsing) && (
+            <div
+              className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
+              onClick={() => setConfirmBankRoundUp(true)}
+              title="Tap to log these minutes now"
+            >
+              <span>⏱ {displayedBank}m</span>
+              <div className="minute-bank-track">
+                <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
+              </div>
+            </div>
+          )}
+        </div>
+
       {/* Progress is the hero: month first, service year second, week pace last, nothing
           behind an "Expand" (docs/tracking-first-plan.md D3). The bars themselves are the
           same elements they always were — only their order and gating changed. */}
@@ -909,80 +938,6 @@ export function ScheduleMain({
           onChange={updateParticipated}
         />
       )}
-
-      <ReturnVisits onGoToContact={onGoToContact} />
-
-      <div className="card">
-        <div className="recent-entries-header">
-          <h4 style={{ margin: 0 }}>Recent Entries</h4>
-          <button
-            className="secondary small"
-            title="Log service time for today"
-            onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
-          >
-            + Log time
-          </button>
-        </div>
-        {/* The minute bank lives here now (moved off the Service Schedule header to declutter
-            it). Its own row keeps the arrival pulse clear of the title/button; the anchor is
-            always rendered so the fly has a stable landing target. */}
-        <div className="minute-bank-row">
-          <span className="minute-bank-anchor" aria-hidden="true" />
-          {(displayedBank > 0 || bankCollapsing) && (
-            <div
-              className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
-              onClick={() => setConfirmBankRoundUp(true)}
-              title="Tap to log these minutes now"
-            >
-              <span>⏱ {displayedBank}m</span>
-              <div className="minute-bank-track">
-                <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
-              </div>
-            </div>
-          )}
-        </div>
-        <ul className="list">
-            {logs.slice(0, visibleLogCount).map((l) => (
-              <li key={l.id} className="list-item">
-                <div className="visit-info">
-                  <span className={`cat-dot ${isCredit(l.category) ? 'credit' : 'ministry'}`} />
-                  {/* The Activity Note is what makes the two-category model readable: a
-                      pre-0.20 LDC entry now reads "Credit — LDC", not a bare "Credit". */}
-                  <strong>{fmtDuration(l.minutes)}</strong> · {CATEGORY_LABELS[l.category]}
-                  {[l.activityNote, l.note].filter(Boolean).map((t) => ` — ${t}`).join('')}
-                  <div className="muted">
-                    {new Date(l.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </div>
-                </div>
-                <div className="visit-actions">
-                  <button className="secondary small" onClick={() => setEditingLog(l)}>
-                    Edit
-                  </button>
-                  <button className="icon-btn row-delete" title="Delete entry" aria-label="Delete this entry" onClick={() => setConfirmDeleteLogId(l.id)}>
-                    🗑
-                  </button>
-                </div>
-              </li>
-            ))}
-            {logs.length === 0 && <p className="muted">No time logged yet.</p>}
-          </ul>
-          {visibleLogCount < logs.length && (
-            <button className="secondary small" onClick={() => setVisibleLogCount((n) => n + 4)}>
-              See more
-            </button>
-          )}
-          <ConfirmDialog
-            open={confirmDeleteLogId != null}
-            title="Delete this time entry?"
-            message="This can't be undone."
-            onConfirm={() => {
-              if (confirmDeleteLogId != null) db.timeLogs.delete(confirmDeleteLogId)
-              setConfirmDeleteLogId(null)
-            }}
-            onCancel={() => setConfirmDeleteLogId(null)}
-          />
-          {editingLog && <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} />}
-        </div>
 
       {/* Service Schedule — mini week (collapsed), inline month calendar, or inline week grid */}
       <div className="card sched-card" ref={schedCardRef}>
@@ -1244,9 +1199,75 @@ export function ScheduleMain({
         </div>
       </div>
 
+      <ReturnVisits onGoToContact={onGoToContact} />
+
+      <div className="card">
+        <div className="recent-entries-header">
+          <h4 style={{ margin: 0 }}>Recent Entries</h4>
+          <button
+            className="secondary small"
+            title="Log service time for today"
+            onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
+          >
+            + Log time
+          </button>
+        </div>
+        <ul className="list">
+            {logs.slice(0, RECENT_LOG_COUNT).map((l) => (
+              <li key={l.id} className="list-item">
+                <div className="visit-info">
+                  <span className={`cat-dot ${isCredit(l.category) ? 'credit' : 'ministry'}`} />
+                  {/* The Activity Note is what makes the two-category model readable: a
+                      pre-0.20 LDC entry now reads "Credit — LDC", not a bare "Credit". */}
+                  <strong>{fmtDuration(l.minutes)}</strong> · {CATEGORY_LABELS[l.category]}
+                  {[l.activityNote, l.note].filter(Boolean).map((t) => ` — ${t}`).join('')}
+                  <div className="muted">
+                    {new Date(l.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </div>
+                </div>
+                <div className="visit-actions">
+                  <button className="secondary small" onClick={() => setEditingLog(l)}>
+                    Edit
+                  </button>
+                  <button className="icon-btn row-delete" title="Delete entry" aria-label="Delete this entry" onClick={() => setConfirmDeleteLogId(l.id)}>
+                    🗑
+                  </button>
+                </div>
+              </li>
+            ))}
+            {logs.length === 0 && <p className="muted">No time logged yet.</p>}
+          </ul>
+          {logs.length > RECENT_LOG_COUNT && (
+            <button className="secondary small" onClick={() => setShowAllEntries(true)}>
+              See all {logs.length}
+            </button>
+          )}
+          <ConfirmDialog
+            open={confirmDeleteLogId != null}
+            title="Delete this time entry?"
+            message="This can't be undone."
+            onConfirm={() => {
+              if (confirmDeleteLogId != null) db.timeLogs.delete(confirmDeleteLogId)
+              setConfirmDeleteLogId(null)
+            }}
+            onCancel={() => setConfirmDeleteLogId(null)}
+          />
+          {editingLog && <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} />}
+        </div>
+
+
       <div className="row" style={{ justifyContent: 'center', marginTop: 4 }}>
         <button className="secondary small" onClick={onRedo}>Change my goal</button>
       </div>
+
+      {showAllEntries && (
+        <EntriesModal
+          logs={logs}
+          onEdit={(l) => setEditingLog(l)}
+          onDelete={(id) => setConfirmDeleteLogId(id)}
+          onClose={() => setShowAllEntries(false)}
+        />
+      )}
 
       {toast && <div className="toast" role="status">{toast}</div>}
 

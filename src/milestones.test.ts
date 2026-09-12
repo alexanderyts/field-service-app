@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { milestoneReached, paceStatus, paceDeltaMin } from './milestones'
+import { milestoneReached, paceStatus, paceDeltaMin, perDayToGoal } from './milestones'
 
 const GOAL = 60 * 60 // 60h in minutes
 
@@ -46,5 +46,18 @@ describe('paceDeltaMin', () => {
     expect(paceDeltaMin(40 * 60, GOAL, 50)).toBe(10 * 60)
     expect(paceDeltaMin(20 * 60, GOAL, 50)).toBe(-10 * 60)
     expect(paceDeltaMin(5, 0, 50)).toBe(0)
+  })
+})
+
+describe('perDayToGoal', () => {
+  it('spreads what remains across the days left, rounded up', () => {
+    expect(perDayToGoal(20 * 60, GOAL, 10)).toBe(4 * 60) // 40h left over 10 days = 4h/day
+  })
+  it('is 0 once the goal is reached', () => {
+    expect(perDayToGoal(GOAL, GOAL, 5)).toBe(0)
+    expect(perDayToGoal(GOAL + 60, GOAL, 5)).toBe(0)
+  })
+  it('puts the remainder on today when no days are left', () => {
+    expect(perDayToGoal(50 * 60, GOAL, 0)).toBe(10 * 60)
   })
 })

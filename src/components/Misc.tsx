@@ -7,6 +7,7 @@ import { readMeleoFile } from '../share'
 import { InstallCard } from './InstallPrompt'
 import { tipServices, type TipKind } from '../tips'
 import { APP_VERSION } from '../version'
+import { viewportDiag } from '../viewportFix'
 import { COPYRIGHT_SUMMARY, NOT_AFFILIATED, DEVELOPER_NAME, DEVELOPER_EMAIL } from '../legal'
 import { getProfileName, saveProfileName } from '../profile'
 import { creditHoursEnabled, setCreditHoursEnabled, getTheme, setTheme as saveTheme, getLastBackupAt, type Theme } from '../settings'
@@ -613,6 +614,9 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
 
       <p className="muted" style={{ textAlign: 'center', fontSize: 12, margin: '4px 0 0' }}>
         Meleo v{APP_VERSION}
+      </p>
+      <p className="muted" style={{ textAlign: 'center', fontSize: 10, margin: '2px 0 0', opacity: 0.6 }}>
+        {viewportDiag()}
       </p>
     </div>
   )

@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.24.0`.** History runs from the initial scaffold forward.
+**Current version: `0.25.0`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -186,6 +186,13 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.20.3 — Browser security policy · 2026-09-07
 - **The app now tells the browser exactly what it's allowed to load and run.** Only Meleo's own code can execute — no injected or inline script ever will — and the only outside places it may contact are the map-tile and address-lookup services it already uses. Nothing changes day to day; it closes the door on a whole class of tampering (F009)
 - Checked by opening the real built app in a browser and exercising the map (both tile sources), the Schedule tab and a contact's share code, with no policy refusals
+
+## 0.25.0 — Launch position, tab flow, and kinder pacing · 2026-09-12
+- **The bottom tab bar lands in the right place on launch.** Installed iOS web apps come up with a viewport that is briefly too short, which floated the bar a little high until the first scroll. Meleo now corrects that shortfall so the bar sits at the true bottom edge from the first frame. A tiny diagnostic line under the version in More reports the numbers, for confirming the fix on a device
+- **The Service tab reads top to bottom in the order you use it:** Log time and the timer, the minute-bank pill right under them, your progress, the weekly schedule, return visits, then recent entries. The schedule sits higher now
+- **Recent entries stay short** — the three most recent, with "See all" opening the full history grouped by month with a total for each month. Return visits show three with "Show all"
+- **Being behind no longer shows a "Behind pace" badge.** Instead the line looks forward: how much time is left this month, the days remaining, and roughly how much a day reaches the goal
+- Verified: 241 tests (new `viewportFix` and `perDayToGoal`); the built app driven in the browser — tab-tab order, the 3-then-"See all" lists with the month-grouped modal, and the forward-looking pace line with no behind badge
 
 ## 0.24.0 — Live timer, and a report that matches the form · 2026-09-12
 - **A live timer on the Service tab.** Start it when you head out, pause if you need to, and Stop opens the time form already filled with what it counted. It survives the app being closed or the phone being locked — the running time is kept as timestamps, not a ticking counter — and the entry records the real start and end for your own records

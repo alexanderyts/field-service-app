@@ -446,7 +446,9 @@
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: calc(12px + env(safe-area-inset-bottom));
+  /* `--deficit` (set by viewportFix.ts) is the installed-iOS launch shortfall; it reads 0
+     everywhere else, so this is a no-op except during that launch state. */
+  bottom: calc(12px + env(safe-area-inset-bottom) - var(--deficit, 0px));
   max-width: 688px;
   margin: 0 auto;
   display: flex;
@@ -457,6 +459,9 @@
   padding: 6px;
   gap: 2px;
   z-index: 10;
+  /* Own compositing layer: the sister app found labels below the short launch viewport line
+     went unpainted without this. */
+  transform: translateZ(0);
 }
 
 .tabbar button {
@@ -3720,16 +3725,12 @@ button.small {
   background: var(--accent-soft);
   color: var(--accent);
 }
-.pace-chip.pace-behind {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
 
 /* Milestone toast: short, non-blocking, sits above the tab bar. */
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(84px + env(safe-area-inset-bottom));
+  bottom: calc(84px + env(safe-area-inset-bottom) - var(--deficit, 0px));
   transform: translateX(-50%);
   max-width: min(92vw, 420px);
   padding: 10px 16px;
@@ -3819,3 +3820,15 @@ button.small {
 }
 .report-submit-list li:last-child { border-bottom: none; }
 .report-submit-list strong { font-size: 16px; }
+
+/* All-entries modal: month subtotals (Wave 5 §B). */
+.entries-month-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}

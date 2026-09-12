@@ -16,6 +16,7 @@ export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: numb
   const [personId, setPersonId] = useState<number | null>(null)
   const [notes, setNotes] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+  const [showAll, setShowAll] = useState(false)
 
   async function add() {
     if (!personId || !date) return
@@ -74,7 +75,7 @@ export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: numb
       )}
 
       <ul className="list">
-        {upcoming.map((a) => {
+        {(showAll ? upcoming : upcoming.slice(0, 3)).map((a) => {
           const person = people.find((p) => p.id === a.personId)
           return (
             <li key={a.id} className="list-item visit-item">
@@ -99,6 +100,11 @@ export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: numb
         })}
         {upcoming.length === 0 && <p className="muted">No return visits scheduled. Set one here or while logging a call.</p>}
       </ul>
+      {upcoming.length > 3 && (
+        <button className="secondary small" onClick={() => setShowAll((v) => !v)}>
+          {showAll ? 'Show fewer' : `Show all (${upcoming.length})`}
+        </button>
+      )}
 
       <ConfirmDialog
         open={confirmDeleteId != null}

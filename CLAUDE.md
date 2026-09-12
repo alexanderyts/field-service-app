@@ -62,6 +62,7 @@ src/
   schedulePrefsRole.ts # Role (publisher/auxiliary/pioneer) derivation + whether hours are tracked this month
   minuteBankFly.ts     # The "minute bank" fly-to-pill animation helper
   timer.ts             # Live service timer: pure start/pause/resume/stop arithmetic + its localStorage record (tested)
+  viewportFix.ts       # Installed-iOS launch-viewport deficit correction (--deficit); bottom-fixed chrome subtracts it
   auxPioneering.ts     # Auxiliary-pioneer config (localStorage) + target-hour math
   auxSlip.ts           # Fills the S-205b auxiliary-pioneer PDF (pdf-lib)
   tips.ts              # Tip/support link config for the More tab
@@ -333,9 +334,11 @@ brand/category/tag hues are brightened per dark theme for contrast.
   pioneer — then only what that role needs (yearly goal + credit; aux months + target; optional
   personal goal). Days and time windows are never asked; planning is opt-in on the tab itself.
   "Change my goal" at the bottom of the tab reopens it and leaves `daysOut`/`daySchedule` untouched.
-- The tab leads with logged time: progress card (month → service year → week pace, plus a pace
-  chip/line from `milestones.ts`), then participation (publishers without a goal), Return Visits,
-  Recent Entries, and only then the planner (Service Schedule card, collapsed). Milestone toasts
+- The tab order (0.25.0): Log time + `TimerCard`, the minute-bank pill, the progress card (month
+  → service year → week pace, plus a pace chip/line from `milestones.ts` — no "behind" chip; short
+  reads as a forward per-day plan), participation (publishers without a goal), the planner
+  (Service Schedule card, collapsed), Return Visits (3 + "Show all"), Recent Entries (3 + "See
+  all" → `EntriesModal`, month-grouped). Milestone toasts
   fire from a render-side baseline comparison so every write path is covered. Goals are displayed
   through `displayGoalMin` on both this tab and Reports (docs/tracking-first-plan.md).
 

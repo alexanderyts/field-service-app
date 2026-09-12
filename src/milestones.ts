@@ -42,3 +42,12 @@ export function paceDeltaMin(appliedMin: number, goalMin: number, elapsedPct: nu
   if (!(goalMin > 0)) return 0
   return Math.round(appliedMin - (goalMin * elapsedPct) / 100)
 }
+
+/** Minutes per remaining day to still reach the goal — the forward-looking figure shown
+    instead of a "behind" label, so being short reads as a plan, not a verdict. 0 once the
+    goal is reached; with no days left, whatever remains falls on today. */
+export function perDayToGoal(appliedMin: number, goalMin: number, daysLeft: number): number {
+  const remaining = Math.max(0, goalMin - appliedMin)
+  if (remaining === 0) return 0
+  return Math.ceil(remaining / Math.max(1, daysLeft))
+}
