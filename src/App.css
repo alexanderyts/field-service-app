@@ -421,6 +421,8 @@
 
 .install-banner-close {
   flex-shrink: 0;
+  width: 44px;
+  height: 44px;
   background: transparent;
   border: none;
   color: var(--muted);
@@ -3377,6 +3379,7 @@ button.small {
 
 .segmented button {
   flex: 1;
+  min-height: 44px;
   background: transparent;
   color: var(--text);
   border: none;
@@ -3425,6 +3428,7 @@ button.small {
 .house-status {
   flex: 0 0 auto;
   max-width: 145px;
+  min-height: 44px;
   padding: 5px 8px;
   font-size: 13px;
 }
@@ -3686,6 +3690,16 @@ button.small {
   background: var(--danger);
 }
 
+/* Backed up, but a while ago (AUDIT F044) — amber, not the red of never. */
+.backup-status.overdue {
+  color: var(--credit);
+  border-color: var(--credit-soft);
+  background: var(--credit-soft);
+}
+.backup-status.overdue .backup-status-dot {
+  background: var(--credit);
+}
+
 /* ── Grouped-territory street rows: finished state ─────────────────────── */
 
 .territory-street-done {
@@ -3831,4 +3845,56 @@ button.small {
   letter-spacing: 0.04em;
   color: var(--muted);
   margin: 10px 0 4px;
+}
+
+/* Back-up reminder banner on the Ministry tab (AUDIT F044). */
+.backup-nag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px 9px 14px;
+  border-radius: 12px;
+  background: var(--credit-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.backup-nag button {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+/* Map first-run + offline states (AUDIT F045). */
+.error.map-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+.error.map-error button { flex: 0 0 auto; color: inherit; }
+.map-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  pointer-events: none;
+  z-index: 400;
+}
+.map-empty p { max-width: 280px; color: var(--text); margin: 0; font-size: 14px; line-height: 1.5; }
+.map-banner {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 400;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--credit-soft);
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
 }

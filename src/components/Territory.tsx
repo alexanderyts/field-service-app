@@ -351,6 +351,7 @@ export function TerritoryManager({
   const [viewStreet, setViewStreet] = useState<TerritoryStreet | null>(null)
   const [shareStreet, setShareStreet] = useState<TerritoryStreet | null>(null)
   const [confirmSend, setConfirmSend] = useState<TerritoryStreet | null>(null)
+  const [confirmRemoveStreet, setConfirmRemoveStreet] = useState<TerritoryStreet | null>(null)
   const streetEntries = useLiveQuery(() => db.streetEntries.toArray(), []) ?? []
   const sendDup = confirmSend
     ? streetEntries.some((e) => e.name.trim().toLowerCase() === confirmSend.name.trim().toLowerCase())
@@ -504,7 +505,7 @@ export function TerritoryManager({
                         <button className="secondary small" onClick={() => { setEditStreetId(s.id); setDrawOpen(true) }}>✏️ Edit trace</button>
                         <button className="secondary small" onClick={() => setViewStreet(s)}>🗺️ Map</button>
                         <button className="secondary small" onClick={() => setShareStreet(s)}>↗ Share</button>
-                        <button className="secondary small" onClick={() => removeStreet(s.id)}>🗑 Remove</button>
+                        <button className="secondary small" onClick={() => setConfirmRemoveStreet(s)}>🗑 Remove</button>
                       </div>
                       <input
                         className="assign-input"
@@ -568,6 +569,17 @@ export function TerritoryManager({
         tone="primary"
         onConfirm={() => { if (confirmSend) sendStreetToMinistry(confirmSend) }}
         onCancel={() => setConfirmSend(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmRemoveStreet != null}
+        title={confirmRemoveStreet ? `Remove "${confirmRemoveStreet.name}" from this draft?` : ''}
+        message="The traced line for this street is lost. This can't be undone."
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={() => { if (confirmRemoveStreet) removeStreet(confirmRemoveStreet.id); setConfirmRemoveStreet(null) }}
+        onCancel={() => setConfirmRemoveStreet(null)}
       />
 
       <ConfirmDialog

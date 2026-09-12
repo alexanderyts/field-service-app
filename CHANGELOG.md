@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.25.0`.** History runs from the initial scaffold forward.
+**Current version: `0.25.1`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -186,6 +186,14 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.20.3 — Browser security policy · 2026-09-07
 - **The app now tells the browser exactly what it's allowed to load and run.** Only Meleo's own code can execute — no injected or inline script ever will — and the only outside places it may contact are the map-tile and address-lookup services it already uses. Nothing changes day to day; it closes the door on a whole class of tampering (F009)
 - Checked by opening the real built app in a browser and exercising the map (both tile sources), the Schedule tab and a contact's share code, with no policy refusals
+
+## 0.25.1 — Data guards, first-run help, and offline maps · 2026-09-12
+- **Clearing all data is safer.** The button moved into "Your data" next to Backup, its warning lists everything that goes and says to export first, and it now takes two confirmations. Deleting a house or a draft-territory street asks first too
+- **A gentle backup reminder.** After a month without a backup (and only when there's data), the Ministry tab shows a dismissible line; the More tab's backup status turns amber when it's overdue
+- **Kinder, clearer map and list first runs.** A denied or failed location now explains what to do instead of showing a raw error, and can be dismissed. An empty map says how to get pins on it. Missing map tiles say they need a connection. An empty People list invites you to add someone instead of reading like a broken search, and there's a new "Next visit" sort
+- **Maps work offline for places you've been.** Tiles you've already viewed are cached, so the map and territory previews still draw without a connection. The rarely-used pioneer-slip PDF no longer downloads on install — it fetches the first time you need it — and the map engine is no longer loaded until you open a map, making the app start faster
+- **Accessibility and motion.** "Reduce motion" is now honored everywhere; a faint status tag got darker for contrast; more controls meet the 44px touch-target size; and the splash only plays its full animation on the very first launch
+- Verified: 244 tests; production build (main bundle down from ~452 kB to ~290 kB, Leaflet split into its own lazy chunk); the app driven in the browser across the Ministry, Map, and More tabs
 
 ## 0.25.0 — Launch position, tab flow, and kinder pacing · 2026-09-12
 - **The bottom tab bar lands in the right place on launch.** Installed iOS web apps come up with a viewport that is briefly too short, which floated the bar a little high until the first scroll. Meleo now corrects that shortfall so the bar sits at the true bottom edge from the first frame. A tiny diagnostic line under the version in More reports the numbers, for confirming the fix on a device

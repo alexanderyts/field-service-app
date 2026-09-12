@@ -27,6 +27,8 @@ const SETTINGS_BLOCKLIST = new Set([
   LAST_BACKUP_AT_KEY,
   // A half-run live timer is device state, not a record (timer.ts).
   'fieldservice_timer',
+  // When this device last dismissed the back-up nag — per-device UX, not a record.
+  'fieldservice_backup_nag_dismissed_at',
 ])
 
 export interface BackupFile {

@@ -75,8 +75,11 @@ function App() {
   // own; hold long enough to let it finish and settle (~450ms rest) before fading out, over
   // the same 0.4s the .splash-out keyframe already uses.
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase('splash-out'), 2450)
-    const t2 = setTimeout(() => setPhase(nextPhase()), 2850)
+    // The full word-transformation animation plays once, on the very first launch. Every
+    // later launch (policy already accepted) gets a short fade so the app opens fast (F046).
+    const seen = hasAcceptedPolicy()
+    const t1 = setTimeout(() => setPhase('splash-out'), seen ? 900 : 2450)
+    const t2 = setTimeout(() => setPhase(nextPhase()), seen ? 1300 : 2850)
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 

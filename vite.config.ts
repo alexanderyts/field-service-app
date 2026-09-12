@@ -37,9 +37,32 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // 'pdf' precaches the S-205b-E auxiliary-pioneer form template so it's fillable
-        // offline, same as everything else in the app.
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,pdf}'],
+        // The PDF form template (555 kB) and pdf-lib are no longer precached — they serve one
+        // rarely-used flow (the aux-pioneer slip), so they cache on first use instead of
+        // doubling every install's download (AUDIT F043).
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,webp}'],
+        globIgnores: ['**/es-*.js'],
+        runtimeCaching: [
+          {
+            // Esri map tiles: cache what's been looked at so the Map and territory previews
+            // still render offline for areas worked recently. Bounded so it can't grow forever.
+            urlPattern: ({ url }) => url.hostname === 'server.arcgisonline.com',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'map-tiles',
+              expiration: { maxEntries: 800, maxAgeSeconds: 30 * 24 * 3600 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // The aux-pioneer PDF template + pdf-lib chunk: cache on first use.
+            urlPattern: ({ url }) => /S-205b.*\.pdf$/.test(url.pathname) || /\/es-[^/]+\.js$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: { cacheName: 'aux-slip', expiration: { maxEntries: 4, maxAgeSeconds: 90 * 24 * 3600 } },
+          },
+        ],
+        // Nominatim/Overpass are intentionally NOT cached — results are address-specific and
+        // their usage policies forbid it.
       },
     }),
   ],

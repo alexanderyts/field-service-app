@@ -26,6 +26,9 @@ const KEY = {
   /** Non-pioneer "did I share in the ministry this month" — a JSON map keyed "YYYY-M"
       (month 0-based, matching Date.getMonth), value true/false. */
   participatedMonths: 'fieldservice_participated_months',
+  /** Epoch ms the user last dismissed the "back up soon" banner; the banner stays hidden for
+      a week after. Per-device UX state, blocklisted from backups. */
+  backupNagDismissedAt: 'fieldservice_backup_nag_dismissed_at',
 } as const
 
 function readRaw(key: string): string | null {
@@ -93,6 +96,27 @@ export function setLastBackupAt(at: number): void {
 /** The key backup.ts must exclude from export/restore — a backup carries the user's data,
     not another device's record of when *it* was last backed up. */
 export const LAST_BACKUP_AT_KEY = KEY.lastBackupAt
+
+/** Whether a reminder to back up is due: never backed up, or the last one is older than
+    `days`. Pure (takes `now`) so callers decide when it matters — the caller also checks
+    there's data worth backing up before nagging (AUDIT F044). */
+export function isBackupOverdue(lastAt: number | null, now: number, days = 30): boolean {
+  if (lastAt === null) return true
+  return now - lastAt > days * 24 * 60 * 60 * 1000
+}
+
+/** True when the back-up nag should show: overdue AND not dismissed within the last week. */
+export function shouldShowBackupNag(lastAt: number | null, now: number): boolean {
+  if (!isBackupOverdue(lastAt, now)) return false
+  const raw = readRaw(KEY.backupNagDismissedAt)
+  const dismissedAt = raw ? Number(raw) : 0
+  if (Number.isFinite(dismissedAt) && dismissedAt > 0 && now - dismissedAt < 7 * 24 * 60 * 60 * 1000) return false
+  return true
+}
+
+export function dismissBackupNag(now: number): void {
+  writeRaw(KEY.backupNagDismissedAt, String(Math.floor(now)))
+}
 
 /** Minutes currently in the minute bank; 0 for anything that isn't a positive integer. */
 export function getMinuteBank(): number {

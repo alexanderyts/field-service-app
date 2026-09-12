@@ -305,6 +305,7 @@ export function StreetDetail({
   const [showEdit, setShowEdit] = useState(false)
   const [showPad, setShowPad] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmRemoveHouse, setConfirmRemoveHouse] = useState<{ id: string; number: string } | null>(null)
   const [showShare, setShowShare] = useState(false)
   const [traceMidpoint, setTraceMidpoint] = useState<{ lat: number; lng: number } | null>(null)
 
@@ -429,7 +430,7 @@ export function StreetDetail({
                       👤
                     </button>
                   )}
-                  <button className="icon-btn" title="Remove house" aria-label="Remove house" onClick={() => removeHouse(h.id)}>×</button>
+                  <button className="icon-btn" title="Remove house" aria-label={`Remove house ${h.number}`} onClick={() => setConfirmRemoveHouse({ id: h.id, number: h.number })}>×</button>
                 </div>
                 <HouseNote
                   value={h.note ?? ''}
@@ -466,6 +467,16 @@ export function StreetDetail({
           message={`This removes "${entry.name}" and all ${entry.houses.length} of its house numbers. This can't be undone.`}
           onConfirm={() => { setConfirmDelete(false); deleteEntry() }}
           onCancel={() => setConfirmDelete(false)}
+        />
+
+        <ConfirmDialog
+          open={confirmRemoveHouse != null}
+          title={confirmRemoveHouse ? `Remove house ${confirmRemoveHouse.number}?` : ''}
+          message="Its status and note are removed too. This can't be undone."
+          confirmLabel="Remove"
+          tone="danger"
+          onConfirm={() => { if (confirmRemoveHouse) removeHouse(confirmRemoveHouse.id); setConfirmRemoveHouse(null) }}
+          onCancel={() => setConfirmRemoveHouse(null)}
         />
       </div>
     </ModalPortal>

@@ -6,6 +6,7 @@ import {
   setTheme,
   getLastBackupAt,
   setLastBackupAt,
+  isBackupOverdue,
   getMinuteBank,
   setMinuteBank,
   getParticipatedMonth,
@@ -182,5 +183,20 @@ describe('participatedMonth', () => {
     store['fieldservice_participated_months'] = 'not json'
     expect(() => setParticipatedMonth(2026, 8, true)).not.toThrow()
     expect(getParticipatedMonth(2026, 8)).toBe(true)
+  })
+})
+
+describe('isBackupOverdue (AUDIT F044)', () => {
+  const now = new Date(2026, 8, 12).getTime()
+  const DAY = 24 * 60 * 60 * 1000
+  it('is overdue when never backed up', () => {
+    expect(isBackupOverdue(null, now)).toBe(true)
+  })
+  it('is overdue past the window and fine within it', () => {
+    expect(isBackupOverdue(now - 31 * DAY, now)).toBe(true)
+    expect(isBackupOverdue(now - 29 * DAY, now)).toBe(false)
+  })
+  it('respects a custom window', () => {
+    expect(isBackupOverdue(now - 8 * DAY, now, 7)).toBe(true)
   })
 })

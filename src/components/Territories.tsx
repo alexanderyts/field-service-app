@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, resolveStreetEntry, commonLocationLabel, type TerritoryStreet } from '../db'
 import ModalPortal from '../ModalPortal'
@@ -6,7 +6,10 @@ import ConfirmDialog from './ConfirmDialog'
 import { StreetDetail, type ContactPrefill } from './StreetEntries'
 import { ensureStreetEntry } from '../streets'
 import { completeTerritory } from '../records'
-import { StreetSnapshotModal, TerritoryMiniMap } from './Territory'
+// Leaflet is heavy and only needed when one of these opens — lazy-loading it keeps the map
+// engine out of the default Ministry tab's chunk (AUDIT F043).
+const StreetSnapshotModal = lazy(() => import('./Territory').then((m) => ({ default: m.StreetSnapshotModal })))
+const TerritoryMiniMap = lazy(() => import('./Territory').then((m) => ({ default: m.TerritoryMiniMap })))
 import ShareModal from './ShareModal'
 import { SharedBadge, SharedWarning, pressable } from './SharedBits'
 import { buildTerritoryPayload } from '../share'
@@ -285,7 +288,9 @@ function TerritoryDetail({
                   <button className="icon-btn close-x" onClick={() => setShowImage(false)} title="Close" aria-label="Close">×</button>
                 </div>
                 <h3 style={{ marginTop: 0 }}>{territory.name}</h3>
-                <TerritoryMiniMap streets={territory.streets} />
+                <Suspense fallback={<div className="tab-loading" />}>
+                  <TerritoryMiniMap streets={territory.streets} />
+                </Suspense>
                 <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
                   Every street in this territory on the map — pan and zoom to see how they connect. Each line is
                   labelled by name.
@@ -299,7 +304,11 @@ function TerritoryDetail({
           <StreetDetail entryId={openStreetEntryId} onClose={() => setOpenStreetEntryId(null)} onGoToMap={onGoToMap} onCreateContact={onCreateContact} />
         )}
 
-        {viewStreet && <StreetSnapshotModal street={viewStreet} onClose={() => setViewStreet(null)} />}
+        {viewStreet && (
+          <Suspense fallback={null}>
+            <StreetSnapshotModal street={viewStreet} onClose={() => setViewStreet(null)} />
+          </Suspense>
+        )}
 
         <ConfirmDialog
           open={confirmComplete}

@@ -155,6 +155,8 @@ export default function MapView({
   const [searchTarget, setSearchTarget] = useState<{ lat: number; lng: number } | null>(null)
   const [searching, setSearching] = useState(false)
   const [searchErr, setSearchErr] = useState<string | null>(null)
+  const [errorDismissed, setErrorDismissed] = useState(false)
+  const [tileError, setTileError] = useState(false)
   async function doSearch() {
     const q = search.trim()
     if (!q) return
@@ -210,6 +212,7 @@ export default function MapView({
       <h2 className="applet-title">Territory Map</h2>
       <button
         onClick={async () => {
+          setErrorDismissed(false)
           const loc = await getLocation()
           if (loc) setMe(loc)
         }}
@@ -217,7 +220,12 @@ export default function MapView({
       >
         {loading ? 'Locating...' : 'Recenter on Me'}
       </button>
-      {error && <p className="error">{error}</p>}
+      {error && !errorDismissed && (
+        <p className="error map-error">
+          <span>{error}</span>
+          <button className="icon-btn" title="Dismiss" aria-label="Dismiss" onClick={() => setErrorDismissed(true)}>×</button>
+        </p>
+      )}
       {statusesShown.length > 0 && (
         <div className="legend">
           {statusesShown.map((s) => (
@@ -264,6 +272,7 @@ export default function MapView({
               attribution='Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
               maxZoom={19}
+              eventHandlers={{ tileerror: () => setTileError(true), load: () => setTileError(false) }}
             />
           ) : (
             <>
@@ -303,6 +312,14 @@ export default function MapView({
           <TerritoryStreetsOverlay streets={sentStreets} />
         </MapContainer>
         <MapCompass />
+        {tileError && (
+          <div className="map-banner">Map tiles need a connection — they'll fill in once you're online.</div>
+        )}
+        {pinned.length === 0 && !me && !focusLocation && (
+          <div className="map-empty">
+            <p>No pins yet. Add an address to a contact and it'll appear here, or tap <strong>Recenter on Me</strong>.</p>
+          </div>
+        )}
         <button
           className="map-layer-toggle"
           onClick={() => setBaseLayer((l) => (l === 'street' ? 'satellite' : 'street'))}

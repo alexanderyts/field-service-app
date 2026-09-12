@@ -10,7 +10,7 @@ import { APP_VERSION } from '../version'
 import { viewportDiag } from '../viewportFix'
 import { COPYRIGHT_SUMMARY, NOT_AFFILIATED, DEVELOPER_NAME, DEVELOPER_EMAIL } from '../legal'
 import { getProfileName, saveProfileName } from '../profile'
-import { creditHoursEnabled, setCreditHoursEnabled, getTheme, setTheme as saveTheme, getLastBackupAt, type Theme } from '../settings'
+import { creditHoursEnabled, setCreditHoursEnabled, getTheme, setTheme as saveTheme, getLastBackupAt, isBackupOverdue, type Theme } from '../settings'
 import { CREDIT_ACTIVITY_SUGGESTIONS } from '../categories'
 import { formatTimeAgo } from '../timeAgo'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
@@ -29,6 +29,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [legalOpen, setLegalOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [confirmClear2, setConfirmClear2] = useState(false)
   const [confirmSeed, setConfirmSeed] = useState(false)
   const [creditEnabled, setCreditEnabled] = useState(() => creditHoursEnabled())
   const schedulePrefs = useLiveQuery(() => db.schedulePrefs.get(1), [])
@@ -443,7 +444,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
           the app.
         </p>
 
-        <div className={`backup-status${lastBackupAt === null ? ' never' : ''}`}>
+        <div className={`backup-status${lastBackupAt === null ? ' never' : isBackupOverdue(lastBackupAt, Date.now()) ? ' overdue' : ''}`}>
           <span className="backup-status-dot" aria-hidden="true" />
           {lastBackupAt === null
             ? "You've never backed up"
@@ -493,6 +494,16 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
             }
           }}
         />
+
+        <div className="section-divider" />
+        <strong>🗑 Clear all data</strong>
+        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
+          Permanently deletes everything on this device — there is no server copy. Export a backup
+          first if you might want any of it back.
+        </p>
+        <button className="danger" onClick={() => setConfirmClear(true)}>
+          Clear All App Data
+        </button>
       </div>
 
       {/* ═══ Help & about ══════════════════════════════════════ */}
@@ -571,10 +582,6 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
             <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, margin: '2px 0 0' }}>
               Informational summary — see the full Privacy Policy &amp; Terms you accepted at first launch.
             </p>
-
-            <button className="danger" style={{ marginTop: 4 }} onClick={() => setConfirmClear(true)}>
-              Clear All App Data
-            </button>
           </div>
         )}
       </div>
@@ -582,12 +589,23 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
       <ConfirmDialog
         open={confirmClear}
         title="Clear all app data?"
-        message="This permanently deletes all contacts, time logs, call history, and schedule settings. This cannot be undone."
-        confirmLabel="Yes, delete everything"
+        message="This permanently deletes all contacts, streets, territories, call history, time logs, return visits, and settings on this device. There is no server copy. Export a backup first if you might want any of it back."
+        confirmLabel="Continue"
         cancelLabel="Never mind"
         tone="danger"
-        onConfirm={clearAllData}
+        onConfirm={() => { setConfirmClear(false); setConfirmClear2(true) }}
         onCancel={() => setConfirmClear(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmClear2}
+        title="Delete everything?"
+        message="Last check — this can't be undone."
+        confirmLabel="Yes, I have a backup"
+        cancelLabel="Never mind"
+        tone="danger"
+        onConfirm={() => { setConfirmClear2(false); clearAllData() }}
+        onCancel={() => setConfirmClear2(false)}
       />
 
       <ConfirmDialog

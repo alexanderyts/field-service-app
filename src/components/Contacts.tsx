@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type ContactStatus } from '../db'
 import { fmtDateTime } from '../localDate'
 import { isOverdue, nextPendingByPerson, visitBadgeLabel } from '../appointments'
+import { getLastBackupAt, shouldShowBackupNag, dismissBackupNag } from '../settings'
 import { STATUS_LABELS, STATUS_ORDER } from '../contactStatus'
 import { deleteContacts } from '../records'
 import { SharedBadge, pressable } from './SharedBits'
@@ -14,7 +15,7 @@ import StreetEntries, { type ContactPrefill } from './StreetEntries'
 import { ContactForm } from './contacts/ContactForm'
 import { ContactDetail } from './contacts/ContactDetail'
 
-type SortKey = 'street' | 'name' | 'date' | 'city' | 'zip'
+type SortKey = 'name' | 'visit' | 'street' | 'date' | 'city' | 'zip'
 type MinistryView = 'people' | 'streets' | 'territories'
 export default function Contacts({
   openContactId,
@@ -44,6 +45,7 @@ export default function Contacts({
   const [view, setView] = useState<MinistryView>('people')
   const [contactPrefill, setContactPrefill] = useState<ContactPrefill | null>(null)
   const [showChooser, setShowChooser] = useState(false)
+  const [showBackupNag, setShowBackupNag] = useState(() => shouldShowBackupNag(getLastBackupAt(), Date.now()))
   const [streetFormOpen, setStreetFormOpen] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -108,6 +110,13 @@ export default function Contacts({
 
   const sorted = [...filtered].sort((a, b) => {
     switch (sortKey) {
+      case 'visit': {
+        // Soonest pending visit first (overdue ones lead, since they sort earliest);
+        // contacts with none go last.
+        const av = nextAppointment.get(a.id) ?? Infinity
+        const bv = nextAppointment.get(b.id) ?? Infinity
+        return av - bv || a.name.localeCompare(b.name)
+      }
       case 'street':
         return (a.street ?? '').localeCompare(b.street ?? '')
       case 'name':
@@ -130,6 +139,13 @@ export default function Contacts({
         <button onClick={() => setShowChooser(true)}>+ New Entry</button>
       </div>
 
+      {showBackupNag && (people.length + streetCount > 0) && (
+        <div className="backup-nag" role="status">
+          <span>It's been a while since your last backup — More → Export Backup keeps it safe.</span>
+          <button className="icon-btn" title="Dismiss" aria-label="Dismiss backup reminder" onClick={() => { dismissBackupNag(Date.now()); setShowBackupNag(false) }}>×</button>
+        </div>
+      )}
+
       {/* People vs. Streets — contacts are individual householders; streets track the
           house numbers worked on a road (and are auto-created from temporary territories). */}
       <div className="segmented">
@@ -140,6 +156,7 @@ export default function Contacts({
 
       {view === 'people' ? (
         <>
+          {people.length > 0 && (
           <input
             className="full"
             placeholder="Search name, street, city, zip..."
@@ -147,11 +164,14 @@ export default function Contacts({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          )}
+          {people.length > 0 && (
           <div className="field-row">
             <label className="field">
               <span className="field-label">Sort by</span>
               <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
                 <option value="name">Name</option>
+                <option value="visit">Next visit</option>
                 <option value="street">Street</option>
                 <option value="date">Date Met</option>
                 <option value="city">City</option>
@@ -168,6 +188,7 @@ export default function Contacts({
               </select>
             </label>
           </div>
+          )}
 
           {showNew && (
             <ContactForm
@@ -220,7 +241,13 @@ export default function Contacts({
                 </div>
               </li>
             ))}
-            {sorted.length === 0 && <p className="muted">No contacts match.</p>}
+            {sorted.length === 0 && (
+              <p className="muted">
+                {people.length === 0
+                  ? 'No contacts yet — tap + New Entry to add someone you met.'
+                  : 'No contacts match.'}
+              </p>
+            )}
           </ul>
 
           <ConfirmDialog

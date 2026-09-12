@@ -266,6 +266,7 @@ moved into `settings.ts` in 0.20.2.
 | `fieldservice_dark_mode` | Legacy boolean, read as a fallback for `_theme`; cleared on any theme write | `settings.ts` |
 | `fieldservice_last_backup_at` | Epoch ms of the last completed backup export; absent = never. Blocklisted, so it never travels inside a backup | `settings.ts` |
 | `fieldservice_timer` | The live service timer's state (start timestamp, accumulated ms, category). Blocklisted — device state, not a record | `timer.ts` |
+| `fieldservice_backup_nag_dismissed_at` | Epoch ms the back-up reminder was last dismissed (hidden 7 days after). Blocklisted | `settings.ts` |
 | `fieldservice_participated_months` | Months the user marked as "participated in ministry" | `settings.ts` |
 | `fieldservice_notify_enabled` / `_notify_lead_min` / `_notify_sent_ids` | Return-visit reminder settings + dedupe | `notifications.ts` |
 | `fieldservice_aux_*` | Auxiliary-pioneer config (see `auxPioneering.ts`) | `auxPioneering.ts` |
@@ -415,6 +416,9 @@ dev server needs its HMR WebSocket and injects its own client.
 - Every outside host is named: `nominatim.openstreetmap.org`, `overpass-api.de` (connect);
   `server.arcgisonline.com` (all map tiles, img — Esri street, imagery, and labels; CARTO was
   dropped in 0.20.5 when it began watermarking keyless tiles, AUDIT F047).
+- Esri map tiles are also **runtime-cached** by the service worker (`CacheFirst`, capped) so
+  worked areas render offline; the aux-slip PDF + pdf-lib are runtime-cached on first use rather
+  than precached (AUDIT F043). Nominatim/Overpass are never cached (per their policies).
 - `data:` is allowed for `img-src` and `connect-src` on purpose — QR codes are `data:` PNGs and
   `ShareModal` `fetch()`es that URL to build a shareable file. Removing either breaks sharing
   silently.

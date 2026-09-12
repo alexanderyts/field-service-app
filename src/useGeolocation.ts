@@ -20,7 +20,16 @@ export function useCurrentLocation() {
           resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude })
         },
         (err) => {
-          setError(err.message)
+          // Friendly, actionable copy instead of the raw browser string (AUDIT F045).
+          setError(
+            err.code === err.PERMISSION_DENIED
+              ? "Location is turned off for Meleo. You can turn it on in your browser's site settings."
+              : err.code === err.POSITION_UNAVAILABLE
+                ? "Couldn't find your location — try again outdoors."
+                : err.code === err.TIMEOUT
+                  ? 'Finding your location is taking too long — try again.'
+                  : "Couldn't get your location."
+          )
           setLoading(false)
           resolve(null)
         },
