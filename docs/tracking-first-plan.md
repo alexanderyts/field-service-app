@@ -200,7 +200,7 @@ Goal: opening the tab feels like checking a scoreboard.
 5. **Verify** with demo data (More → load demo data): pioneer, aux month, publisher with
    and without goal. Screenshot each. Re-shoot the two tutorial images.
 
-### Wave 3 — Logging first, banking only (0.23.0)
+### Wave 3 — Logging first, banking only (0.23.0) ✅ shipped 2026-09-12 — deviation: the form is `LogTimeForm` rendered as the day modal's time step (opened for today by the top button), not a separate sheet; same banking path, less surface
 
 Goal: logging takes one tap to start and never records time that was not spent.
 

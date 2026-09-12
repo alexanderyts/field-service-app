@@ -90,8 +90,8 @@ export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: numb
                     Go to contact
                   </button>
                 )}
-                <button className="danger small" onClick={() => setConfirmDeleteId(a.id)}>
-                  Delete
+                <button className="icon-btn row-delete" title="Delete return visit" aria-label="Delete this return visit" onClick={() => setConfirmDeleteId(a.id)}>
+                  🗑
                 </button>
               </div>
             </li>

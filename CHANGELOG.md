@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.22.0`.** History runs from the initial scaffold forward.
+**Current version: `0.23.0`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -186,6 +186,12 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.20.3 — Browser security policy · 2026-09-07
 - **The app now tells the browser exactly what it's allowed to load and run.** Only Meleo's own code can execute — no injected or inline script ever will — and the only outside places it may contact are the map-tile and address-lookup services it already uses. Nothing changes day to day; it closes the door on a whole class of tampering (F009)
 - Checked by opening the real built app in a browser and exercising the map (both tile sources), the Schedule tab and a contact's share code, with no policy refusals
+
+## 0.23.0 — Log time in one tap, and never round up · 2026-09-12
+- **A big "Log time" button at the top of the Service tab** opens the time form for today. The form has one-tap presets (30m, 1h, 1h 30m, 2h, 3h) above the number pad, and is the same form the day tap uses, so the minute bank behaves identically from either
+- **Nothing is rounded up any more.** The "Round up to the next hour?" question is gone — 1h 45m logs 1 hour and banks 45 minutes, every time. Tapping the minute-bank pill logs exactly the banked minutes rather than a whole hour. Reports shows what is carried forward so the figure you submit is clear
+- **The day popup is lighter:** one Edit path, a header "Options" for removing the day, and delete buttons on entries and return visits are quiet icons instead of red pills
+- Verified: 221 tests (`quickLogStrategy` "never rounds up"); in the browser a 1h 45m entry logs 1h and banks 45m with no dialog, presets fill the fields, and the pill logs the banked minutes
 
 ## 0.22.0 — Progress is the hero · 2026-09-12
 - **Your month is the first thing on the Service tab.** Hours against the month's goal, then the service year, then the week — always visible, no "Expand" button. The bars are the same ones as before; only their order and gating changed

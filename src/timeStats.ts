@@ -14,7 +14,10 @@ export function isCredit(category: TimeCategory) {
  *
  * - `'whole'` — write the full h:mm as one entry, no banking.
  * - `'bank'` — write the whole hours and put the leftover minutes in the minute bank.
- * - `'confirm'` — ask whether to round up to the next hour first (30+ leftover minutes).
+ *
+ * There is deliberately no "round up" answer any more (tracking-first D5). The old dialog
+ * offered to write 2h for 1h 45m — time that was not spent. Leftover ministry minutes always
+ * bank and become a logged hour only once sixty of them exist.
  *
  * **Credit is always `'whole'` (AUDIT F-A6).** The bank is a single pot with no category of
  * its own, so any credit minutes it accepted had to be guessed back on the way out — the
@@ -24,11 +27,11 @@ export function isCredit(category: TimeCategory) {
  * ministry minutes removes the ambiguity at the source instead of teaching the bank to track
  * categories.
  */
-export function quickLogStrategy(category: TimeCategory, hours: number, minutes: number): 'none' | 'whole' | 'bank' | 'confirm' {
+export function quickLogStrategy(category: TimeCategory, hours: number, minutes: number): 'none' | 'whole' | 'bank' {
   if (hours === 0 && minutes === 0) return 'none'
   if (isCredit(category)) return 'whole'
   if (minutes === 0) return 'whole'
-  return minutes >= 30 ? 'confirm' : 'bank'
+  return 'bank'
 }
 
 export interface MonthTotals {

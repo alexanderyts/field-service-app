@@ -336,12 +336,13 @@ brand/category/tag hues are brightened per dark theme for contrast.
   through `displayGoalMin` on both this tab and Reports (docs/tracking-first-plan.md).
 
 ### Service → Add Time
-- **Date** opens a custom `CalendarPicker`; **Hours/Minutes** open a custom `NumPad` (no native
-  `type="date"`/`type="number"` here — intentional for mobile UX).
-- **Round-up dialog** when minutes > 30; leftover minutes go to the **minute bank**
-  (`fieldservice_minute_bank`) which auto-adds a 1-hour ministry entry at 60, with a fly-to-pill animation.
-  The bank holds **ministry minutes only** — credit is logged whole, so the hour it rolls over
-  (and the one "cash in now" adds) can't be misattributed at the 55h cap.
+- The primary **Log time** button (top of the tab) and a day tap both open `DayActionModal`,
+  whose time step is `LogTimeForm` — presets + a custom `NumPad` (no native `type="number"` —
+  intentional for mobile UX). The date is the day tapped; today for the button.
+- **Never rounds up** (tracking-first D5): leftover ministry minutes go to the **minute bank**
+  (`fieldservice_minute_bank`) which auto-adds a 1-hour ministry entry at 60, with a fly-to-pill
+  animation; tapping the pill logs exactly the banked minutes. The bank holds **ministry minutes
+  only** — credit is logged whole, so nothing it emits can be misattributed at the 55h cap.
 - Category **pills** (not a dropdown). Per-day planning uses `DayScheduleBlock`s; goal rings via
   `goalSegments.ts`.
 

@@ -15,6 +15,7 @@ import {
   serviceYearlyTotals,
 } from '../timeStats'
 import { getAuxConfig } from '../auxPioneering'
+import { getMinuteBank } from '../settings'
 import ServiceYearReview from './ServiceYearReview'
 import { StepperNav } from './SharedBits'
 
@@ -150,10 +151,14 @@ export default function Reports() {
 
   const monthLabel = targetDate.toLocaleString(undefined, { month: 'long', year: 'numeric' })
   const isCurrentMonth = monthOffset === 0
+  // Leftover ministry minutes not yet logged as an hour — they carry into next month, and the
+  // person should see that the figure they submit doesn't include them.
+  const bankedMin = getMinuteBank()
 
   function reportBody(): string {
     let body = `Meleo Report — ${monthLabel}\n\n`
     body += `Total Hours: ${fmtDuration(totalMin)}\n`
+    if (isCurrentMonth && bankedMin > 0) body += `  (${bankedMin}m banked, carried forward)\n`
     if (ministryMin) body += `  Ministry: ${fmtDuration(ministryMin)}\n`
     if (creditMin) body += `  Credit Hours: ${fmtDuration(creditMin)}\n`
     // Deliberately no breakdown of credit by type. The congregation's Service Report has no
@@ -284,6 +289,11 @@ export default function Reports() {
             {monthGoalMin > 0 && (
               <span className="muted" style={{ fontSize: 12 }}>
                 Goal: {fmtDuration(monthGoalMin)} · {monthPct}% reached
+              </span>
+            )}
+            {isCurrentMonth && bankedMin > 0 && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                {bankedMin}m in the minute bank, carried forward
               </span>
             )}
           </div>

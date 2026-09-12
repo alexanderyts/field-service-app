@@ -570,13 +570,8 @@ export function ScheduleMain({
     return d.getFullYear() === monthProgress.year && d.getMonth() === monthProgress.month
   }
 
-  // Logging service time for a specific day, right from the day-tap modal — mirrors
-  // AddTime's own save/banking rules (1-29 leftover minutes bank automatically; 30-59
-  // asks to round up) so time logged this way is never treated differently.
-  const [quickLogConfirm, setQuickLogConfirm] = useState<
-    { date: Date; hours: number; minutes: number; category: TimeCategory; activityNote: string; originEl?: HTMLElement } | null
-  >(null)
-
+  // Logging service time for a specific day — leftover ministry minutes always bank; nothing
+  // is ever rounded up (tracking-first D5).
   async function saveQuickLog(date: Date, totalMin: number, category: TimeCategory, activityNote: string) {
     if (totalMin <= 0) return
     const d = new Date(date)
@@ -703,10 +698,6 @@ export function ScheduleMain({
       closeDayModalSmoothly()
       return
     }
-    if (strategy === 'confirm') {
-      setQuickLogConfirm({ date, hours: h, minutes: m, category, activityNote, originEl })
-      return
-    }
     // Fade the modal's other fields while the minutes field gathers into the ball; the modal
     // itself is morphed shut by bankQuickLogMinutes once the ball has launched (so the gather
     // is visible and the ball originates from the field's real position).
@@ -725,18 +716,17 @@ export function ScheduleMain({
   // this same flag.
   const hasSchedule = prefs.daysOut.length > 0 || weeklyGoalMin > 0
 
-  // Tapping the pill lets someone cash in banked minutes early instead of waiting for
-  // them to reach a full hour naturally — logged as ministry time, same as an automatic
-  // bank-to-hour conversion. Ministry is now the *correct* category rather than a guess:
-  // only ministry minutes can enter the bank (F-A6). Counts the bank down to 0 (instead of
-  // snapping) and then plays the reverse of the pill's opening animation, mirroring how it
-  // appeared.
+  // Tapping the pill logs the banked minutes now — exactly the minutes that are there, as one
+  // ministry entry (only ministry minutes can enter the bank, F-A6). It used to write a whole
+  // hour, which was time not spent (tracking-first D5). Counts the bank down to 0 and plays the
+  // reverse of the pill's opening animation.
   async function redeemMinuteBank() {
     setConfirmBankRoundUp(false)
-    const startValue = displayedBank
+    const startValue = getMinuteBank()
+    if (startValue <= 0) return
     const d = new Date()
     d.setHours(12, 0, 0, 0)
-    await db.timeLogs.add({ date: d.getTime(), minutes: 60, category: 'ministry', note: 'Added from minute bank' } as TimeLog)
+    await db.timeLogs.add({ date: d.getTime(), minutes: startValue, category: 'ministry', note: 'Added from minute bank' } as TimeLog)
     setMinuteBank(0)
     await animateBankValue(startValue, 0, 380, setDisplayedBank)
     setBankCollapsing(true)
@@ -749,6 +739,14 @@ export function ScheduleMain({
       <div className="view-header">
         <h2 className="applet-title">Service</h2>
       </div>
+
+      {/* The tab's primary action (tracking-first D4): straight into the time form for today. */}
+      <button
+        className="log-time-cta"
+        onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
+      >
+        ＋ Log time
+      </button>
 
       {/* Progress is the hero: month first, service year second, week pace last, nothing
           behind an "Expand" (docs/tracking-first-plan.md D3). The bars themselves are the
@@ -902,7 +900,7 @@ export function ScheduleMain({
             title="Log service time for today"
             onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
           >
-            + Quick add time
+            + Log time
           </button>
         </div>
         {/* The minute bank lives here now (moved off the Service Schedule header to declutter
@@ -914,7 +912,7 @@ export function ScheduleMain({
             <div
               className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
               onClick={() => setConfirmBankRoundUp(true)}
-              title="Tap to round up and add now"
+              title="Tap to log these minutes now"
             >
               <span>⏱ {displayedBank}m</span>
               <div className="minute-bank-track">
@@ -940,8 +938,8 @@ export function ScheduleMain({
                   <button className="secondary small" onClick={() => setEditingLog(l)}>
                     Edit
                   </button>
-                  <button className="danger small" onClick={() => setConfirmDeleteLogId(l.id)}>
-                    Delete
+                  <button className="icon-btn row-delete" title="Delete entry" aria-label="Delete this entry" onClick={() => setConfirmDeleteLogId(l.id)}>
+                    🗑
                   </button>
                 </div>
               </li>
@@ -1255,34 +1253,11 @@ export function ScheduleMain({
         />
       )}
 
-      {quickLogConfirm && (
-        <ConfirmDialog
-          open
-          title="Round up to the next hour?"
-          message={`You entered ${quickLogConfirm.hours}h ${quickLogConfirm.minutes}m. Round up to ${quickLogConfirm.hours + 1}h?`}
-          confirmLabel="Yes, round up"
-          cancelLabel="No, bank the minutes"
-          tone="primary"
-          onConfirm={() => {
-            const { date, hours, category, activityNote } = quickLogConfirm
-            setQuickLogConfirm(null)
-            saveQuickLog(date, (hours + 1) * 60, category, activityNote)
-            closeDayModalSmoothly()
-          }}
-          onCancel={() => {
-            const { date, hours, minutes, category, activityNote, originEl } = quickLogConfirm
-            setQuickLogConfirm(null)
-            setDayModalClosing(true)
-            bankQuickLogMinutes(date, hours, minutes, category, activityNote, originEl)
-          }}
-        />
-      )}
-
       <ConfirmDialog
         open={confirmBankRoundUp}
-        title="Add your banked minutes now?"
-        message={`You have ${displayedBank}m banked. Round up and add 1 hour of ministry time now, or keep banking until it fills up on its own.`}
-        confirmLabel="Yes, add now"
+        title="Log your banked minutes now?"
+        message={`You have ${displayedBank}m banked. Log them as ${displayedBank}m of ministry time now, or keep banking until they make a full hour on their own.`}
+        confirmLabel="Yes, log them"
         cancelLabel="Keep banking"
         tone="primary"
         onConfirm={redeemMinuteBank}

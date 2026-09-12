@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { db, type Appointment, type DayScheduleBlock, type TimeCategory } from '../../db'
-import { CATEGORY_LABELS, CREDIT_ACTIVITY_SUGGESTIONS } from '../../categories'
+import { CATEGORY_LABELS } from '../../categories'
 import { creditHoursEnabled } from '../../settings'
 import { fmtDuration } from '../../timeStats'
 import ConfirmDialog from '../ConfirmDialog'
@@ -8,7 +8,7 @@ import ModalPortal from '../../ModalPortal'
 import { DAY_NAMES_FULL, fmtTime, startOfWeek, fmtDayMonth, minutesToTimeInput, timeInputToMinutes } from './dates'
 import { fmtLocalDate } from '../../localDate'
 import { EditAppointmentModal } from './EditAppointmentModal'
-import { NumPad } from './NumPad'
+import { LogTimeForm } from './LogTimeForm'
 
 /** A block being edited in the day modal — times as HH:MM strings for the inputs. */
 interface EditableBlock {
@@ -74,24 +74,8 @@ export function DayActionModal({
   const [confirmClearAll, setConfirmClearAll] = useState(false)
   const [confirmSubmitScheduled, setConfirmSubmitScheduled] = useState(false)
   const scheduledTotalMin = currentBlocks.reduce((s, b) => s + Math.max(0, b.end - b.start), 0)
-  const [hours, setHours] = useState('0')
-  const [minutes, setMinutes] = useState('0')
-  const [category, setCategory] = useState<TimeCategory>('ministry')
-  const [activityNote, setActivityNote] = useState('')
-  // One-way: every path out of Submit Time (log whole, bank, or the round-up dialog's two
-  // answers) ends with this modal unmounting, so a second tap during the ~620ms collect
-  // animation — or the 180ms close morph — must not write a second entry (REVIEW.md F-C2).
-  const [submitted, setSubmitted] = useState(false)
-  const [numPad, setNumPad] = useState<'hours' | 'minutes' | null>(null)
-  const minutesBtnRef = useRef<HTMLButtonElement>(null)
-
-  // Credit off means Ministry only. (Before the two-category model, 'other' was offered even
-  // with credit switched off — and `isCredit('other')` was true, so time logged under a
-  // control labelled "Type of ministry" was silently counted as capped credit. That control
-  // is now an Activity Note on a Ministry log, which is what it always described.)
-  const creditEnabled = creditHoursEnabled()
-  const availableCats: TimeCategory[] = creditEnabled ? ['ministry', 'credit'] : ['ministry']
-  const effectiveCategory = availableCats.includes(category) ? category : 'ministry'
+  // Credit off means Ministry only (the planner's block pills; the log form decides for itself).
+  const availableCats: TimeCategory[] = creditHoursEnabled() ? ['ministry', 'credit'] : ['ministry']
 
   function blockDuration(b: EditableBlock): number {
     return timeInputToMinutes(b.end) - timeInputToMinutes(b.start)
@@ -143,8 +127,8 @@ export function DayActionModal({
               <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>{dateLabel}</p>
               <p className="muted" style={{ margin: '1px 0 0', fontSize: 12 }}>{weekRangeLabel}</p>
             </div>
-            {isSuggestedDay && step !== 'dayOptions' && (
-              <button className="secondary small" onClick={() => setStep('dayOptions')}>Edit</button>
+            {isSuggestedDay && step === 'menu' && (
+              <button className="secondary small" onClick={() => setStep('dayOptions')}>Options</button>
             )}
           </div>
 
@@ -185,7 +169,6 @@ export function DayActionModal({
                       </div>
                       <div className="sched-submit-actions">
                         <button className="small" onClick={() => onSubmitBlock(i)}>Submit</button>
-                        <button className="secondary small" onClick={() => setStep('window')}>Edit</button>
                         <button className="secondary small" onClick={() => onDeleteBlock(i)}>Delete</button>
                       </div>
                     </div>
@@ -285,79 +268,9 @@ export function DayActionModal({
             </>
           )}
 
-          {step === 'logTime' && (
-            <div className={closing ? 'time-entry-closing' : ''}>
-              <div className="hours-minutes-row">
-                <div className="field">
-                  <span className="field-label">Hours</span>
-                  <button className="numpad-display-btn" onClick={() => setNumPad('hours')}>{hours}</button>
-                </div>
-                <div className="field">
-                  <span className="field-label">Minutes</span>
-                  <button ref={minutesBtnRef} className="numpad-display-btn" onClick={() => setNumPad('minutes')}>{minutes}</button>
-                </div>
-              </div>
-              <div className="field">
-                <span className="field-label">Category</span>
-                <div className="cat-pills">
-                  {availableCats.map((cat) => (
-                    <button
-                      key={cat}
-                      className={`chip${effectiveCategory === cat ? ' active' : ''}`}
-                      onClick={() => setCategory(cat)}
-                    >
-                      {CATEGORY_LABELS[cat]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* The Activity Note. Offered on both categories — Credit gets quick-picks for
-                  the common kinds, Ministry just the free text, because "cart witnessing" and
-                  "letter writing" are field ministry that people still want named on the
-                  entry. It annotates the log and nothing else: no total, no cap, no goal. */}
-              <div className="field">
-                <span className="field-label">What was it? (optional)</span>
-                {effectiveCategory === 'credit' && (
-                  <div className="cat-pills">
-                    {CREDIT_ACTIVITY_SUGGESTIONS.map((s) => (
-                      <button
-                        key={s}
-                        className={`chip${activityNote === s ? ' active' : ''}`}
-                        onClick={() => setActivityNote(activityNote === s ? '' : s)}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <input
-                  value={activityNote}
-                  onChange={(e) => setActivityNote(e.target.value)}
-                  aria-label="What this time was (optional)"
-                  placeholder={effectiveCategory === 'credit' ? 'e.g. LDC, Circuit assembly…' : 'e.g. Cart witnessing, Letter writing…'}
-                />
-              </div>
-              <button
-                onClick={() => {
-                  if (submitted) return
-                  setSubmitted(true)
-                  onLogTime(Math.max(0, Number(hours) || 0), Math.min(59, Math.max(0, Number(minutes) || 0)), effectiveCategory, activityNote, minutesBtnRef.current ?? undefined)
-                }}
-                disabled={(Number(hours) === 0 && Number(minutes) === 0) || submitted || closing}
-              >
-                Submit Time
-              </button>
-            </div>
-          )}
+          {step === 'logTime' && <LogTimeForm closing={closing} onSubmit={onLogTime} />}
         </div>
       </div>
-
-      {numPad === 'hours' && (
-        <NumPad initialValue={hours} label="Hours" onConfirm={setHours} onClose={() => setNumPad(null)} />
-      )}
-      {numPad === 'minutes' && (
-        <NumPad initialValue={minutes} label="Minutes" max={59} onConfirm={setMinutes} onClose={() => setNumPad(null)} />
-      )}
 
       {/* Three-way save choice (repeat weekly / just this date / cancel) — ConfirmDialog
           only supports two buttons, so this one is laid out by hand in the same style. */}

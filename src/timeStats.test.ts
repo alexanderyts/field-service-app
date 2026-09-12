@@ -108,7 +108,9 @@ describe('quickLogStrategy — what the minute bank is allowed to hold (F-A6)', 
   })
 
   it('asks about rounding up a ministry remainder of 30+ minutes', () => {
-    expect(quickLogStrategy('ministry', 2, 45)).toBe('confirm')
+    // Never rounds up: 30+ leftover minutes bank like any other leftover (tracking-first D5).
+    expect(quickLogStrategy('ministry', 2, 45)).toBe('bank')
+    expect(quickLogStrategy('ministry', 0, 59)).toBe('bank')
   })
 
   it('logs a whole ministry hour with no remainder directly', () => {

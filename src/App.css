@@ -3749,3 +3749,20 @@ button.small {
 @media (prefers-reduced-motion: reduce) {
   .toast { animation: none; }
 }
+
+/* ---- Primary "Log time" action (tracking-first, Wave 3) ---- */
+.log-time-cta {
+  width: 100%;
+  min-height: 52px;
+  font-size: 17px;
+  font-weight: 700;
+  border-radius: 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+}
+/* Row deletes are quiet icon buttons: a list at rest shouldn't be a wall of red pills. */
+.icon-btn.row-delete {
+  color: var(--muted);
+  font-size: 15px;
+}
+.icon-btn.row-delete:hover { color: var(--danger); }
