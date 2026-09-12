@@ -181,3 +181,12 @@ export function fmtDuration(mins: number): string {
   if (m === 0) return `${h}h`
   return `${h}h ${m}m`
 }
+
+/**
+ * A goal as the person should read it: rounded UP to the whole hour. Both the Service tab and
+ * Reports show goals through this so the same month never reads "65h" on one screen and
+ * "64h 30m" on the other (AUDIT F048). Display only — never feed it back into pace math.
+ */
+export function displayGoalMin(goalMin: number): number {
+  return Math.ceil(goalMin / 60) * 60
+}

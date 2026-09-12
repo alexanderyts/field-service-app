@@ -3696,3 +3696,56 @@ button.small {
   text-decoration: line-through;
   color: var(--muted);
 }
+
+/* ---- Progress as hero (tracking-first, Wave 2) ---- */
+.goal-row.hero strong {
+  font-size: var(--fs-xl, 18px);
+}
+.pace-line {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.pace-chip {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.pace-chip.pace-ahead,
+.pace-chip.pace-done {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pace-chip.pace-behind {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Milestone toast: short, non-blocking, sits above the tab bar. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  max-width: min(92vw, 420px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--text-h);
+  color: var(--bg);
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: var(--shadow-md);
+  z-index: 60;
+  animation: toast-in 0.28s var(--ease-emphasized, ease-out) both;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}

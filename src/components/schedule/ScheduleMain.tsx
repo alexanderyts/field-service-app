@@ -4,11 +4,12 @@ import { db, type DayScheduleBlock, type SchedulePrefs, type TimeCategory, type 
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../categories'
 import { animateBankValue, collectAndFlyToMinuteBank } from '../../minuteBankFly'
 import { getMinuteBank, setMinuteBank, getParticipatedMonth, setParticipatedMonth } from '../../settings'
-import { effectiveMonthlyGoalMin, fmtDuration, isCredit, monthTotals, quickLogStrategy, serviceYearLabel, serviceYearRangeLabel, serviceYearlyApplied, serviceYearlyTotals } from '../../timeStats'
+import { displayGoalMin, effectiveMonthlyGoalMin, fmtDuration, isCredit, monthTotals, quickLogStrategy, serviceYearLabel, serviceYearRangeLabel, serviceYearlyApplied, serviceYearlyTotals } from '../../timeStats'
 import { StepperNav, GoalRing } from '../SharedBits'
 import { daySegments } from '../../goalSegments'
 import { type AuxConfig, auxTargetHoursFor, getAuxConfig, isAuxMonth, saveAuxConfig, weeklyHoursNeeded } from '../../auxPioneering'
 import { deriveRole, roleTracksHours } from '../../schedulePrefsRole'
+import { milestoneReached, paceDeltaMin, paceStatus, type Pace } from '../../milestones'
 import ConfirmDialog from '../ConfirmDialog'
 import { DAYS, DAY_RANGE, dayTrackPct, fmtTime, startOfWeek, fmtDayMonth, fmtDayMonthFull, calendarWeekNumber, MONTH_NAMES_LONG, monthsTouchedByRange, monthLogsFor, daysLeftInMonth, monthElapsedPct, MONTH_NAMES } from './dates'
 import { fmtLocalDate } from '../../localDate'
@@ -23,6 +24,14 @@ import { MonthlyParticipationBox } from './MonthlyParticipationBox'
 import { AuxPioneeringBox } from './AuxPioneeringBox'
 import { ReturnVisits } from './ReturnVisits'
 
+const PACE_LABEL: Record<Pace, string> = {
+  done: 'Goal reached',
+  ahead: 'Ahead of pace',
+  'on-pace': 'On pace',
+  behind: 'Behind pace',
+  'not-started': '',
+}
+
 export function ScheduleMain({
   prefs,
   onRedo,
@@ -36,11 +45,9 @@ export function ScheduleMain({
   const appointments = useLiveQuery(() => db.appointments.orderBy('date').toArray(), []) ?? []
   const now = new Date()
   const thisWeekStartMs = startOfWeek(now).getTime()
-  // Progress-bar goals are always shown rounded UP to a whole hour (a 49h40m goal reads as
-  // 50h), so the target is never a fiddly fraction.
-  const ceilHourMin = (min: number) => Math.ceil(min / 60) * 60
+  // Goals are shown rounded UP to a whole hour, through the same helper Reports uses.
+  const ceilHourMin = displayGoalMin
 
-  const [progressExpanded, setProgressExpanded] = useState(false)
   // The Service Schedule window's one view state: the mini-week (collapsed), the inline
   // month calendar, or the inline week grid. The contextual bars and the header's red X
   // move between these — replacing the old separate weekOpen flag + full-screen calendar
@@ -121,7 +128,8 @@ export function ScheduleMain({
 
   function progressScrollTarget(): number {
     const headerH = (document.querySelector('.app-header') as HTMLElement | null)?.offsetHeight ?? 0
-    const pc = progressCardRef.current
+    // The planner now sits below Recent Entries, so an expand pins the planner card itself.
+    const pc = schedCardRef.current
     if (!pc) return window.scrollY
     return Math.max(0, window.scrollY + pc.getBoundingClientRect().top - headerH - 10)
   }
@@ -329,6 +337,10 @@ export function ScheduleMain({
     setParticipatedMonth(displayedMonth.year, displayedMonth.month, participated)
   }
 
+  const tracksHours = isPioneer || nonPioneerTracksHours
+  const isCurrentMonthShown = displayedMonth.year === now.getFullYear() && displayedMonth.month === now.getMonth()
+  // Bible studies as the congregation counts them: distinct people currently studying.
+  const bibleStudies = people.filter((p) => p.status === 'bible-study').length
   const contactsThisMonth = people.filter((p) => {
     const d = new Date(p.createdAt)
     return d.getFullYear() === displayedMonth.year && d.getMonth() === displayedMonth.month
@@ -359,6 +371,49 @@ export function ScheduleMain({
       pct: goalMin ? Math.min(100, Math.round((stats.applied / goalMin) * 100)) : 0,
     }
   })()
+
+  // Pace against the elapsed share of the month — only meaningful for the month you're in.
+  const pace = isCurrentMonthShown ? paceStatus(monthProgress.applied, monthProgress.goalMin, monthElapsedPctVal) : 'not-started'
+  const paceDelta = paceDeltaMin(monthProgress.applied, monthProgress.goalMin, monthElapsedPctVal)
+  const paceText = !isCurrentMonthShown
+    ? `${monthProgress.pct}% of the goal`
+    : pace === 'done' ? '🎉 Goal reached for this month'
+    : pace === 'ahead' ? `${fmtDuration(paceDelta)} ahead of pace · ${monthDaysLeft} day${monthDaysLeft === 1 ? '' : 's'} left`
+    : pace === 'behind' ? `${fmtDuration(-paceDelta)} behind pace · ${monthDaysLeft} day${monthDaysLeft === 1 ? '' : 's'} left`
+    : pace === 'on-pace' ? `On pace · ${monthDaysLeft} day${monthDaysLeft === 1 ? '' : 's'} left`
+    : `${monthDaysLeft} day${monthDaysLeft === 1 ? '' : 's'} to go`
+
+  // Milestone moments (25/50/75/100% of the month, 100% of the service year). Compared against
+  // the previous render's totals for the *current* month, so every write path — quick log, bank
+  // roll-over, submitted block, an edit — is caught without teaching each one about toasts. The
+  // first render only records a baseline, so reopening the tab never re-celebrates.
+  const currentMonthApplied = isCurrentMonthShown
+    ? monthProgress.applied
+    : monthTotals(monthLogsFor(logs, now.getFullYear(), now.getMonth())).applied
+  const currentMonthGoal = isCurrentMonthShown
+    ? monthProgress.goalMin
+    : ceilHourMin(effectiveMonthlyGoalMin(prefs, auxConfig, now.getFullYear(), now.getMonth()))
+  const currentYearApplied = serviceYearlyApplied(logs, serviceYearLabel(now))
+  const [toast, setToast] = useState<string | null>(null)
+  const baselineRef = useRef<{ month: number; year: number } | null>(null)
+  useEffect(() => {
+    const prev = baselineRef.current
+    baselineRef.current = { month: currentMonthApplied, year: currentYearApplied }
+    if (!prev || !tracksHours) return
+    const m = milestoneReached(prev.month, currentMonthApplied, currentMonthGoal)
+    const y = yearlyGoalMin > 0 ? milestoneReached(prev.year, currentYearApplied, yearlyGoalMin) : null
+    const msg =
+      y === 100 ? '🏆 Service-year goal reached!'
+      : m === 100 ? `🎉 ${MONTH_NAMES_LONG[now.getMonth()]} goal reached!`
+      : m ? `${m}% of ${MONTH_NAMES_LONG[now.getMonth()]}'s goal — keep going`
+      : y ? `${y}% of the service year done`
+      : null
+    if (!msg) return
+    setToast(msg)
+    const t = window.setTimeout(() => { if (mountedRef.current) setToast(null) }, 2600)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonthApplied, currentYearApplied])
 
   // Navigated week (for the suggested-week section, which can page forward/back)
   const perDayCat: Partial<Record<TimeCategory, number>>[] = Array.from({ length: 7 }, () => ({}))
@@ -695,187 +750,221 @@ export function ScheduleMain({
         <h2 className="applet-title">Service</h2>
       </div>
 
+      {/* Progress is the hero: month first, service year second, week pace last, nothing
+          behind an "Expand" (docs/tracking-first-plan.md D3). The bars themselves are the
+          same elements they always were — only their order and gating changed. */}
       <div className="card highlight" ref={progressCardRef}>
         <div className="goal-row" style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
           <span>{monthYearLabel}</span>
-          <button className="secondary small" onClick={() => setProgressExpanded((v) => !v)}>
-            {progressExpanded ? 'Collapse' : 'Expand'}
-          </button>
+          {tracksHours && isCurrentMonthShown && pace !== 'not-started' && (
+            <span className={`pace-chip pace-${pace}`}>{PACE_LABEL[pace]}</span>
+          )}
         </div>
 
-        {isPioneer ? (
-          hasSchedule ? (
-            <>
-              <div className="goal-row">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {weekOffset === 0 ? 'This week' : `Week of ${fmtDayMonth(weekStartMs)}`}
-                  <InfoTip text="Hours you need this week to stay on pace for your yearly goal — worked out from the hours still needed this month and the weeks left in it, rounded up to the whole hour." />
-                </span>
-                <strong>
-                  {pioneerWeeklyGoalMin > 0
-                    ? `${fmtDuration(weekTotal)} / ${fmtDuration(pioneerWeeklyGoalMin)}`
-                    : `${fmtDuration(weekTotal)} · on pace 🎉`}
-                </strong>
-              </div>
-              <div className="progress-bar split">
-                <div className="progress-fill ministry" style={{ width: `${weekMinistryPct}%` }} />
-                <div className="progress-fill credit" style={{ width: `${weekCreditPct}%` }} />
-              </div>
-            </>
-          ) : (
-            <p className="muted" style={{ fontSize: 12, margin: '2px 0 4px' }}>
-              No weekly schedule set yet — here's your progress for the month and year below.
-            </p>
-          )
-        ) : currentlyAux ? (
-          <div>
-            <div className="goal-row">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                This week
-                <InfoTip text="Hours still needed this week to hit your auxiliary pioneering target by month end, based on what's already logged and how many weeks remain." />
-              </span>
-              <strong>{fmtDuration(weekTotal)} / {fmtDuration(auxWeeklyGoalMin)}</strong>
-            </div>
-            <HourGoalBar appliedMin={weekTotal} goalMin={auxWeeklyGoalMin} />
-          </div>
-        ) : prefs.goalPeriod === 'weekly' ? (
-          <div>
-            <div className="goal-row">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                {weekOffset === 0 ? 'This week' : `Week of ${fmtDayMonth(weekStartMs)}`}
-                <InfoTip text="Hours logged this week toward your weekly goal." />
-              </span>
-              <strong>{fmtDuration(weekTotal)} / {fmtDuration(weeklyGoalMin)}</strong>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${weeklyGoalMin ? Math.min(100, (weekTotal / weeklyGoalMin) * 100) : 0}%` }} />
-            </div>
-          </div>
-        ) : prefs.goalPeriod === 'monthly' ? (
-          <div>
-            <div className="goal-row">
+        {tracksHours ? (
+          <>
+            <div className="goal-row hero">
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {MONTH_NAMES_LONG[monthProgress.month]}
-                <InfoTip text="Hours logged this month toward your monthly goal." />
+                <InfoTip
+                  text={
+                    !isPioneer && currentlyAux && isCurrentMonthShown
+                      ? 'Hours logged this month toward your auxiliary pioneering target.'
+                      : 'Hours logged this month toward your monthly goal.'
+                  }
+                />
               </span>
               <strong>{fmtDuration(monthProgress.applied)} / {fmtDuration(monthProgress.goalMin)}</strong>
             </div>
             <div className="progress-bar">
               <div className="progress-fill" style={{ width: `${monthProgress.pct}%` }} />
             </div>
-          </div>
-        ) : prefs.goalPeriod === 'yearly' ? (
-          <div>
-            <div className="goal-row">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                Service year <span className="muted" style={{ fontSize: 11 }}>({serviceYearRangeLabel(yearProgress.label)})</span>
-                <InfoTip text="Hours logged this service year toward your yearly goal." />
-              </span>
-              <strong>{fmtDuration(yearProgress.applied)} / {fmtDuration(yearlyGoalMin)}</strong>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${yearProgress.pct}%` }} />
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div className="goal-row">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                Days left in {MONTH_NAMES_LONG[displayedMonth.month]}
-                <InfoTip text="How far through this month is — not tied to any goal." />
-              </span>
-              <strong>{monthDaysLeft} day{monthDaysLeft === 1 ? '' : 's'} left</strong>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${monthElapsedPctVal}%` }} />
-            </div>
-          </div>
-        )}
+            <p className="pace-line">{paceText}</p>
 
-        {progressExpanded && (
-          <>
-            {!isPioneer && <AuxPioneeringBox config={auxConfig} onChange={updateAuxConfig} />}
-
-            {(isPioneer || nonPioneerTracksHours) && (
-              <>
-                <div style={{ marginTop: 10 }}>
-                  <div className="goal-row">
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {MONTH_NAMES_LONG[monthProgress.month]}
-                      <InfoTip
-                        text={
-                          !isPioneer && currentlyAux && monthProgress.year === now.getFullYear() && monthProgress.month === now.getMonth()
-                            ? 'Hours logged this month toward your auxiliary pioneering target.'
-                            : 'Hours logged this month toward your monthly goal.'
-                        }
-                      />
-                    </span>
-                    <strong>{fmtDuration(monthProgress.applied)} / {fmtDuration(monthProgress.goalMin)}</strong>
-                  </div>
-                  <div className="progress-bar">
-                    <div className="progress-fill" style={{ width: `${monthProgress.pct}%` }} />
-                  </div>
+            {(isPioneer || prefs.goalPeriod === 'yearly') && (
+              <div style={{ marginTop: 10 }}>
+                <div className="goal-row">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    Service year <span className="muted" style={{ fontSize: 11 }}>({serviceYearRangeLabel(yearProgress.label)})</span>
+                    <InfoTip text={`Hours applied toward your yearly goal${isPioneer ? ' (credit hours capped at 55h/month)' : ''} — the lighter fill shows everything logged, uncapped.`} />
+                  </span>
+                  <strong>
+                    {fmtDuration(yearProgress.applied)} / {fmtDuration(yearlyGoalMin)}
+                  </strong>
                 </div>
-
-                {(isPioneer || prefs.goalPeriod === 'yearly') && (
-                  <div style={{ marginTop: 10 }}>
-                    <div className="goal-row">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        Service year <span className="muted" style={{ fontSize: 11 }}>({serviceYearRangeLabel(yearProgress.label)})</span>
-                        <InfoTip text={`Hours applied toward your yearly goal${isPioneer ? ' (credit hours capped at 55h/month)' : ''} — the lighter fill shows everything logged, uncapped.`} />
-                      </span>
-                      <strong>
-                        {fmtDuration(yearProgress.applied)} / {fmtDuration(yearlyGoalMin)}
-                      </strong>
-                    </div>
-                    <div className="progress-bar">
-                      <div className="progress-fill raw" style={{ width: `${yearProgress.rawPct}%` }} />
-                      <div className="progress-fill" style={{ width: `${yearProgress.pct}%` }} />
-                    </div>
-                    {isPioneer && (
-                      <div className="legend tight">
-                        <span><i className="sw ministry" /> Ministry {fmtDuration(yearProgress.stats.ministry)}</span>
-                        <span><i className="sw credit" /> Credit {fmtDuration(yearProgress.stats.credit)}</span>
-                      </div>
-                    )}
-                    {yearProgress.stats.total > yearProgress.applied && (
-                      <p className="muted">
-                        {fmtDuration(yearProgress.stats.total)} logged in total this service year — 55h/mo credit cap applies.
-                      </p>
-                    )}
-                    <p className="goal-remaining">
-                      {yearProgress.remainingMin > 0
-                        ? `${fmtDuration(yearProgress.remainingMin)} left to reach your yearly goal`
-                        : yearlyGoalMin > 0 ? '🎉 Yearly goal reached!' : ''}
-                    </p>
+                <div className="progress-bar">
+                  <div className="progress-fill raw" style={{ width: `${yearProgress.rawPct}%` }} />
+                  <div className="progress-fill" style={{ width: `${yearProgress.pct}%` }} />
+                </div>
+                {isPioneer && (
+                  <div className="legend tight">
+                    <span><i className="sw ministry" /> Ministry {fmtDuration(yearProgress.stats.ministry)}</span>
+                    <span><i className="sw credit" /> Credit {fmtDuration(yearProgress.stats.credit)}</span>
                   </div>
                 )}
-              </>
+                {yearProgress.stats.total > yearProgress.applied && (
+                  <p className="muted">
+                    {fmtDuration(yearProgress.stats.total)} logged in total this service year — 55h/mo credit cap applies.
+                  </p>
+                )}
+                <p className="goal-remaining">
+                  {yearProgress.remainingMin > 0
+                    ? `${fmtDuration(yearProgress.remainingMin)} left to reach your yearly goal`
+                    : yearlyGoalMin > 0 ? '🎉 Yearly goal reached!' : ''}
+                </p>
+              </div>
             )}
 
-            {!isPioneer && !nonPioneerTracksHours && (
-              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {!participatedThisMonth && contactsThisMonth === 0 && scripturesThisMonth === 0 && territoriesThisMonth === 0 ? (
-                  <p className="muted">Nothing recorded yet this month.</p>
-                ) : (
-                  <>
-                    {participatedThisMonth && <p className="muted">✓ Participated in the ministry this month</p>}
-                    {contactsThisMonth > 0 && (
-                      <p className="muted">👋 {contactsThisMonth} contact{contactsThisMonth === 1 ? '' : 's'} recorded this month</p>
-                    )}
-                    {scripturesThisMonth > 0 && (
-                      <p className="muted">📖 {scripturesThisMonth} scripture{scripturesThisMonth === 1 ? '' : 's'} shared this month</p>
-                    )}
-                    {territoriesThisMonth > 0 && (
-                      <p className="muted">🗺️ {territoriesThisMonth} custom territor{territoriesThisMonth === 1 ? 'y' : 'ies'} completed this month</p>
-                    )}
-                  </>
-                )}
+            {isPioneer && hasSchedule && (
+              <div style={{ marginTop: 10 }}>
+                <div className="goal-row">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {weekOffset === 0 ? 'This week' : `Week of ${fmtDayMonth(weekStartMs)}`}
+                    <InfoTip text="Hours you need this week to stay on pace for your yearly goal — worked out from the hours still needed this month and the weeks left in it, rounded up to the whole hour." />
+                  </span>
+                  <strong>
+                    {pioneerWeeklyGoalMin > 0
+                      ? `${fmtDuration(weekTotal)} / ${fmtDuration(pioneerWeeklyGoalMin)}`
+                      : `${fmtDuration(weekTotal)} · on pace 🎉`}
+                  </strong>
+                </div>
+                <div className="progress-bar split">
+                  <div className="progress-fill ministry" style={{ width: `${weekMinistryPct}%` }} />
+                  <div className="progress-fill credit" style={{ width: `${weekCreditPct}%` }} />
+                </div>
+              </div>
+            )}
+            {!isPioneer && currentlyAux && (
+              <div style={{ marginTop: 10 }}>
+                <div className="goal-row">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    This week
+                    <InfoTip text="Hours still needed this week to hit your auxiliary pioneering target by month end, based on what's already logged and how many weeks remain." />
+                  </span>
+                  <strong>{fmtDuration(weekTotal)} / {fmtDuration(auxWeeklyGoalMin)}</strong>
+                </div>
+                <HourGoalBar appliedMin={weekTotal} goalMin={auxWeeklyGoalMin} />
+              </div>
+            )}
+            {!isPioneer && !currentlyAux && prefs.goalPeriod === 'weekly' && (
+              <div style={{ marginTop: 10 }}>
+                <div className="goal-row">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {weekOffset === 0 ? 'This week' : `Week of ${fmtDayMonth(weekStartMs)}`}
+                    <InfoTip text="Hours logged this week toward your weekly goal." />
+                  </span>
+                  <strong>{fmtDuration(weekTotal)} / {fmtDuration(weeklyGoalMin)}</strong>
+                </div>
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: `${weeklyGoalMin ? Math.min(100, (weekTotal / weeklyGoalMin) * 100) : 0}%` }} />
+                </div>
               </div>
             )}
           </>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <p className="pace-line" style={{ marginTop: 0 }}>
+              {participatedThisMonth ? '✓ Shared in the ministry this month' : 'Not yet marked as shared in the ministry this month'}
+            </p>
+            <p className="muted">📖 {bibleStudies} Bible stud{bibleStudies === 1 ? 'y' : 'ies'}</p>
+            {contactsThisMonth > 0 && (
+              <p className="muted">👋 {contactsThisMonth} contact{contactsThisMonth === 1 ? '' : 's'} recorded this month</p>
+            )}
+            {scripturesThisMonth > 0 && (
+              <p className="muted">✨ {scripturesThisMonth} scripture{scripturesThisMonth === 1 ? '' : 's'} shared this month</p>
+            )}
+            {territoriesThisMonth > 0 && (
+              <p className="muted">🗺️ {territoriesThisMonth} custom territor{territoriesThisMonth === 1 ? 'y' : 'ies'} completed this month</p>
+            )}
+          </div>
         )}
+
+        {!isPioneer && <AuxPioneeringBox config={auxConfig} onChange={updateAuxConfig} />}
       </div>
+
+      {/* Non-pioneers not tracking hours just check a single box off once a month; everyone
+          who tracks hours logs via day taps (or the header's "+ Add time" shortcut). */}
+      {!isPioneer && !nonPioneerTracksHours && (
+        <MonthlyParticipationBox
+          month={displayedMonth.month}
+          participated={participatedThisMonth}
+          onChange={updateParticipated}
+        />
+      )}
+
+      <ReturnVisits onGoToContact={onGoToContact} />
+
+      <div className="card">
+        <div className="recent-entries-header">
+          <h4 style={{ margin: 0 }}>Recent Entries</h4>
+          <button
+            className="secondary small"
+            title="Log service time for today"
+            onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
+          >
+            + Quick add time
+          </button>
+        </div>
+        {/* The minute bank lives here now (moved off the Service Schedule header to declutter
+            it). Its own row keeps the arrival pulse clear of the title/button; the anchor is
+            always rendered so the fly has a stable landing target. */}
+        <div className="minute-bank-row">
+          <span className="minute-bank-anchor" aria-hidden="true" />
+          {(displayedBank > 0 || bankCollapsing) && (
+            <div
+              className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
+              onClick={() => setConfirmBankRoundUp(true)}
+              title="Tap to round up and add now"
+            >
+              <span>⏱ {displayedBank}m</span>
+              <div className="minute-bank-track">
+                <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
+              </div>
+            </div>
+          )}
+        </div>
+        <ul className="list">
+            {logs.slice(0, visibleLogCount).map((l) => (
+              <li key={l.id} className="list-item">
+                <div className="visit-info">
+                  <span className={`cat-dot ${isCredit(l.category) ? 'credit' : 'ministry'}`} />
+                  {/* The Activity Note is what makes the two-category model readable: a
+                      pre-0.20 LDC entry now reads "Credit — LDC", not a bare "Credit". */}
+                  <strong>{fmtDuration(l.minutes)}</strong> · {CATEGORY_LABELS[l.category]}
+                  {[l.activityNote, l.note].filter(Boolean).map((t) => ` — ${t}`).join('')}
+                  <div className="muted">
+                    {new Date(l.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </div>
+                </div>
+                <div className="visit-actions">
+                  <button className="secondary small" onClick={() => setEditingLog(l)}>
+                    Edit
+                  </button>
+                  <button className="danger small" onClick={() => setConfirmDeleteLogId(l.id)}>
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+            {logs.length === 0 && <p className="muted">No time logged yet.</p>}
+          </ul>
+          {visibleLogCount < logs.length && (
+            <button className="secondary small" onClick={() => setVisibleLogCount((n) => n + 4)}>
+              See more
+            </button>
+          )}
+          <ConfirmDialog
+            open={confirmDeleteLogId != null}
+            title="Delete this time entry?"
+            message="This can't be undone."
+            onConfirm={() => {
+              if (confirmDeleteLogId != null) db.timeLogs.delete(confirmDeleteLogId)
+              setConfirmDeleteLogId(null)
+            }}
+            onCancel={() => setConfirmDeleteLogId(null)}
+          />
+          {editingLog && <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} />}
+        </div>
 
       {/* Service Schedule — mini week (collapsed), inline month calendar, or inline week grid */}
       <div className="card sched-card" ref={schedCardRef}>
@@ -1137,93 +1226,11 @@ export function ScheduleMain({
         </div>
       </div>
 
-      {/* Non-pioneers not tracking hours just check a single box off once a month; everyone
-          who tracks hours logs via day taps (or the header's "+ Add time" shortcut). */}
-      {!isPioneer && !nonPioneerTracksHours && (
-        <MonthlyParticipationBox
-          month={displayedMonth.month}
-          participated={participatedThisMonth}
-          onChange={updateParticipated}
-        />
-      )}
-
-      <ReturnVisits onGoToContact={onGoToContact} />
-
-      <div className="card">
-        <div className="recent-entries-header">
-          <h4 style={{ margin: 0 }}>Recent Entries</h4>
-          <button
-            className="secondary small"
-            title="Log service time for today"
-            onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
-          >
-            + Quick add time
-          </button>
-        </div>
-        {/* The minute bank lives here now (moved off the Service Schedule header to declutter
-            it). Its own row keeps the arrival pulse clear of the title/button; the anchor is
-            always rendered so the fly has a stable landing target. */}
-        <div className="minute-bank-row">
-          <span className="minute-bank-anchor" aria-hidden="true" />
-          {(displayedBank > 0 || bankCollapsing) && (
-            <div
-              className={`minute-bank-pill${bankCollapsing ? ' minute-bank-collapsing' : ''}`}
-              onClick={() => setConfirmBankRoundUp(true)}
-              title="Tap to round up and add now"
-            >
-              <span>⏱ {displayedBank}m</span>
-              <div className="minute-bank-track">
-                <div className="minute-bank-fill" style={{ width: `${(displayedBank / 60) * 100}%` }} />
-              </div>
-            </div>
-          )}
-        </div>
-        <ul className="list">
-            {logs.slice(0, visibleLogCount).map((l) => (
-              <li key={l.id} className="list-item">
-                <div className="visit-info">
-                  <span className={`cat-dot ${isCredit(l.category) ? 'credit' : 'ministry'}`} />
-                  {/* The Activity Note is what makes the two-category model readable: a
-                      pre-0.20 LDC entry now reads "Credit — LDC", not a bare "Credit". */}
-                  <strong>{fmtDuration(l.minutes)}</strong> · {CATEGORY_LABELS[l.category]}
-                  {[l.activityNote, l.note].filter(Boolean).map((t) => ` — ${t}`).join('')}
-                  <div className="muted">
-                    {new Date(l.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </div>
-                </div>
-                <div className="visit-actions">
-                  <button className="secondary small" onClick={() => setEditingLog(l)}>
-                    Edit
-                  </button>
-                  <button className="danger small" onClick={() => setConfirmDeleteLogId(l.id)}>
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
-            {logs.length === 0 && <p className="muted">No time logged yet.</p>}
-          </ul>
-          {visibleLogCount < logs.length && (
-            <button className="secondary small" onClick={() => setVisibleLogCount((n) => n + 4)}>
-              See more
-            </button>
-          )}
-          <ConfirmDialog
-            open={confirmDeleteLogId != null}
-            title="Delete this time entry?"
-            message="This can't be undone."
-            onConfirm={() => {
-              if (confirmDeleteLogId != null) db.timeLogs.delete(confirmDeleteLogId)
-              setConfirmDeleteLogId(null)
-            }}
-            onCancel={() => setConfirmDeleteLogId(null)}
-          />
-          {editingLog && <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} />}
-        </div>
-
       <div className="row" style={{ justifyContent: 'center', marginTop: 4 }}>
         <button className="secondary small" onClick={onRedo}>Change my goal</button>
       </div>
+
+      {toast && <div className="toast" role="status">{toast}</div>}
 
       {dayModalFor != null && (
         <DayActionModal

@@ -58,6 +58,7 @@ src/
   useGeolocation.ts    # GPS hook wrapping navigator.geolocation
   timeStats.ts         # Credit-hour cap (55h/mo), monthly/yearly + service-year helpers
   goalSegments.ts      # Day goal-ring arc math for the Schedule calendar
+  milestones.ts        # Milestone crossing (25/50/75/100) + month pace status/delta (pure, tested)
   schedulePrefsRole.ts # Role (publisher/auxiliary/pioneer) derivation + whether hours are tracked this month
   minuteBankFly.ts     # The "minute bank" fly-to-pill animation helper
   auxPioneering.ts     # Auxiliary-pioneer config (localStorage) + target-hour math
@@ -328,8 +329,11 @@ brand/category/tag hues are brightened per dark theme for contrast.
   pioneer — then only what that role needs (yearly goal + credit; aux months + target; optional
   personal goal). Days and time windows are never asked; planning is opt-in on the tab itself.
   "Change my goal" at the bottom of the tab reopens it and leaves `daysOut`/`daySchedule` untouched.
-- The tab leads with logged time; the planner (Service Schedule card) is optional and its copy
-  never nags about time "to schedule" (docs/tracking-first-plan.md).
+- The tab leads with logged time: progress card (month → service year → week pace, plus a pace
+  chip/line from `milestones.ts`), then participation (publishers without a goal), Return Visits,
+  Recent Entries, and only then the planner (Service Schedule card, collapsed). Milestone toasts
+  fire from a render-side baseline comparison so every write path is covered. Goals are displayed
+  through `displayGoalMin` on both this tab and Reports (docs/tracking-first-plan.md).
 
 ### Service → Add Time
 - **Date** opens a custom `CalendarPicker`; **Hours/Minutes** open a custom `NumPad` (no native

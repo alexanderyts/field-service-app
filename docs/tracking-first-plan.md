@@ -171,7 +171,7 @@ Goal: the first five minutes tell the user the app counts their time.
 4. **Verify:** fresh profile → intake as each role → land on the tab with the right bar.
    Redo intake on a legacy `isPioneer`-less row starts pre-answered as Pioneer.
 
-### Wave 2 — Progress as hero (0.22.0)
+### Wave 2 — Progress as hero (0.22.0) ✅ shipped 2026-09-12 (tutorial images not re-shot: the week grid and calendar they show are unchanged)
 
 Goal: opening the tab feels like checking a scoreboard.
 

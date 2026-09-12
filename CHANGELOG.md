@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.21.0`.** History runs from the initial scaffold forward.
+**Current version: `0.22.0`.** History runs from the initial scaffold forward.
 
 > Keep this in sync with `src/version.ts` (`APP_VERSION`, shown in the More tab and stamped into
 > backups) and `package.json` — bump all three together when cutting a version.
@@ -186,6 +186,15 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## 0.20.3 — Browser security policy · 2026-09-07
 - **The app now tells the browser exactly what it's allowed to load and run.** Only Meleo's own code can execute — no injected or inline script ever will — and the only outside places it may contact are the map-tile and address-lookup services it already uses. Nothing changes day to day; it closes the door on a whole class of tampering (F009)
 - Checked by opening the real built app in a browser and exercising the map (both tile sources), the Schedule tab and a contact's share code, with no policy refusals
+
+## 0.22.0 — Progress is the hero · 2026-09-12
+- **Your month is the first thing on the Service tab.** Hours against the month's goal, then the service year, then the week — always visible, no "Expand" button. The bars are the same ones as before; only their order and gating changed
+- **A pace line and chip** say whether you are ahead of, on, or behind pace for the month, with days left, and read "Goal reached" when you get there. Past months show the percentage reached
+- **Milestone moments.** Crossing 25, 50, 75, or 100 percent of the month, or finishing the service year, shows a short toast. It fires on any write — a quick log, a bank roll-over, a submitted block, an edit — and never on simply opening the tab
+- **Publishers without an hour goal** see whether the month is marked as shared in the ministry and how many Bible studies they have, instead of a meaningless "days left" bar
+- **The planner moved below Recent Entries.** The Service Schedule card is unchanged and still collapsed by default; expanding it now pins the planner itself
+- **Schedule and Reports agree on the goal.** Both round a month's goal up to the whole hour through one shared helper, so the same month no longer reads "65h" on one screen and "64h 30m" on the other. Reports' service-year heading lost its double dash
+- Verified: 221 tests (new: `milestones.test.ts`, `displayGoalMin`); the tab driven in the browser on the demo data — card order, pace chip and line, no Expand button, and a 13-hour log producing the 25% toast
 
 ## 0.21.0 — Set your goal: the tab counts your time · 2026-09-12
 - **The intake asks who you are, not when you'll be out.** One question — Publisher, Auxiliary pioneer, or Regular pioneer — then only what that role needs: a pioneer's yearly goal and credit question; an auxiliary's months and 15h/30h target (this month, chosen months, or continuous); a publisher's optional personal goal. Days and time windows are no longer asked anywhere in the intake. The button reads "Start tracking"

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { TimeLog, TimeCategory } from './db'
 import {
+  displayGoalMin,
   isCredit,
   monthTotals,
   fmtDuration,
@@ -161,5 +162,13 @@ describe('monthlyGoalFromWeekly', () => {
   it('falls back to 0 for a non-finite weeklyHours instead of returning NaN', () => {
     expect(monthlyGoalFromWeekly(Number.NaN)).toBe(0)
     expect(monthlyGoalFromWeekly(undefined as unknown as number)).toBe(0)
+  })
+})
+
+describe('displayGoalMin (AUDIT F048)', () => {
+  it('rounds a goal up to the whole hour for display', () => {
+    expect(displayGoalMin(64.5 * 60)).toBe(65 * 60)
+    expect(displayGoalMin(60 * 60)).toBe(60 * 60)
+    expect(displayGoalMin(0)).toBe(0)
   })
 })

@@ -4,6 +4,7 @@ import { db, type TimeCategory } from '../db'
 import { CATEGORY_EMOJI, CATEGORY_LABELS } from '../categories'
 import {
   CREDIT_CAP_HOURS,
+  displayGoalMin,
   effectiveMonthlyGoalMin,
   fmtDuration,
   monthTotals,
@@ -128,12 +129,13 @@ export default function Reports() {
   const yearAppliedMin = serviceYearlyApplied(logs, reportServiceYear)
   const yearStats = serviceYearlyTotals(logs, reportServiceYear)
   const yearGoalMin = (prefs?.[0]?.yearlyHours ?? 0) * 60
-  const monthGoalMin = effectiveMonthlyGoalMin(
-    { isPioneer: prefs?.[0]?.isPioneer, weeklyHours: prefs?.[0]?.weeklyHours ?? 0 },
+  // Same rounding as the Service tab, so the two screens agree on the month's goal (F048).
+  const monthGoalMin = displayGoalMin(effectiveMonthlyGoalMin(
+    { isPioneer: prefs?.[0]?.isPioneer, weeklyHours: prefs?.[0]?.weeklyHours ?? 0, goalPeriod: prefs?.[0]?.goalPeriod, monthlyHours: prefs?.[0]?.monthlyHours },
     getAuxConfig(),
     targetYear,
     targetMonth,
-  )
+  ))
   const monthPct = monthGoalMin > 0 ? Math.min(100, Math.round((appliedMin / monthGoalMin) * 100)) : 0
   const yearPct = yearGoalMin > 0 ? Math.min(100, Math.round((yearAppliedMin / yearGoalMin) * 100)) : 0
   // Raw (uncapped) progress bar length — the counted/applied fill above is always <= this.
@@ -419,7 +421,7 @@ export default function Reports() {
       {/* Yearly progress */}
       {yearGoalMin > 0 && (
         <div className="card">
-          <h4>Service Year — {serviceYearRangeLabel(reportServiceYear)}</h4>
+          <h4>Service year {serviceYearRangeLabel(reportServiceYear)}</h4>
           <div className="progress-bar">
             <div className="progress-fill raw" style={{ width: `${yearRawPct}%` }} />
             <div className="progress-fill" style={{ width: `${yearPct}%` }} />
