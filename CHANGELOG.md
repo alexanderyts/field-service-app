@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.25.2`.** Newest first. Work in progress goes under **Unreleased**; `npm run release` stamps it with the next version.
+**Current version: `0.26.0`.** Newest first. Work in progress goes under **Unreleased**; `npm run release` stamps it with the next version.
 
 > Cut versions with `npm run release -- <patch|minor|major> "Title"`: it updates this file,
 > `src/version.ts` (`APP_VERSION`, shown in More and stamped into backups), package.json and the
@@ -17,6 +17,8 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ---
 
 ## Unreleased
+
+## 0.26.0 — The report hands your month in · 2026-09-23
 
 - **The Report tab hands your month in.** The top card now follows the form, in order: Shared in the ministry, Bible studies, Hours, Comments. Each has a Copy button, so filling in NW Publisher is tap, paste, tap, paste. **Share report** sends the same lines through your phone's share sheet (mail, messages, notes), replacing the email box. **Mark as submitted** records that it's done
 - **Report reminders.** In the first ten days of a month, last month's report opens first and the Service tab shows "August report is ready to hand in →" until you mark it submitted
