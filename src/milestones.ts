@@ -65,3 +65,19 @@ export function perDayToGoal(appliedMin: number, goalMin: number, daysLeft: numb
   if (remaining === 0) return 0
   return Math.ceil(remaining / Math.max(1, daysLeft))
 }
+
+/** Past this, "about Xh a day" reads as a scolding rather than a plan, so it isn't shown —
+    the line says what's left and that every hour counts (Phase 3d tone rule). */
+export const PER_DAY_SHOWN_MAX_MIN = 3 * 60
+
+export function perDayWorthShowing(perDayMin: number): boolean {
+  return perDayMin > 0 && perDayMin <= PER_DAY_SHOWN_MAX_MIN
+}
+
+/** A week's catch-up target is a stretch when it is more than half again the month's
+    average week — then the week line shows hours logged, without the target. */
+export function weekTargetIsStretch(weekNeedMin: number, monthGoalMin: number, daysInMonth: number): boolean {
+  if (!(monthGoalMin > 0) || !(daysInMonth > 0)) return false
+  const averageWeekMin = monthGoalMin / (daysInMonth / 7)
+  return weekNeedMin > averageWeekMin * 1.5
+}

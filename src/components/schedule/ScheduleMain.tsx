@@ -10,9 +10,9 @@ import { clearTimerLoggedBy } from '../../timer'
 import { displayGoalMin, effectiveMonthlyGoalMin, fmtDuration, isCredit, monthTotals, quickLogStrategy, serviceYearLabel, serviceYearRangeLabel, serviceYearlyApplied, serviceYearlyTotals } from '../../timeStats'
 import { StepperNav, GoalRing } from '../SharedBits'
 import { daySegments } from '../../goalSegments'
-import { type AuxConfig, auxTargetHoursFor, getAuxConfig, isAuxMonth, saveAuxConfig, weeklyHoursNeeded } from '../../auxPioneering'
+import { type AuxConfig, auxTargetHoursFor, getAuxConfig, isAuxMonth, weeklyHoursNeeded } from '../../auxPioneering'
 import { deriveRole, roleTracksHours } from '../../schedulePrefsRole'
-import { paceDeltaMin, paceStatus, perDayToGoal, type Pace } from '../../milestones'
+import { paceDeltaMin, paceStatus, perDayToGoal, perDayWorthShowing, weekTargetIsStretch, type Pace } from '../../milestones'
 import ConfirmDialog from '../ConfirmDialog'
 import { DAYS, DAY_RANGE, addDays, dayTrackPct, fmtTime, startOfWeek, fmtDayMonth, fmtDayMonthFull, calendarWeekNumber, MONTH_NAMES_LONG, monthsTouchedByRange, monthLogsFor, daysLeftInMonth, monthElapsedPct, MONTH_NAMES } from './dates'
 import { fmtLocalDate } from '../../localDate'
@@ -32,6 +32,8 @@ type DayModalInitialLog = { hours: number; minutes: number; category?: TimeCateg
 import { ScheduleCalendarView } from './ScheduleCalendarView'
 import { EntriesModal } from './EntriesModal'
 import { AuxPioneeringBox } from './AuxPioneeringBox'
+import { Survey } from './Survey'
+import ModalPortal from '../../ModalPortal'
 import { ReturnVisits } from './ReturnVisits'
 
 // No "Behind pace" chip on purpose: being short is shown as a forward plan (hours to go,
@@ -46,11 +48,9 @@ const PACE_LABEL: Record<Pace, string> = {
 
 export function ScheduleMain({
   prefs,
-  onRedo,
   onOpenReport,
 }: {
   prefs: SchedulePrefs
-  onRedo: () => void
   onOpenReport: () => void
 }) {
   // Contacts open over this tab rather than jumping to People (Phase 3b): from Today's
@@ -223,9 +223,13 @@ export function ScheduleMain({
   const [auxConfig, setAuxConfigState] = useState<AuxConfig>(() => getAuxConfig())
   const role = deriveRole(prefs, auxConfig)
   const isPioneer = role === 'pioneer'
-  function updateAuxConfig(next: AuxConfig) {
-    setAuxConfigState(next)
-    saveAuxConfig(next)
+  // "Change my goal" edits the role and goal in a pop-up over this tab, with Cancel. It used
+  // to flip completedSurvey off and swap the whole tab for the survey, so leaving halfway left
+  // the tab stuck on it. Closing re-reads the aux config the survey may have changed.
+  const [editingGoal, setEditingGoal] = useState(false)
+  function closeGoalEditor() {
+    setEditingGoal(false)
+    setAuxConfigState(getAuxConfig())
   }
 
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
@@ -418,7 +422,9 @@ export function ScheduleMain({
     : pace === 'ahead' ? `${fmtDuration(paceDelta)} ahead of pace · ${daysWord}`
     : pace === 'on-pace' ? `On pace · ${daysWord}`
     : monthProgress.goalMin > 0
-      ? `${fmtDuration(remainingMin)} to go · ${daysWord} · about ${fmtDuration(perDay)} a day`
+      ? perDayWorthShowing(perDay)
+        ? `${fmtDuration(remainingMin)} to go · ${daysWord} · about ${fmtDuration(perDay)} a day`
+        : `${fmtDuration(remainingMin)} to go · ${daysWord} · every hour counts`
       : `${daysWord}`
 
   // Milestone toasts watch the current month and service year, whatever week is shown.
@@ -485,6 +491,14 @@ export function ScheduleMain({
       : prefs.goalPeriod === 'weekly'
         ? weeklyGoalMin
         : 0
+  // A catch-up target far above a normal week reads as a verdict, not a plan: past 1.5× the
+  // month's average week, the week line shows only what's logged (Phase 3d tone rule).
+  const daysInPrimaryMonth = new Date(primaryMonth.year, primaryMonth.month + 1, 0).getDate()
+  const pioneerWeekStretch = weekTargetIsStretch(
+    pioneerWeeklyGoalMin, effectiveMonthlyGoalMin(prefs, auxConfig, primaryMonth.year, primaryMonth.month), daysInPrimaryMonth)
+  const auxWeekStretch = currentlyAux && weekTargetIsStretch(
+    auxWeeklyGoalMin, (auxTargetHoursFor(auxConfig, now.getFullYear(), now.getMonth()) ?? 0) * 60,
+    new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate())
   const primaryServiceYear = serviceYearLabel(new Date(displayedMonth.year, displayedMonth.month, 1))
   const yearProgress = (() => {
     const label = primaryServiceYear
@@ -810,15 +824,19 @@ export function ScheduleMain({
                     <InfoTip text="Hours you need this week to stay on pace for your yearly goal — worked out from the hours still needed this month and the weeks left in it, rounded up to the whole hour." />
                   </span>
                   <strong>
-                    {pioneerWeeklyGoalMin > 0
-                      ? `${fmtDuration(weekTotal)} / ${fmtDuration(pioneerWeeklyGoalMin)}`
-                      : `${fmtDuration(weekTotal)} · on pace 🎉`}
+                    {pioneerWeeklyGoalMin <= 0
+                      ? `${fmtDuration(weekTotal)} · on pace 🎉`
+                      : pioneerWeekStretch
+                        ? `${fmtDuration(weekTotal)} logged`
+                        : `${fmtDuration(weekTotal)} / ${fmtDuration(pioneerWeeklyGoalMin)}`}
                   </strong>
                 </div>
-                <div className="progress-bar split">
-                  <div className="progress-fill ministry" style={{ width: `${weekMinistryPct}%` }} />
-                  <div className="progress-fill credit" style={{ width: `${weekCreditPct}%` }} />
-                </div>
+                {!pioneerWeekStretch && (
+                  <div className="progress-bar split">
+                    <div className="progress-fill ministry" style={{ width: `${weekMinistryPct}%` }} />
+                    <div className="progress-fill credit" style={{ width: `${weekCreditPct}%` }} />
+                  </div>
+                )}
               </div>
             )}
             {!isPioneer && currentlyAux && (
@@ -828,9 +846,13 @@ export function ScheduleMain({
                     This week
                     <InfoTip text="Hours still needed this week to hit your auxiliary pioneering target by month end, based on what's already logged and how many weeks remain." />
                   </span>
-                  <strong>{fmtDuration(weekTotal)} / {fmtDuration(auxWeeklyGoalMin)}</strong>
+                  <strong>
+                    {auxWeeklyGoalMin <= 0
+                      ? `${fmtDuration(weekTotal)} · goal reached 🎉`
+                      : auxWeekStretch ? `${fmtDuration(weekTotal)} logged` : `${fmtDuration(weekTotal)} / ${fmtDuration(auxWeeklyGoalMin)}`}
+                  </strong>
                 </div>
-                <HourGoalBar appliedMin={weekTotal} goalMin={auxWeeklyGoalMin} />
+                {auxWeeklyGoalMin > 0 && !auxWeekStretch && <HourGoalBar appliedMin={weekTotal} goalMin={auxWeeklyGoalMin} />}
               </div>
             )}
             {!isPioneer && !currentlyAux && prefs.goalPeriod === 'weekly' && (
@@ -879,7 +901,7 @@ export function ScheduleMain({
           </div>
         )}
 
-        {!isPioneer && <AuxPioneeringBox config={auxConfig} onChange={updateAuxConfig} />}
+        {(role === 'auxiliary' || auxConfig.enabled) && <AuxPioneeringBox config={auxConfig} onChange={() => setEditingGoal(true)} />}
       </div>
 
       {/* Service Schedule — mini week (collapsed), inline month calendar, or inline week grid */}
@@ -1146,14 +1168,7 @@ export function ScheduleMain({
 
       <div className="card">
         <div className="recent-entries-header">
-          <h4 style={{ margin: 0 }}>Recent Entries</h4>
-          <button
-            className="secondary small"
-            title="Log service time for today"
-            onClick={(e) => openDayModal(new Date(), e.currentTarget.getBoundingClientRect(), 'logTime')}
-          >
-            + Log time
-          </button>
+          <h4 style={{ margin: 0 }}>Recent entries</h4>
         </div>
         <ul className="list">
             {logs.slice(0, RECENT_LOG_COUNT).map((l) => (
@@ -1200,7 +1215,7 @@ export function ScheduleMain({
 
 
       <div className="row" style={{ justifyContent: 'center', marginTop: 4 }}>
-        <button className="secondary small" onClick={onRedo}>Change my goal</button>
+        <button className="secondary small" onClick={() => setEditingGoal(true)}>Change my goal</button>
       </div>
 
       {showAllEntries && (
@@ -1213,6 +1228,18 @@ export function ScheduleMain({
       )}
 
       {toast && <div className="toast" role="status">{toast}</div>}
+      {editingGoal && (
+        <ModalPortal onClose={closeGoalEditor}>
+          <div className="modal-backdrop" onClick={closeGoalEditor}>
+            <div className="modal modal-expanded goal-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-toolbar">
+                <button className="icon-btn close-x" onClick={closeGoalEditor} title="Close" aria-label="Close">×</button>
+              </div>
+              <Survey existing={prefs} onDone={closeGoalEditor} onCancel={closeGoalEditor} />
+            </div>
+          </div>
+        </ModalPortal>
+      )}
       {openPerson && (
         <ContactDetail personId={openPerson.id} startLogging={openPerson.log} onClose={() => setOpenPerson(null)} />
       )}

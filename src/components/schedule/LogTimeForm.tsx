@@ -25,12 +25,15 @@ export function LogTimeForm({
   closing,
   initial,
   onSubmit,
+  submitLabel = 'Log it',
 }: {
   /** True while the hub is animating the minutes into the bank — fades the other fields. */
   closing: boolean
   /** Prefill from the live timer: the elapsed time and the real interval it covered. */
   initial?: { hours: number; minutes: number; category?: TimeCategory; activityNote?: string; interval?: LogInterval }
   onSubmit: (hours: number, minutes: number, category: TimeCategory, activityNote: string, minutesEl?: HTMLElement, interval?: LogInterval) => void
+  /** "Log it" for new time; the edit modal says "Save changes". */
+  submitLabel?: string
 }) {
   const [hours, setHours] = useState(String(initial?.hours ?? 0))
   const [minutes, setMinutes] = useState(String(initial?.minutes ?? 0))
@@ -42,8 +45,9 @@ export function LogTimeForm({
   const [numPad, setNumPad] = useState<'hours' | 'minutes' | null>(null)
   const minutesBtnRef = useRef<HTMLButtonElement>(null)
 
-  // Credit off means Ministry only (see the 0.20.0 notes on the old 'other' category).
-  const availableCats: TimeCategory[] = creditHoursEnabled() ? ['ministry', 'credit'] : ['ministry']
+  // Credit off means Ministry only (see the 0.20.0 notes on the old 'other' category) — except
+  // when editing an entry that already is Credit, which must not silently become Ministry.
+  const availableCats: TimeCategory[] = creditHoursEnabled() || initial?.category === 'credit' ? ['ministry', 'credit'] : ['ministry']
   const effectiveCategory = availableCats.includes(category) ? category : 'ministry'
   const isPreset = (p: { h: number; m: number }) => Number(hours) === p.h && Number(minutes) === p.m
 
@@ -128,7 +132,7 @@ export function LogTimeForm({
         }}
         disabled={(Number(hours) === 0 && Number(minutes) === 0) || submitted || closing}
       >
-        Submit Time
+        {submitLabel}
       </button>
 
       {numPad === 'hours' && (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { milestoneReached, milestoneToastText, paceStatus, paceDeltaMin, perDayToGoal } from './milestones'
+import { milestoneReached, milestoneToastText, paceStatus, paceDeltaMin, perDayToGoal, perDayWorthShowing, weekTargetIsStretch } from './milestones'
 
 const GOAL = 60 * 60 // 60h in minutes
 
@@ -74,5 +74,20 @@ describe('milestoneToastText', () => {
   it('nothing when no line is crossed, or totals went down', () => {
     expect(milestoneToastText({ month: 26 * 60, year: 0 }, { month: 27 * 60, year: 0 }, goal, 0, 'September')).toBeNull()
     expect(milestoneToastText({ month: 30 * 60, year: 0 }, { month: 20 * 60, year: 0 }, goal, 0, 'September')).toBeNull()
+  })
+})
+
+describe('tone rules (Phase 3d)', () => {
+  it('a per-day figure over 3 hours is not shown', () => {
+    expect(perDayWorthShowing(2 * 60)).toBe(true)
+    expect(perDayWorthShowing(3 * 60)).toBe(true)
+    expect(perDayWorthShowing(3 * 60 + 1)).toBe(false)
+    expect(perDayWorthShowing(0)).toBe(false)
+  })
+  it('a week target more than 1.5× the average week is a stretch', () => {
+    // 50h over 30 days ≈ 11h40m a week; 1.5× ≈ 17h30m.
+    expect(weekTargetIsStretch(17 * 60, 50 * 60, 30)).toBe(false)
+    expect(weekTargetIsStretch(18 * 60, 50 * 60, 30)).toBe(true)
+    expect(weekTargetIsStretch(18 * 60, 0, 30)).toBe(false)
   })
 })

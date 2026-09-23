@@ -35,7 +35,7 @@ export function SurveyIntro({ onTakeSurvey, onSkip }: { onTakeSurvey: () => void
  *
  * On a redo, `daysOut`/`daySchedule`/`dateOverrides` are left exactly as they were.
  */
-export function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone: () => void }) {
+export function Survey({ existing, onDone, onCancel }: { existing?: SchedulePrefs; onDone: () => void; onCancel?: () => void }) {
   const initialAux = getAuxConfig()
   const [role, setRole] = useState<Role | null>(existing ? deriveRole(existing, initialAux) : null)
 
@@ -228,9 +228,10 @@ export function Survey({ existing, onDone }: { existing?: SchedulePrefs; onDone:
         </div>
       )}
 
-      {role && (
-        <button onClick={save} disabled={!ready}>Start tracking</button>
-      )}
+      <div className="row">
+        {role && <button onClick={save} disabled={!ready}>{existing ? 'Save' : 'Start tracking'}</button>}
+        {onCancel && <button className="secondary" onClick={onCancel}>Cancel</button>}
+      </div>
     </div>
   )
 }

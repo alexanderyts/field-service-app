@@ -3940,3 +3940,8 @@ button.small {
 }
 .visit-date-chips { display: flex; flex-direction: column; gap: var(--space-4); margin-bottom: var(--space-6); }
 .contact-primary-actions > button { flex: 1; min-height: 48px; }
+
+/* Service tidy (Phase 3d): the auxiliary summary line and the goal editor as a pop-up. */
+.aux-summary { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-6); }
+.aux-summary-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
+.goal-modal .view { padding: 0; }

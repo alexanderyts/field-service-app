@@ -43,10 +43,6 @@ export default function Schedule({ onOpenReport }: { onOpenReport: () => void })
   return (
     <ScheduleMain
       prefs={current}
-      onRedo={async () => {
-        await db.schedulePrefs.update(current.id, { completedSurvey: false })
-        setWizardOpen(true)
-      }}
       onOpenReport={onOpenReport}
     />
   )

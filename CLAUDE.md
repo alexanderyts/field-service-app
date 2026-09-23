@@ -61,7 +61,7 @@ src/
   useGeolocation.ts    # GPS hook wrapping navigator.geolocation
   timeStats.ts         # Credit-hour cap (55h/mo), monthly/yearly + service-year helpers
   goalSegments.ts      # Day goal-ring arc math for the Schedule calendar
-  milestones.ts        # Milestone crossing (25/50/75/100) + month pace status/delta (pure, tested)
+  milestones.ts        # Milestone crossing (25/50/75/100), month pace status/delta, tone rules (per-day ≤ 3h shown; week stretch > 1.5× average) — pure, tested
   territoriesFeature.ts # Streets & territories opt-in: useTerritoriesEnabled() = the More switch, else on iff streets/territories exist
   schedulePrefsRole.ts # Role (publisher/auxiliary/pioneer) derivation + whether hours are tracked this month
   minuteBankFly.ts     # The "minute bank" fly-to-pill animation helper
@@ -345,7 +345,9 @@ brand/category/tag hues are brightened per dark theme for contrast.
 - **Intake (`Survey.tsx`)** asks one deciding question — Publisher / Auxiliary pioneer / Regular
   pioneer — then only what that role needs (yearly goal + credit; aux months + target; optional
   personal goal). Days and time windows are never asked; planning is opt-in on the tab itself.
-  "Change my goal" at the bottom of the tab reopens it and leaves `daysOut`/`daySchedule` untouched.
+  "Change my goal" at the bottom of the tab opens it as a pop-up with Cancel (0.27.0 — it no longer
+  flips `completedSurvey`) and leaves `daysOut`/`daySchedule` untouched. Auxiliary pioneering is set
+  only there; `AuxPioneeringBox` is a summary + S-205b-E slip + Change link.
 - The tab order (0.27.0): the report-due banner (days 1–10), Log time + `TimerCard`, the minute-bank pill,
   `TodayCard` (today's + overdue visits, **Log visit** opens `ContactDetail` over the tab with the
   form ready — contacts opened from Service never switch tabs), the progress card (month

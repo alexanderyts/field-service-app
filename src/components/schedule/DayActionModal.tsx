@@ -5,7 +5,7 @@ import { creditHoursEnabled } from '../../settings'
 import { fmtDuration } from '../../timeStats'
 import ConfirmDialog from '../ConfirmDialog'
 import ModalPortal from '../../ModalPortal'
-import { DAY_NAMES_FULL, addDays, fmtTime, startOfWeek, fmtDayMonth, minutesToTimeInput, timeInputToMinutes } from './dates'
+import { DAY_NAMES_FULL, fmtTime, minutesToTimeInput, timeInputToMinutes } from './dates'
 import { fmtLocalDate } from '../../localDate'
 import { EditAppointmentModal } from './EditAppointmentModal'
 import { LogTimeForm, type LogInterval } from './LogTimeForm'
@@ -62,9 +62,6 @@ export function DayActionModal({
 }) {
   const dayLabel = DAY_NAMES_FULL[date.getDay()]
   const dateLabel = date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-  const weekStart = startOfWeek(date).getTime()
-  const weekEnd = addDays(weekStart, 6)
-  const weekRangeLabel = `Week of ${fmtDayMonth(weekStart)} – ${fmtDayMonth(weekEnd)}, ${new Date(weekEnd).getFullYear()}`
   const dayAppt = appointments.find((a) => fmtLocalDate(new Date(a.date)) === fmtLocalDate(date)) ?? null
   const [editingAppt, setEditingAppt] = useState(false)
   const [confirmDeleteAppt, setConfirmDeleteAppt] = useState(false)
@@ -128,9 +125,8 @@ export function DayActionModal({
           </div>
           <div style={{ marginTop: -6, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <div>
-              <h3 style={{ margin: 0 }}>{dayLabel}</h3>
-              <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>{dateLabel}</p>
-              <p className="muted" style={{ margin: '1px 0 0', fontSize: 12 }}>{weekRangeLabel}</p>
+              {/* The date, once (AUDIT F048(3)). */}
+              <h3 style={{ margin: 0 }}>{date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
             </div>
             {isSuggestedDay && step === 'menu' && (
               <button className="secondary small" onClick={() => setStep('dayOptions')}>Options</button>
