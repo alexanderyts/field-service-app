@@ -3132,11 +3132,6 @@ button.small {
 /* ============================================================
    Guided tutorial
    ============================================================ */
-.tutorial-prompt-modal {
-  max-width: 360px;
-  text-align: center;
-}
-
 .tutorial-icon {
   font-size: 44px;
   line-height: 1;
@@ -3945,3 +3940,24 @@ button.small {
 .aux-summary { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-6); }
 .aux-summary-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
 .goal-modal .view { padding: 0; }
+
+/* First run (Phase 3e): one welcome screen — plain-language points, role, optional name. */
+.welcome-points {
+  margin: 0 0 var(--space-4);
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: 14px;
+  line-height: var(--lh-relaxed);
+}
+.welcome-q { margin: var(--space-8) 0 var(--space-4); }
+.welcome-roles { display: flex; flex-direction: column; gap: 8px; }
+.welcome-role {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+.welcome-role span { font-size: 12px; font-weight: 400; opacity: 0.85; }

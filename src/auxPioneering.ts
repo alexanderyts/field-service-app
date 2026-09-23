@@ -75,6 +75,9 @@ export function getAuxConfig(): AuxConfig {
   }
 }
 
+/** Auxiliary pioneering switched off — what choosing Publisher or Regular pioneer writes. */
+export const AUX_OFF: AuxConfig = { enabled: false, mode: null, targetHours: 30, weeklyHours: 7, months: [], monthTargets: {} }
+
 export function saveAuxConfig(cfg: AuxConfig) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)) } catch { /* localStorage unavailable */ }
 }

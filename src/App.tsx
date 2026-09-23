@@ -1,8 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import Contacts from './components/Contacts'
-import { SplashScreen, PrivacyGate, ProfileGate, hasAcceptedPolicy } from './components/Onboarding'
-import { hasSeenProfilePrompt } from './profile'
-import Tutorial, { TutorialPrompt, hasSeenTutorialPrompt, markTutorialPromptSeen } from './components/Tutorial'
+import { SplashScreen, WelcomeGate, hasAcceptedPolicy } from './components/Onboarding'
+import Tutorial from './components/Tutorial'
 import InstallBanner from './components/InstallPrompt'
 import ImportConfirm from './components/ImportConfirm'
 import { parseImportHash } from './share'
@@ -39,12 +38,12 @@ const Misc = lazy(importMisc)
 // Keys predate the 0.27.0 labels (contacts = People, schedule = Service) and stay, so nothing
 // saved or deep-linked moves. The Map is a view inside People now, not a tab.
 type Tab = 'contacts' | 'schedule' | 'reports' | 'misc'
-type Phase = 'splash' | 'splash-out' | 'policy' | 'profile' | 'app'
+// First run is two screens (0.27.0): the splash, then one welcome screen (policy summary,
+// optional name, role). Anyone who accepted the policy before goes straight to the app.
+type Phase = 'splash' | 'splash-out' | 'welcome' | 'app'
 
 function nextPhase(): Phase {
-  if (!hasAcceptedPolicy()) return 'policy'
-  if (!hasSeenProfilePrompt()) return 'profile'
-  return 'app'
+  return hasAcceptedPolicy() ? 'app' : 'welcome'
 }
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
@@ -57,7 +56,6 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 function App() {
   const [tab, setTab] = useState<Tab>('schedule')
   const [phase, setPhase] = useState<Phase>('splash')
-  const [showTutorialPrompt, setShowTutorialPrompt] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
   // A share opened via a scanned deep-link or a picked .meleo file — shown as an import
   // prompt once the app is fully reached (a brand-new device still gates on policy/name).
@@ -75,12 +73,6 @@ function App() {
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
-  // Offer the guided tour once, the first time the app phase is reached on this device.
-  useEffect(() => {
-    if (phase === 'app' && !hasSeenTutorialPrompt()) {
-      setShowTutorialPrompt(true)
-    }
-  }, [phase])
 
   // Ask the browser to keep our IndexedDB out of routine eviction. Best-effort — some
   // browsers only grant it once the app is installed/engaged, so it's harmless to request
@@ -145,11 +137,8 @@ function App() {
   if (phase === 'splash' || phase === 'splash-out') {
     return <SplashScreen leaving={phase === 'splash-out'} />
   }
-  if (phase === 'policy') {
-    return <PrivacyGate onAccept={() => setPhase(nextPhase())} />
-  }
-  if (phase === 'profile') {
-    return <ProfileGate onDone={() => setPhase('app')} />
+  if (phase === 'welcome') {
+    return <WelcomeGate onDone={() => setPhase('app')} />
   }
 
   return (
@@ -194,20 +183,6 @@ function App() {
           </button>
         ))}
       </nav>
-
-      {showTutorialPrompt && (
-        <TutorialPrompt
-          onYes={() => {
-            markTutorialPromptSeen()
-            setShowTutorialPrompt(false)
-            setShowTutorial(true)
-          }}
-          onNo={() => {
-            markTutorialPromptSeen()
-            setShowTutorialPrompt(false)
-          }}
-        />
-      )}
 
       {showTutorial && <Tutorial currentTab={tab} onNavigate={setTab} onClose={() => setShowTutorial(false)} />}
 

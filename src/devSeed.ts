@@ -534,10 +534,8 @@ export async function seedDemoData() {
     goalPeriod: 'none',
   })
 
-  // Re-set the flags a preview wants: accept the current policy gate and skip the one-time
-  // onboarding prompts, and turn credit categories on (the demo logs credit time).
+  // Re-set the flags a preview wants: accept the current policy (skipping the welcome
+  // screen), and turn credit categories on (the demo logs credit time).
   localStorage.setItem('fieldservice_privacy_v2', 'yes')
-  localStorage.setItem('fieldservice_profile_prompted', 'yes')
-  localStorage.setItem('fieldservice_tutorial_seen', 'yes')
   setCreditHoursEnabled(true)
 }

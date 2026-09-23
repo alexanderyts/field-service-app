@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { db, type SchedulePrefs } from '../../db'
 import { creditHoursEnabled, setCreditHoursEnabled } from '../../settings'
-import { type AuxConfig, type AuxMode, auxMonthKey, getAuxConfig, saveAuxConfig, suggestedWeeklyHours } from '../../auxPioneering'
+import { AUX_OFF, type AuxMode, auxMonthKey, getAuxConfig, saveAuxConfig, suggestedWeeklyHours } from '../../auxPioneering'
 import { type Role, deriveRole } from '../../schedulePrefsRole'
 import { weeklyFromYearly } from './dates'
 import { AuxMonthTargets } from './AuxMonthTargets'
 
-const AUX_OFF: AuxConfig = { enabled: false, mode: null, targetHours: 30, weeklyHours: 7, months: [], monthTargets: {} }
 
 /** Shown once, only for a device with no schedulePrefs record yet — a way past the intake
     for someone who hasn't decided what they want to track. */

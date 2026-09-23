@@ -1,23 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useTerritoriesEnabled } from '../territoriesFeature'
 import ModalPortal from '../ModalPortal'
 import contactShot from '../assets/tutorial/contact.webp'
-import scheduleWeekShot from '../assets/tutorial/schedule-week.webp'
-import scheduleCalendarShot from '../assets/tutorial/schedule-calendar.webp'
-import contactsMapShot from '../assets/tutorial/contacts-map.webp'
-import streetShot from '../assets/tutorial/street.webp'
-import territoryShot from '../assets/tutorial/territory.webp'
-import reportShot from '../assets/tutorial/report.webp'
 
-const TUTORIAL_KEY = 'fieldservice_tutorial_seen'
-
-export function hasSeenTutorialPrompt(): boolean {
-  try { return localStorage.getItem(TUTORIAL_KEY) === 'yes' } catch { return false }
-}
-
-export function markTutorialPromptSeen() {
-  try { localStorage.setItem(TUTORIAL_KEY, 'yes') } catch {}
-}
 
 export type TutorialTab = 'contacts' | 'schedule' | 'reports' | 'misc'
 
@@ -46,8 +30,6 @@ interface TutorialStep {
   /** A signature line (e.g. "— Alex") rendered with deliberate spacing below the body, so it
       reads as a sign-off rather than an orphaned trailing line. */
   signoff?: string
-  /** Only shown with Streets & territories switched on (More → Features). */
-  territoriesOnly?: boolean
 }
 
 // A short, tab-by-tab overview rather than a granular button-by-button walkthrough —
@@ -56,93 +38,41 @@ interface TutorialStep {
 // and snappy: one stop per tab, plus a welcome and a thank-you.
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
-    icon: '👋',
-    title: 'Welcome to Meleo',
-    body: "Here's a quick look around — under a minute. You can replay it anytime from More.",
-    tab: 'schedule',
-    highlight: '[data-tutorial="tabbar"]',
-  },
-  {
     icon: '◫',
-    title: 'Service · Your week',
-    body: "Log your time and watch the week fill toward your goal. Planning days out is optional — the bars show what you actually did.",
-    tab: 'schedule',
-    highlight: '[data-tutorial="tab-schedule"]',
-    image: scheduleWeekShot,
-    imageAlt: 'A week of days with time-of-day bars and a weekly goal meter.',
-  },
-  {
-    icon: '◫',
-    title: 'Service · The month',
-    body: "Zoom out to the whole month — each day's ring fills as you log time, so the month you're having is visible at a glance.",
-    tab: 'schedule',
-    highlight: '[data-tutorial="tab-schedule"]',
-    image: scheduleCalendarShot,
-    imageAlt: 'A month calendar with a small goal ring above each day.',
-  },
-  {
-    icon: '⏱',
-    title: 'The minute bank',
-    body: "Odd minutes never go to waste — leftover time banks up and rolls into a full hour on its own.",
+    title: 'Log your time',
+    body: "Tap Log time when you're done, or start the timer as you head out and stop it when you're back. Odd minutes are never rounded up — they bank toward the next hour.",
     tab: 'schedule',
     highlight: '[data-tutorial="tab-schedule"]',
     live: 'minutebank',
     imageAlt: 'A minute-bank pill showing 45 minutes filling toward an hour.',
   },
   {
+    icon: '◫',
+    title: 'Today',
+    body: "Today's return visits sit at the top of Service. At the door, tap Log visit — Talked or Not home, and the next visit is one tap: Tomorrow, +1 week, +2 weeks.",
+    tab: 'schedule',
+    highlight: '[data-tutorial="tab-schedule"]',
+  },
+  {
     icon: '◎',
     title: 'People',
-    body: "Everyone you meet — log a visit, jot what you talked about, and set return visits so you never lose the thread.",
+    body: "Everyone you meet, with every visit and what you talked about. Switch to Map to see where they are.",
     tab: 'contacts',
     highlight: '[data-tutorial="tab-contacts"]',
     image: contactShot,
-    imageAlt: 'A contact with a Return Visit tag, address, and a history of logged calls.',
-  },
-  {
-    icon: '◎',
-    title: 'People · Map',
-    body: "Give a contact an address and they land here automatically — pinned on the map and colour-coded by status, so your territory takes shape as you go.",
-    tab: 'contacts',
-    highlight: '[data-tutorial="tab-contacts"]',
-    image: contactsMapShot,
-    imageFocus: 'center',
-    imageAlt: 'A map with several contacts pinned across a neighborhood, colour-coded by status.',
-  },
-  {
-    icon: '◎',
-    title: 'Trace a street',
-    body: "Working a street? Trace it right on the map, so you always remember exactly where you've been. Your streets live in People → Streets.",
-    tab: 'contacts',
-    highlight: '[data-tutorial="tab-contacts"]',
-    territoriesOnly: true,
-    image: streetShot,
-    imageFocus: 'center',
-    imageAlt: 'A street traced as a colored line on the map, matching the real road.',
-  },
-  {
-    icon: '◎',
-    title: 'Territories',
-    body: "Bundle a few streets into a custom territory — each one labelled, so the whole area stays organized. Find them in People → Territories.",
-    tab: 'contacts',
-    highlight: '[data-tutorial="tab-contacts"]',
-    territoriesOnly: true,
-    image: territoryShot,
-    imageFocus: 'center',
-    imageAlt: 'Several labelled streets grouped into one custom territory on the map.',
+    imageAlt: 'A contact with a Return Visit tag, address, and a history of visits.',
   },
   {
     icon: '▦',
-    title: 'Report',
-    body: "Your monthly report, ready to hand in — tap Copy beside each figure for NW Publisher, or Share it. Below it, a recap of your month and service year.",
+    title: 'Your report',
+    body: "At month's end your report is ready in the order the form asks. Tap Copy beside each figure to paste it into NW Publisher, or Share it — then Mark as submitted.",
     tab: 'reports',
     highlight: '[data-tutorial="tab-reports"]',
-    image: reportShot,
-    imageAlt: 'A monthly report showing total hours, category breakdown, and highlights.',
   },
   {
     icon: '⋯',
     title: 'More',
-    body: "Themes, settings, and a few handy extras — the place to make Meleo your own.",
+    body: "Back up your data, change settings, turn on Streets & territories, and replay this tour.",
     tab: 'misc',
     highlight: '[data-tutorial="tab-misc"]',
   },
@@ -153,26 +83,6 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     signoff: '— Alex',
   },
 ]
-
-export function TutorialPrompt({ onYes, onNo }: { onYes: () => void; onNo: () => void }) {
-  return (
-    <ModalPortal onClose={onNo}>
-    <div className="modal-backdrop" onClick={onNo}>
-      <div className="modal tutorial-prompt-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="tutorial-icon">👋</div>
-        <h3 style={{ textAlign: 'center' }}>Welcome to Meleo</h3>
-        <p className="muted" style={{ textAlign: 'center' }}>
-          Want a quick guided tour of the app's main features? Takes about a minute.
-        </p>
-        <div className="row">
-          <button onClick={onYes}>Yes, show me around</button>
-          <button className="secondary" onClick={onNo}>No thanks</button>
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
-  )
-}
 
 // Every highlight target is the bottom tab bar these days, so the card centers itself
 // in the readable middle of the screen via a flex wrapper (.tutorial-card-wrap) whose
@@ -190,8 +100,7 @@ export default function Tutorial({
 }) {
   const [step, setStep] = useState(0)
   const [rect, setRect] = useState<DOMRect | null>(null)
-  const territoriesOn = useTerritoriesEnabled()
-  const steps = TUTORIAL_STEPS.filter((st) => territoriesOn || !st.territoriesOnly)
+  const steps = TUTORIAL_STEPS
   const isLast = step === steps.length - 1
   const current = steps[Math.min(step, steps.length - 1)]
 

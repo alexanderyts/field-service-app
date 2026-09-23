@@ -63,6 +63,7 @@ src/
   goalSegments.ts      # Day goal-ring arc math for the Schedule calendar
   milestones.ts        # Milestone crossing (25/50/75/100), month pace status/delta, tone rules (per-day ≤ 3h shown; week stretch > 1.5× average) — pure, tested
   territoriesFeature.ts # Streets & territories opt-in: useTerritoriesEnabled() = the More switch, else on iff streets/territories exist
+  roleSetup.ts         # applyFirstRunRole: the welcome screen's role → a ready prefs row + aux config (never overwrites; tested)
   schedulePrefsRole.ts # Role (publisher/auxiliary/pioneer) derivation + whether hours are tracked this month
   minuteBankFly.ts     # The "minute bank" fly-to-pill animation helper
   timer.ts             # Live service timer: pure start/pause/resume/stop arithmetic + its localStorage record (tested). Stop keeps the record (`stoppedAt`) until the log is written or discarded
@@ -80,8 +81,8 @@ src/
   localDate.ts         # parse/format YYYY-MM-DD + HH:mm as LOCAL time (never toISOString — it shifts the date west of UTC); fmtDateTime (no seconds)
   csp.ts               # Content-Security-Policy + the build-only Vite plugin that injects it (see section below)
   components/
-    Onboarding.tsx     # SplashScreen + PrivacyGate + ProfileGate (+ hasAcceptedPolicy/hasSeenProfilePrompt)
-    Tutorial.tsx       # Guided tour + first-run TutorialPrompt
+    Onboarding.tsx     # SplashScreen + WelcomeGate (policy summary + full text on request, role, optional name) + hasAcceptedPolicy
+    Tutorial.tsx       # Guided tour, 5 steps + thank-you; offered from More only (no first-run prompt since 0.27.0)
     InstallPrompt.tsx  # "Add to Home Screen" banner
     Contacts.tsx       # THE PEOPLE TAB root (key 'contacts'): List | Map (| Streets | Territories) segments + list; hosts the lazy MapView
     contacts/          # ContactForm (doorstep layout + "More details"), ContactDetail (Log visit / Schedule visit first),
@@ -109,15 +110,16 @@ src/
 
 ## App Startup Flow
 
-Phase state (`App.tsx`): `'splash' | 'splash-out' | 'policy' | 'profile' | 'app'`
+Phase state (`App.tsx`): `'splash' | 'splash-out' | 'welcome' | 'app'`
 
-1. **splash** (~0–2.45s) — Greek→Latin wordmark animation (pure CSS, `.splash-*`)
-2. **splash-out** (~2.45–2.85s) — fade-out
-3. **policy** — first boot: user must accept the privacy policy (`hasAcceptedPolicy()`)
-4. **profile** — first boot: optional name prompt (`hasSeenProfilePrompt()`)
-5. **app** — main app with 4-tab nav, landing on **Service**
+1. **splash** (~0–2.45s first launch, ~0.9s after) — Greek→Latin wordmark animation (pure CSS, `.splash-*`)
+2. **splash-out** — fade-out
+3. **welcome** — first boot only (`!hasAcceptedPolicy()`): one screen — plain-language summary, the full
+   policy on request, the role question (`applyFirstRunRole`), optional name, agree checkbox
+4. **app** — main app with 4-tab nav, landing on **Service**
 
-`nextPhase()` skips whichever gates are already satisfied. `main.tsx` applies the saved theme to
+Before 0.27.0 first run was five steps (policy, name, tour prompt, Service intro, survey).
+`SurveyIntro` still greets a device that accepted the policy but has no prefs row. `main.tsx` applies the saved theme to
 `<html data-theme>` **before first paint** so a non-light theme never flashes light.
 
 ---
@@ -265,9 +267,9 @@ moved into `settings.ts` in 0.20.2.
 | Key | Purpose | Owner |
 |---|---|---|
 | `fieldservice_privacy_v2` | `'yes'` when privacy policy accepted (v1 was pre-Meleo rename) | `Onboarding.tsx` |
-| `fieldservice_profile_prompted` | `'yes'` once the name prompt was shown | `profile.ts` |
+| `fieldservice_profile_prompted` | Legacy (the name screen is gone since 0.27.0); no longer read or written | — |
 | `fieldservice_first_name` / `_last_name` | User's own name (share attribution, personalization) | `profile.ts` |
-| `fieldservice_tutorial_seen` | `'yes'` once the guided-tour prompt was shown | `Tutorial.tsx` |
+| `fieldservice_tutorial_seen` | Legacy (no first-run tour prompt since 0.27.0); still blocklisted in backups | — |
 | `fieldservice_credit_hours` | `'yes'` when credit-hour categories are enabled | `settings.ts` |
 | `fieldservice_minute_bank` | Integer minutes accumulated toward the next auto-hour (ministry minutes only — credit logs whole) | `settings.ts` |
 | `fieldservice_theme` | `'light' | 'dark' | 'pastel' | 'mark'` | `settings.ts` |
