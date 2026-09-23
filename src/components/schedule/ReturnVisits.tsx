@@ -1,41 +1,18 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type Appointment } from '../../db'
+import { db } from '../../db'
 import ConfirmDialog from '../ConfirmDialog'
-import { parseLocalDate, fmtDateTime } from '../../localDate'
+import { fmtDateTime } from '../../localDate'
 import { isOverdue, pendingAppointments } from '../../appointments'
-import { ContactPicker } from './ContactPicker'
+import { ReturnVisitEditor } from '../contacts/ReturnVisitEditor'
 
 export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: number) => void }) {
   const appointments = useLiveQuery(() => db.appointments.orderBy('date').toArray(), []) ?? []
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const calls = useLiveQuery(() => db.calls.toArray(), []) ?? []
-  const [open, setOpen] = useState(false)
-  const [date, setDate] = useState('')
-  const [time, setTime] = useState('10:00')
-  const [personId, setPersonId] = useState<number | null>(null)
-  const [notes, setNotes] = useState('')
+  const [adding, setAdding] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [showAll, setShowAll] = useState(false)
-
-  async function add() {
-    if (!personId || !date) return
-    const person = people.find((p) => p.id === personId)
-    const [h, m] = time.split(':').map(Number)
-    const d = parseLocalDate(date)
-    d.setHours(h, m, 0, 0)
-    await db.appointments.add({
-      title: `Return Visit${person ? ` — ${person.name}` : ''}`,
-      date: d.getTime(),
-      durationMinutes: 30,
-      personId,
-      notes: notes || undefined,
-    } as Appointment)
-    setDate('')
-    setNotes('')
-    setPersonId(null)
-    setOpen(false)
-  }
 
   const now = Date.now()
   // Missed visits stay listed, marked overdue, until followed up or stale (AUDIT F036).
@@ -43,36 +20,11 @@ export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: numb
 
   return (
     <div className="card">
-      <button className="collapse-header" onClick={() => setOpen((o) => !o)}>
+      <div className="collapse-header">
         <strong>Return Visits</strong>
-        <span className="add-plus">{open ? '×' : '+'}</span>
-      </button>
-
-      {open && (
-        <div className="add-time-body">
-          <label className="field">
-            <span className="field-label">Contact</span>
-            <ContactPicker people={people} personId={personId} onChange={setPersonId} />
-          </label>
-          <div className="field-row">
-            <label className="field">
-              <span className="field-label">Date</span>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </label>
-            <label className="field">
-              <span className="field-label">Time</span>
-              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-            </label>
-          </div>
-          <label className="field">
-            <span className="field-label">Notes</span>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </label>
-          <button onClick={add} disabled={!personId || !date}>
-            Schedule Return Visit
-          </button>
-        </div>
-      )}
+        <button className="add-plus" onClick={() => setAdding(true)} aria-label="Schedule a return visit" title="Schedule a return visit">+</button>
+      </div>
+      {adding && <ReturnVisitEditor people={people} onClose={() => setAdding(false)} />}
 
       <ul className="list">
         {(showAll ? upcoming : upcoming.slice(0, 3)).map((a) => {
@@ -88,7 +40,7 @@ export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: numb
               <div className="visit-actions">
                 {person && (
                   <button className="secondary small" onClick={() => onGoToContact(person.id)}>
-                    Go to contact
+                    Open contact
                   </button>
                 )}
                 <button className="icon-btn row-delete" title="Delete return visit" aria-label="Delete this return visit" onClick={() => setConfirmDeleteId(a.id)}>
@@ -98,7 +50,7 @@ export function ReturnVisits({ onGoToContact }: { onGoToContact: (personId: numb
             </li>
           )
         })}
-        {upcoming.length === 0 && <p className="muted">No return visits scheduled. Set one here or while logging a call.</p>}
+        {upcoming.length === 0 && <p className="muted">No return visits scheduled. Tap + here, or set one while logging a visit.</p>}
       </ul>
       {upcoming.length > 3 && (
         <button className="secondary small" onClick={() => setShowAll((v) => !v)}>

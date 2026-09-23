@@ -86,7 +86,8 @@ src/
     InstallPrompt.tsx  # "Add to Home Screen" banner
     Contacts.tsx       # THE PEOPLE TAB root (key 'contacts'): List | Map (| Streets | Territories) segments + list; hosts the lazy MapView
     contacts/          # ContactForm (doorstep layout + "More details"), ContactDetail (Log visit / Schedule visit first),
-                       #   CallLogger (Talked / Not home, "Now · change"), ReturnVisitEditor (create or edit), VisitDateChips
+                       #   CallLogger (Talked / Not home, "Now · change"), ReturnVisitEditor (THE return-visit editor: create,
+                       #   edit, remove, optional contact picker — used by contacts, the day view and Return Visits), VisitDateChips
                        #   (Tomorrow / +1 wk / +2 wk / Pick…, shared); geocode.ts (Nominatim lookups, pure)
     StreetEntries.tsx  # Streets sub-view: street list, StreetDetail, house-number pad
     Territories.tsx    # Territories sub-view: grouped-territory list + detail
@@ -95,7 +96,7 @@ src/
     Schedule.tsx       # THE SERVICE TAB root (tab key 'schedule'): intake-or-main switch only
     schedule/          # dates.ts (incl. addDays — never step days by 24 h, DST) / plan.ts / animate.ts (pure, no React) + useMilestoneToast.ts + one file per piece: ScheduleMain
                        #   (week view, logging, minute bank — the hub, 1.3k), ScheduleCalendarView, DayActionModal,
-                       #   Survey, EditLogModal, EditAppointmentModal, TimeInputModal, NumPad, InfoTip, HourGoalBar,
+                       #   Survey, EditLogModal, TimeInputModal, NumPad, InfoTip, HourGoalBar,
                        #   AuxPioneeringBox, ContactPicker, ReturnVisits
     Reports.tsx        # THE REPORT TAB: the month's hand-off card (copy per field, Share, Mark as submitted) + personal recap
     ServiceYearReview.tsx # Animated end-of-service-year summary

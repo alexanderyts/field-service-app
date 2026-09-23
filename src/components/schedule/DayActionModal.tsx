@@ -7,7 +7,7 @@ import ConfirmDialog from '../ConfirmDialog'
 import ModalPortal from '../../ModalPortal'
 import { DAY_NAMES_FULL, fmtTime, minutesToTimeInput, timeInputToMinutes } from './dates'
 import { fmtLocalDate } from '../../localDate'
-import { EditAppointmentModal } from './EditAppointmentModal'
+import { ReturnVisitEditor } from '../contacts/ReturnVisitEditor'
 import { LogTimeForm, type LogInterval } from './LogTimeForm'
 
 type LogTimeFormInitial = NonNullable<Parameters<typeof LogTimeForm>[0]['initial']>
@@ -147,7 +147,7 @@ export function DayActionModal({
                   <div className="row">
                     {dayAppt.personId != null && (
                       <button className="secondary small" onClick={() => onGoToContact(dayAppt.personId!)}>
-                        Jump to Contact
+                        Open contact
                       </button>
                     )}
                     <button className="secondary small" onClick={() => setEditingAppt(true)}>Edit</button>
@@ -159,7 +159,7 @@ export function DayActionModal({
                 <div className="highlight-box">
                   <strong>Scheduled for this day</strong>
                   <p className="muted" style={{ margin: '3px 0 8px', fontSize: 13 }}>
-                    Submit each as you do it — that logs the time and clears it from here.
+                    Log each one as you do it — it moves into your logged time.
                   </p>
                   {currentBlocks.map((b, i) => (
                     <div key={i} className="sched-submit-row">
@@ -169,14 +169,14 @@ export function DayActionModal({
                         <span className="muted">{fmtTime(b.start)}–{fmtTime(b.end)} · {fmtDuration(b.end - b.start)}</span>
                       </div>
                       <div className="sched-submit-actions">
-                        <button className="small" onClick={() => onSubmitBlock(i)}>Submit</button>
+                        <button className="small" onClick={() => onSubmitBlock(i)}>Log it</button>
                         <button className="secondary small" onClick={() => onDeleteBlock(i)}>Delete</button>
                       </div>
                     </div>
                   ))}
                   {currentBlocks.length > 1 && (
                     <button className="secondary" style={{ marginTop: 8 }} onClick={() => setConfirmSubmitScheduled(true)}>
-                      Submit all remaining ({fmtDuration(scheduledTotalMin)})
+                      Log all remaining ({fmtDuration(scheduledTotalMin)})
                     </button>
                   )}
                 </div>
@@ -295,7 +295,7 @@ export function DayActionModal({
 
       <ConfirmDialog
         open={confirmSubmitScheduled}
-        title="Submit this scheduled time?"
+        title="Log this planned time?"
         message={`Log ${fmtDuration(scheduledTotalMin)} of scheduled time for ${dateLabel} so it counts toward your report. You can edit or delete it afterward from Recent Entries.`}
         confirmLabel="Yes, submit it"
         cancelLabel="Cancel"
@@ -338,7 +338,7 @@ export function DayActionModal({
       />
 
       {editingAppt && dayAppt && (
-        <EditAppointmentModal appointment={dayAppt} people={people} onClose={() => setEditingAppt(false)} />
+        <ReturnVisitEditor appt={dayAppt} people={people} onClose={() => setEditingAppt(false)} />
       )}
     </ModalPortal>
   )

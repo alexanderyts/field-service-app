@@ -118,7 +118,7 @@ function ContactPin({ person, onGoToContact }: { person: Person; onGoToContact?:
               style={{ fontSize: 12, padding: '5px 10px', borderRadius: 8, marginTop: 2 }}
               onClick={() => onGoToContact(person.id)}
             >
-              Jump to Contact
+              Open contact
             </button>
           )}
         </div>

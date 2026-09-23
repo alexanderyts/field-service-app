@@ -11,7 +11,7 @@ import { findStreetTraceMidpoint } from '../streets'
 
 const HOUSE_STATUS_OPTIONS: { value: '' | HouseStatus; label: string }[] = [
   { value: '', label: '—' },
-  { value: 'not-home', label: 'Not Home' },
+  { value: 'not-home', label: 'Not home' },
   { value: 'no-trespassing', label: 'No Trespassing' },
   { value: 'other', label: 'Other' },
 ]

@@ -60,7 +60,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     tab: 'contacts',
     highlight: '[data-tutorial="tab-contacts"]',
     image: contactShot,
-    imageAlt: 'A contact with a Return Visit tag, address, and a history of visits.',
+    imageAlt: 'A contact with a Return Visit status, address, and a history of visits.',
   },
   {
     icon: '▦',

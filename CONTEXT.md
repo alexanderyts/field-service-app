@@ -88,3 +88,18 @@ hour once they reach 60.
 **Timer** — the live count of a stretch of service, from Start to Stop. Stopping it produces one
 Time Log (whole minutes, through the same Minute Bank rule as any other log) that also records the
 real start and end for the person's own records.
+
+---
+
+## Words on screen (0.27.0)
+
+One name per idea, everywhere in the UI (the code and data keep their older names — `Call`,
+`calls`, `ContactStatus` — which are not renamed):
+
+- **Status** — a contact's Contact Status (never "tag").
+- **Visit** — one recorded interaction (the `Call` record); **Visit history**, **Log visit**,
+  **Next visit**. A not-at-home attempt is a visit marked **Not home** (that exact wording).
+- **Return visit** — a scheduled follow-up; set and changed in one editor (`ReturnVisitEditor`).
+- **Open contact** — the button that opens a contact from anywhere else.
+- **Log it** — saving time. **Submit** is reserved for handing in the monthly report
+  ("Mark as submitted").

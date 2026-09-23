@@ -505,7 +505,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
               <span className="misc-privacy-icon" aria-hidden="true">📱</span>
               <div>
                 <strong>Your data stays on your device.</strong>
-                <p>Contacts, call logs, time records, and schedules live only in your browser's local storage (IndexedDB). Meleo has no server — no analytics, tracking, ads, or backend — and the developer can't see anything you enter. The only outside services are the map ones: address text goes to OpenStreetMap to find a position, traced areas go to Overpass to snap to roads, and Esri serves the map tiles. Never a name or a note.</p>
+                <p>Contacts, visits, time records, and schedules live only in your browser's local storage (IndexedDB). Meleo has no server — no analytics, tracking, ads, or backend — and the developer can't see anything you enter. The only outside services are the map ones: address text goes to OpenStreetMap to find a position, traced areas go to Overpass to snap to roads, and Esri serves the map tiles. Never a name or a note.</p>
               </div>
             </div>
 
@@ -543,7 +543,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
       <ConfirmDialog
         open={confirmClear}
         title="Clear all app data?"
-        message="This permanently deletes all contacts, streets, territories, call history, time logs, return visits, and settings on this device. There is no server copy. Export a backup first if you might want any of it back."
+        message="This permanently deletes all contacts, streets, territories, visit history, time logs, return visits, and settings on this device. There is no server copy. Export a backup first if you might want any of it back."
         confirmLabel="Continue"
         cancelLabel="Never mind"
         tone="danger"
@@ -565,7 +565,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
       <ConfirmDialog
         open={confirmSeed}
         title="Load a year of demo data?"
-        message="This replaces all current contacts, time logs, call history, and schedule settings with generated demo data. This cannot be undone."
+        message="This replaces all current contacts, time logs, visit history, and schedule settings with generated demo data. This cannot be undone."
         confirmLabel="Yes, load demo data"
         cancelLabel="Never mind"
         tone="danger"

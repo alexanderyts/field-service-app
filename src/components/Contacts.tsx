@@ -186,9 +186,9 @@ export default function Contacts({
               </select>
             </label>
             <label className="field">
-              <span className="field-label">Filter by tag</span>
+              <span className="field-label">Status</span>
               <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as ContactStatus | 'all')}>
-                <option value="all">All tags</option>
+                <option value="all">All statuses</option>
                 {STATUS_ORDER.map((s) => (
                   <option key={s} value={s}>{STATUS_LABELS[s]}</option>
                 ))}
@@ -253,7 +253,7 @@ export default function Contacts({
           <ConfirmDialog
             open={confirmBulk}
             title={`Delete ${selectedIds.size} contact${selectedIds.size === 1 ? '' : 's'}?`}
-            message="This permanently removes the selected contacts and their call logs and return visits. This can't be undone."
+            message="This permanently removes the selected contacts and their visit history and return visits. This can't be undone."
             confirmLabel="Delete"
             cancelLabel="Cancel"
             tone="danger"
