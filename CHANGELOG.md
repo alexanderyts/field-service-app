@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.26.0`.** Newest first. Work in progress goes under **Unreleased**; `npm run release` stamps it with the next version.
+**Current version: `0.27.0`.** Newest first. Work in progress goes under **Unreleased**; `npm run release` stamps it with the next version.
 
 > Cut versions with `npm run release -- <patch|minor|major> "Title"`: it updates this file,
 > `src/version.ts` (`APP_VERSION`, shown in More and stamped into backups), package.json and the
@@ -17,6 +17,8 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ---
 
 ## Unreleased
+
+## 0.27.0 — Four tabs, a Today card, and a faster doorstep · 2026-09-23
 
 - **Four tabs, opening on Service.** Service · People · Report · More. "Ministry" is now **People**, and the Map moved inside it: a **List | Map** switch at the top. The map's buttons (satellite, find me, search, and a Key for the pin colours) now sit on the map itself instead of stacking above it, so the map fills the screen
 - **Streets & territories is now optional** (More → App Settings). It's on automatically if you already have streets or territories, and off for new installs — then People is just List | Map, the button reads "+ New Contact", and the tour skips tracing. Turning it off hides those parts; nothing is deleted
