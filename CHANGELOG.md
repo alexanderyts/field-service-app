@@ -19,6 +19,15 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ## Unreleased
 
 - Developer workflow (no app changes): one `verify` command that CI also runs, with a main-bundle size budget and a check that the built page's security policy can't silently block a script; a `release` command that bumps every version file at once; CI now checks pull requests (including dependency updates), runs Node 24, and skips redeploys for docs-only changes; `/?demo=1` loads the demo year in dev, and the demo history now runs up to yesterday; a one-paste browser smoke check; this changelog is now newest-first
+- **Daylight-saving weeks show the right days.** Around a clock change the week view could show Sunday twice and skip Saturday, and tapping a day could log to the day before. Days are now counted by the calendar, not by adding 24 hours
+- **The timer never loses a session.** "Stop & log" used to forget the timer the moment the form opened, so closing the form (or the app being closed) lost the time. A stopped timer now waits in its card — "Stopped · not logged yet" — until you log it or choose Discard
+- **Logging time is crash-safe.** A logged hour and the minute-bank hour it rolls over are saved together or not at all, as are "log my planned time" and "clear this day"
+- **Milestone toasts behave.** Opening the Service tab no longer pops a "25% of September" toast, and a toast can no longer get stuck on screen
+- **The map forgets old jumps.** After "Jump to Map" from a contact, the Map tab reopened on that contact every time; now only the jump does
+- **A damaged share or backup can't lock you out.** Shares and backup files are checked field by field; a backup with a bad entry is refused with a message naming it, and nothing is changed. Restoring onto a new phone no longer hides the install banner there
+- **Offline map tiles take far less storage.** Tiles are now cached in a form the browser can measure (each used to count as ~7 MB toward the storage the app's data shares), failed tiles are no longer cached for a month, and the cache clears itself if storage runs short
+- "Days left" counts today (the last day of the month read "0 days left", overstating the per-day amount all month), and the empty grey chip beside the month is gone
+- Verified: 279 tests (new ones pinned to a US time zone across both 2026 clock changes); the app driven in the browser — timer stop, close, reload, log and discard; Jump to Map then a plain Map visit; all five tabs with demo data and no security-policy refusals
 
 ## 0.25.1 — Data guards, first-run help, and offline maps · 2026-09-12
 - **Clearing all data is safer.** The button moved into "Your data" next to Backup, its warning lists everything that goes and says to export first, and it now takes two confirmations. Deleting a house or a draft-territory street asks first too

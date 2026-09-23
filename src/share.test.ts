@@ -298,6 +298,22 @@ describe('decodeSharePayload — field types (AUDIT F039)', () => {
     expect(ok.from).toBe('')
     await expect(decodeSharePayload(await enc({ ...contact({}), from: 'x'.repeat(201) }))).rejects.toThrow(/malformed/i)
   })
+  it('rejects wrong-type text a list would render (AUDIT F054)', async () => {
+    const street = (extra: Record<string, unknown>) => ({ v: 1, kind: 'street', from: 'x', data: { name: 'Oak', houses: [], ...extra } })
+    const t = (extra: Record<string, unknown>, st: Record<string, unknown> = {}) =>
+      ({ v: 1, kind: 'territory', from: 'x', data: { name: 'T', streets: [{ id: '1', name: 'S', points: [], done: false, ...st }], ...extra } })
+    await expect(decodeSharePayload(await enc(street({ assignedTo: { a: 1 } })))).rejects.toThrow(/malformed/i)
+    await expect(decodeSharePayload(await enc(street({ notes: 42 })))).rejects.toThrow(/malformed/i)
+    await expect(decodeSharePayload(await enc(street({ houses: [{ id: 'h', number: '1', status: 'vip' }] })))).rejects.toThrow(/malformed/i)
+    await expect(decodeSharePayload(await enc(t({ assignedTo: ['x'] })))).rejects.toThrow(/malformed/i)
+    await expect(decodeSharePayload(await enc(t({}, { assignedTo: 3 })))).rejects.toThrow(/malformed/i)
+    await expect(decodeSharePayload(await enc(contact({}, [{ date: 1, literaturePlaced: ['x'] }])))).rejects.toThrow(/malformed/i)
+    await expect(decodeSharePayload(await enc(contact({}, [{ date: 1, leftAtDoor: 7 }])))).rejects.toThrow(/malformed/i)
+    await expect(decodeSharePayload(await enc(contact({ spouseName: {} })))).rejects.toThrow(/malformed/i)
+    // …and the same shapes with the right types still pass.
+    await expect(decodeSharePayload(await enc(street({ assignedTo: 'Sam', notes: 'n', houses: [{ id: 'h', number: '1', status: 'not-home' }] })))).resolves.toBeTruthy()
+    await expect(decodeSharePayload(await enc(contact({ spouseName: 'B' }, [{ date: 1, literaturePlaced: 'Tract', leftAtDoor: 'Card', notHome: true }])))).resolves.toBeTruthy()
+  })
 })
 
 describe('importSharedPayload — transaction (AUDIT F040)', () => {

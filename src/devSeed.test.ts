@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { db } from './db'
 import { compareHouseNumbers } from './db'
 import { seedDemoData } from './devSeed'
+import { TABLE_ROW_GUARDS, findBadRow } from './rowGuards'
 
 // The demo seed is dev-only, but it's what every manual test of the app starts from — so if
 // it stops producing the things those tests need (a draft territory to group from, streets
@@ -80,5 +81,12 @@ describe('seedDemoData', () => {
 
   it('seeds past completions so Reports has a figure to show', async () => {
     expect(await db.territoryCompletions.count()).toBeGreaterThan(0)
+  })
+
+  it('every seeded row passes the restore guards, and every table has one (F055)', async () => {
+    for (const t of db.tables) {
+      expect(TABLE_ROW_GUARDS[t.name], `no row guard for table ${t.name}`).toBeTypeOf('function')
+      expect(findBadRow(t.name, await t.toArray())).toBeNull()
+    }
   })
 })

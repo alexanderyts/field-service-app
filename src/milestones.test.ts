@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { milestoneReached, paceStatus, paceDeltaMin, perDayToGoal } from './milestones'
+import { milestoneReached, milestoneToastText, paceStatus, paceDeltaMin, perDayToGoal } from './milestones'
 
 const GOAL = 60 * 60 // 60h in minutes
 
@@ -59,5 +59,20 @@ describe('perDayToGoal', () => {
   })
   it('puts the remainder on today when no days are left', () => {
     expect(perDayToGoal(50 * 60, GOAL, 0)).toBe(10 * 60)
+  })
+})
+
+describe('milestoneToastText', () => {
+  const goal = 50 * 60
+  it('names the month milestone crossed', () => {
+    expect(milestoneToastText({ month: 20 * 60, year: 0 }, { month: 26 * 60, year: 0 }, goal, 0, 'September')).toBe("50% of September's goal — keep going")
+    expect(milestoneToastText({ month: 49 * 60, year: 0 }, { month: 50 * 60, year: 0 }, goal, 0, 'September')).toBe('🎉 September goal reached!')
+  })
+  it('the service-year goal wins over a month milestone', () => {
+    expect(milestoneToastText({ month: 49 * 60, year: 599 * 60 }, { month: 50 * 60, year: 600 * 60 }, goal, 600 * 60, 'August')).toBe('🏆 Service-year goal reached!')
+  })
+  it('nothing when no line is crossed, or totals went down', () => {
+    expect(milestoneToastText({ month: 26 * 60, year: 0 }, { month: 27 * 60, year: 0 }, goal, 0, 'September')).toBeNull()
+    expect(milestoneToastText({ month: 30 * 60, year: 0 }, { month: 20 * 60, year: 0 }, goal, 0, 'September')).toBeNull()
   })
 })

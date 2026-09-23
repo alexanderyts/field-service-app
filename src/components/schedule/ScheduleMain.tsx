@@ -3,15 +3,17 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type DayScheduleBlock, type SchedulePrefs, type TimeCategory, type TimeLog } from '../../db'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../categories'
 import { animateBankValue, collectAndFlyToMinuteBank } from '../../minuteBankFly'
-import { getMinuteBank, setMinuteBank, getParticipatedMonth, setParticipatedMonth } from '../../settings'
+import { getMinuteBank, getParticipatedMonth, setParticipatedMonth } from '../../settings'
+import { clearDay, logTime, logWithBank, redeemMinuteBank as redeemBank, submitPlanned } from '../../timeRecords'
+import { clearTimerLoggedBy } from '../../timer'
 import { displayGoalMin, effectiveMonthlyGoalMin, fmtDuration, isCredit, monthTotals, quickLogStrategy, serviceYearLabel, serviceYearRangeLabel, serviceYearlyApplied, serviceYearlyTotals } from '../../timeStats'
 import { StepperNav, GoalRing } from '../SharedBits'
 import { daySegments } from '../../goalSegments'
 import { type AuxConfig, auxTargetHoursFor, getAuxConfig, isAuxMonth, saveAuxConfig, weeklyHoursNeeded } from '../../auxPioneering'
 import { deriveRole, roleTracksHours } from '../../schedulePrefsRole'
-import { milestoneReached, paceDeltaMin, paceStatus, perDayToGoal, type Pace } from '../../milestones'
+import { paceDeltaMin, paceStatus, perDayToGoal, type Pace } from '../../milestones'
 import ConfirmDialog from '../ConfirmDialog'
-import { DAYS, DAY_RANGE, dayTrackPct, fmtTime, startOfWeek, fmtDayMonth, fmtDayMonthFull, calendarWeekNumber, MONTH_NAMES_LONG, monthsTouchedByRange, monthLogsFor, daysLeftInMonth, monthElapsedPct, MONTH_NAMES } from './dates'
+import { DAYS, DAY_RANGE, addDays, dayTrackPct, fmtTime, startOfWeek, fmtDayMonth, fmtDayMonthFull, calendarWeekNumber, MONTH_NAMES_LONG, monthsTouchedByRange, monthLogsFor, daysLeftInMonth, monthElapsedPct, MONTH_NAMES } from './dates'
 import { fmtLocalDate } from '../../localDate'
 import { blocksForDate, weekSuggestedMinutesExcluding, clearWeekSchedule, mutateSchedulePrefs } from './plan'
 import { InfoTip } from './InfoTip'
@@ -20,6 +22,7 @@ import { animateHeightScroll } from './animate'
 import { EditLogModal } from './EditLogModal'
 import { DayActionModal } from './DayActionModal'
 import { TimerCard } from './TimerCard'
+import { useMilestoneToast } from './useMilestoneToast'
 import type { LogInterval } from './LogTimeForm'
 
 type DayModalInitialLog = { hours: number; minutes: number; category?: TimeCategory; activityNote?: string; interval?: LogInterval }
@@ -48,7 +51,9 @@ export function ScheduleMain({
   onRedo: () => void
   onGoToContact: (personId: number) => void
 }) {
-  const logs = useLiveQuery(() => db.timeLogs.orderBy('date').reverse().toArray(), []) ?? []
+  const logsOrUndefined = useLiveQuery(() => db.timeLogs.orderBy('date').reverse().toArray(), [])
+  const logsLoaded = logsOrUndefined !== undefined
+  const logs = logsOrUndefined ?? []
   const appointments = useLiveQuery(() => db.appointments.orderBy('date').toArray(), []) ?? []
   const now = new Date()
   const thisWeekStartMs = startOfWeek(now).getTime()
@@ -196,8 +201,8 @@ export function ScheduleMain({
   }, [scheduleView])
   const [bankCollapsing, setBankCollapsing] = useState(false)
 
-  const weekStartMs = thisWeekStartMs + weekOffset * 7 * 24 * 60 * 60 * 1000
-  const weekEndMs = weekStartMs + 7 * 24 * 60 * 60 * 1000
+  const weekStartMs = addDays(thisWeekStartMs, weekOffset * 7)
+  const weekEndMs = addDays(weekStartMs, 7)
 
   function jumpToNextReturnVisit() {
     const next = appointments.filter((a) => a.date >= Date.now()).sort((a, b) => a.date - b.date)[0]
@@ -273,10 +278,10 @@ export function ScheduleMain({
   const segmentBoundaryMs = (() => {
     if (!isSplitWeek) return weekStartMs
     let boundary = weekStartMs
-    for (let t = weekStartMs; t < weekEndMs; t += 24 * 60 * 60 * 1000) {
+    for (let t = weekStartMs; t < weekEndMs; t = addDays(t, 1)) {
       const d = new Date(t)
       if (d.getFullYear() === touchedMonths[0].year && d.getMonth() === touchedMonths[0].month) {
-        boundary = t + 24 * 60 * 60 * 1000
+        boundary = addDays(t, 1)
       } else break
     }
     return boundary
@@ -309,8 +314,8 @@ export function ScheduleMain({
       // Entering a new week backward lands on its later month first, if it splits —
       // the natural "last thing before where you were," matching chronological order.
       const prevOffset = weekOffset - 1
-      const prevStart = thisWeekStartMs + prevOffset * 7 * 24 * 60 * 60 * 1000
-      const prevMonths = monthsTouchedByRange(prevStart, prevStart + 7 * 24 * 60 * 60 * 1000)
+      const prevStart = addDays(thisWeekStartMs, prevOffset * 7)
+      const prevMonths = monthsTouchedByRange(prevStart, addDays(prevStart, 7))
       setSegmentOverride(prevMonths.length > 1 ? 1 : null)
       setWeekOffset(prevOffset)
     }
@@ -399,10 +404,7 @@ export function ScheduleMain({
       ? `${fmtDuration(remainingMin)} to go · ${daysWord} · about ${fmtDuration(perDay)} a day`
       : `${daysWord}`
 
-  // Milestone moments (25/50/75/100% of the month, 100% of the service year). Compared against
-  // the previous render's totals for the *current* month, so every write path — quick log, bank
-  // roll-over, submitted block, an edit — is caught without teaching each one about toasts. The
-  // first render only records a baseline, so reopening the tab never re-celebrates.
+  // Milestone toasts watch the current month and service year, whatever week is shown.
   const currentMonthApplied = isCurrentMonthShown
     ? monthProgress.applied
     : monthTotals(monthLogsFor(logs, now.getFullYear(), now.getMonth())).applied
@@ -410,26 +412,6 @@ export function ScheduleMain({
     ? monthProgress.goalMin
     : ceilHourMin(effectiveMonthlyGoalMin(prefs, auxConfig, now.getFullYear(), now.getMonth()))
   const currentYearApplied = serviceYearlyApplied(logs, serviceYearLabel(now))
-  const [toast, setToast] = useState<string | null>(null)
-  const baselineRef = useRef<{ month: number; year: number } | null>(null)
-  useEffect(() => {
-    const prev = baselineRef.current
-    baselineRef.current = { month: currentMonthApplied, year: currentYearApplied }
-    if (!prev || !tracksHours) return
-    const m = milestoneReached(prev.month, currentMonthApplied, currentMonthGoal)
-    const y = yearlyGoalMin > 0 ? milestoneReached(prev.year, currentYearApplied, yearlyGoalMin) : null
-    const msg =
-      y === 100 ? '🏆 Service-year goal reached!'
-      : m === 100 ? `🎉 ${MONTH_NAMES_LONG[now.getMonth()]} goal reached!`
-      : m ? `${m}% of ${MONTH_NAMES_LONG[now.getMonth()]}'s goal — keep going`
-      : y ? `${y}% of the service year done`
-      : null
-    if (!msg) return
-    setToast(msg)
-    const t = window.setTimeout(() => { if (mountedRef.current) setToast(null) }, 2600)
-    return () => window.clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMonthApplied, currentYearApplied])
 
   // Navigated week (for the suggested-week section, which can page forward/back)
   const perDayCat: Partial<Record<TimeCategory, number>>[] = Array.from({ length: 7 }, () => ({}))
@@ -454,6 +436,14 @@ export function ScheduleMain({
   // without a separate segment concept for service years.
   const weeklyGoalMin = prefs.weeklyHours * 60
   const yearlyGoalMin = prefs.yearlyHours * 60
+  const toast = useMilestoneToast({
+    loaded: logsLoaded,
+    enabled: tracksHours,
+    current: { month: currentMonthApplied, year: currentYearApplied },
+    monthGoalMin: currentMonthGoal,
+    yearGoalMin: yearlyGoalMin,
+    monthName: MONTH_NAMES_LONG[now.getMonth()],
+  })
   // A pioneer's weekly target is no longer a fixed figure they typed — it's derived from the
   // month: hours still needed this month ÷ weeks left, rounded up to the whole hour. So a slow
   // start automatically raises the weekly bar, and getting ahead lowers it. 0 once the month's
@@ -564,7 +554,7 @@ export function ScheduleMain({
   }
 
   function dayDateFor(day: number): Date {
-    return new Date(weekStartMs + day * 24 * 60 * 60 * 1000)
+    return new Date(addDays(weekStartMs, day))
   }
 
   // Opens the shared day-action modal, capturing the tapped element's rect so it can morph
@@ -587,60 +577,9 @@ export function ScheduleMain({
     return d.getFullYear() === monthProgress.year && d.getMonth() === monthProgress.month
   }
 
-  // Logging service time for a specific day — leftover ministry minutes always bank; nothing
-  // is ever rounded up (tracking-first D5).
-  async function saveQuickLog(date: Date, totalMin: number, category: TimeCategory, activityNote: string, interval?: LogInterval) {
-    if (totalMin <= 0) return
-    const d = new Date(date)
-    d.setHours(12, 0, 0, 0)
-    await db.timeLogs.add({
-      date: d.getTime(),
-      minutes: totalMin,
-      category,
-      activityNote: activityNote.trim() || undefined,
-      // The live timer's real interval rides along for the person's own records (0.24.0).
-      startedAt: interval?.startedAt,
-      endedAt: interval?.endedAt,
-    } as TimeLog)
-  }
-
-  // Logs a scheduled day's planned blocks as real time entries (one per block, by category), then
-  // clears that date's scheduled blocks via a date-override so the same time can't be submitted
-  // twice — the recurring weekly pattern (other weeks) is untouched. "Submit all remaining."
-  async function submitScheduledTime(date: Date) {
-    await db.transaction('rw', db.timeLogs, db.schedulePrefs, async () => {
-      const current = await db.schedulePrefs.get(prefs.id)
-      if (!current) return
-      const blocks = blocksForDate(current, date)
-      if (blocks.length === 0) return
-      const d = new Date(date)
-      d.setHours(12, 0, 0, 0)
-      for (const b of blocks) {
-        const min = b.end - b.start
-        if (min > 0) await db.timeLogs.add({ date: d.getTime(), minutes: min, category: b.category } as TimeLog)
-      }
-      await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(current.dateOverrides ?? {}), [fmtLocalDate(date)]: [] } })
-    })
-  }
-
-  // Submit ONE scheduled block: log it, then remove just that block from that date (a date-override
-  // holding the remaining blocks). It can't be submitted again and "moves off" the day; the recurring
-  // weekly pattern stays intact. The day's ring then reads it as filled (logged) + the rest hollow.
-  async function submitScheduledBlock(date: Date, blockIndex: number) {
-    await db.transaction('rw', db.timeLogs, db.schedulePrefs, async () => {
-      const current = await db.schedulePrefs.get(prefs.id)
-      if (!current) return
-      const dayBlocks = blocksForDate(current, date)
-      const b = dayBlocks[blockIndex]
-      if (!b) return
-      const d = new Date(date)
-      d.setHours(12, 0, 0, 0)
-      const min = b.end - b.start
-      if (min > 0) await db.timeLogs.add({ date: d.getTime(), minutes: min, category: b.category } as TimeLog)
-      const remaining = dayBlocks.filter((_, i) => i !== blockIndex)
-      await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(current.dateOverrides ?? {}), [fmtLocalDate(date)]: remaining } })
-    })
-  }
+  // Clears one day completely — its logged entries AND its planned instance (the recurring
+  // weekly pattern stays). Reached from the ✕ on each week-view day row.
+  const [confirmClearDay, setConfirmClearDay] = useState<Date | null>(null)
 
   // Remove ONE scheduled block from a date without logging it (date-override with the rest).
   async function deleteScheduledBlock(date: Date, blockIndex: number) {
@@ -652,20 +591,11 @@ export function ScheduleMain({
     })
   }
 
-  // Clears one day completely — deletes that date's logged time entries AND hides its
-  // scheduled instance (an empty date-override, leaving the recurring weekly pattern intact).
-  // Reached from the ✕ on each week-view day row.
-  const [confirmClearDay, setConfirmClearDay] = useState<Date | null>(null)
-  async function clearDay(date: Date) {
-    const dayStart = new Date(date); dayStart.setHours(0, 0, 0, 0)
-    const dayEnd = new Date(date); dayEnd.setHours(23, 59, 59, 999)
-    await db.transaction('rw', db.timeLogs, db.schedulePrefs, async () => {
-      const current = await db.schedulePrefs.get(prefs.id)
-      await db.timeLogs.where('date').between(dayStart.getTime(), dayEnd.getTime(), true, true).delete()
-      if (current && blocksForDate(current, date).length > 0) {
-        await db.schedulePrefs.update(prefs.id, { dateOverrides: { ...(current.dateOverrides ?? {}), [fmtLocalDate(date)]: [] } })
-      }
-    })
+  // A stopped timer waits in its card until its time is actually written (F050); this is
+  // that moment. The key remount makes the card re-read its (now cleared) record.
+  const [timerKey, setTimerKey] = useState(0)
+  function timerLogged(interval?: LogInterval) {
+    if (interval && clearTimerLoggedBy(interval.startedAt)) setTimerKey((k) => k + 1)
   }
 
   async function bankQuickLogMinutes(
@@ -677,24 +607,10 @@ export function ScheduleMain({
     minutesFieldEl?: HTMLElement,
     interval?: LogInterval
   ) {
-    const before = getMinuteBank()
-    let bank = before + m
-    const autoHour = bank >= 60
-    if (autoHour) bank -= 60
-    // Persist EVERYTHING before any animation runs (F011). The animations below take ~1.1s,
-    // and if the OS freezes/kills the backgrounded PWA in that window the logged time and the
-    // decremented bank must already be durable. Order: write the DB rows, then the localStorage
-    // bank (so a crash between them over-retains minutes rather than losing a logged hour),
-    // then animate purely cosmetically off the already-committed values.
-    if (autoHour) {
-      const d = new Date(date)
-      d.setHours(12, 0, 0, 0)
-      // `category` is always 'ministry' here — quickLogTime logs credit whole and never
-      // reaches the bank (F-A6) — so the rolled-over hour can't be misattributed.
-      await db.timeLogs.add({ date: d.getTime(), minutes: 60, category, note: 'Added from minute bank' } as TimeLog)
-    }
-    if (h > 0) await saveQuickLog(date, h * 60, category, activityNote, interval)
-    setMinuteBank(bank)
+    // Everything is durable before any animation runs (F011): the animations take ~1.1s and
+    // the OS can freeze or kill a backgrounded PWA inside that window.
+    const { before, after: bank } = await logWithBank({ date, hours: h, extraMinutes: m, category, activityNote, interval })
+    timerLogged(interval)
     // Keep the modal open through the gather (so the field's glow is visible), then close it
     // once the ball has launched from the field's captured position.
     await collectAndFlyToMinuteBank(minutesFieldEl)
@@ -716,7 +632,7 @@ export function ScheduleMain({
     const strategy = quickLogStrategy(category, h, m)
     if (strategy === 'none') return
     if (strategy === 'whole') {
-      saveQuickLog(date, h * 60 + m, category, activityNote, interval)
+      void logTime({ date, minutes: h * 60 + m, category, activityNote, interval }).then(() => timerLogged(interval))
       closeDayModalSmoothly()
       return
     }
@@ -742,14 +658,10 @@ export function ScheduleMain({
   // ministry entry (only ministry minutes can enter the bank, F-A6). It used to write a whole
   // hour, which was time not spent (tracking-first D5). Counts the bank down to 0 and plays the
   // reverse of the pill's opening animation.
-  async function redeemMinuteBank() {
+  async function redeemMinuteBankNow() {
     setConfirmBankRoundUp(false)
-    const startValue = getMinuteBank()
+    const startValue = await redeemBank(new Date())
     if (startValue <= 0) return
-    const d = new Date()
-    d.setHours(12, 0, 0, 0)
-    await db.timeLogs.add({ date: d.getTime(), minutes: startValue, category: 'ministry', note: 'Added from minute bank' } as TimeLog)
-    setMinuteBank(0)
     await animateBankValue(startValue, 0, 380, setDisplayedBank)
     setBankCollapsing(true)
     await new Promise((resolve) => window.setTimeout(resolve, 260))
@@ -770,6 +682,7 @@ export function ScheduleMain({
         ＋ Log time
       </button>
       <TimerCard
+        key={timerKey}
         onStop={(r, el) =>
           openDayModal(new Date(r.endedAt), el?.getBoundingClientRect() ?? new DOMRect(0, 0, 0, 0), 'logTime', {
             hours: r.hours, minutes: r.minutes, category: r.category, activityNote: r.activityNote,
@@ -803,7 +716,8 @@ export function ScheduleMain({
       <div className="card highlight" ref={progressCardRef}>
         <div className="goal-row" style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
           <span>{monthYearLabel}</span>
-          {tracksHours && isCurrentMonthShown && pace !== 'not-started' && (
+          {/* 'behind' has no label on purpose; an empty chip rendered as a grey blob (F057). */}
+          {tracksHours && isCurrentMonthShown && PACE_LABEL[pace] !== '' && (
             <span className={`pace-chip pace-${pace}`}>{PACE_LABEL[pace]}</span>
           )}
         </div>
@@ -980,9 +894,9 @@ export function ScheduleMain({
               <span>{MONTH_NAMES[calMonth]} {calYear}</span>
             ) : (
               <span>
-                {segmentEndMs - segmentStartMs <= 24 * 60 * 60 * 1000
+                {segmentEndMs <= addDays(segmentStartMs, 1)
                   ? fmtDayMonthFull(segmentStartMs)
-                  : `${fmtDayMonth(segmentStartMs)} – ${fmtDayMonth(segmentEndMs - 86400000)}`}
+                  : `${fmtDayMonth(segmentStartMs)} – ${fmtDayMonth(addDays(segmentEndMs, -1))}`}
                 {` · Week ${calendarWeekNumber(weekStartMs)}`}
               </span>
             )}
@@ -1054,7 +968,7 @@ export function ScheduleMain({
                 // it (e.g. a long convention day plus other categories), scale to the actual
                 // total instead — otherwise every segment past the edge would pile up at 100%.
                 const trackScale = Math.max(DAY_RANGE, logged)
-                const dayDate = new Date(weekStartMs + i * 24 * 60 * 60 * 1000)
+                const dayDate = new Date(addDays(weekStartMs, i))
                 const isToday = dayDate.toDateString() === now.toDateString()
                 const isHighlighted = highlightTs != null && new Date(highlightTs).toDateString() === dayDate.toDateString()
                 const dayAppts = perDayAppointments[i]
@@ -1185,8 +1099,8 @@ export function ScheduleMain({
             onRemoveDay={removeDaySchedule}
             onClearAllDays={clearAllSuggestedDays}
             onLogTime={quickLogTime}
-            onSubmitScheduled={submitScheduledTime}
-            onSubmitBlock={submitScheduledBlock}
+            onSubmitScheduled={(date) => submitPlanned(prefs.id, date)}
+            onSubmitBlock={(date, i) => submitPlanned(prefs.id, date, i)}
             onDeleteBlock={deleteScheduledBlock}
             onClearWeek={(weekStart) => clearWeekSchedule(prefs, weekStart)}
             onSeeWeeklyView={() => changeView('week')}
@@ -1285,8 +1199,8 @@ export function ScheduleMain({
           onRemoveDay={() => removeDaySchedule(dayModalFor)}
           onClearAllDays={clearAllSuggestedDays}
           onLogTime={(h, m, category, activityNote, originEl, interval) => quickLogTime(dayModalFor, h, m, category, activityNote, originEl, interval)}
-          onSubmitScheduled={() => submitScheduledTime(dayModalFor)}
-          onSubmitBlock={(i) => submitScheduledBlock(dayModalFor, i)}
+          onSubmitScheduled={() => submitPlanned(prefs.id, dayModalFor)}
+          onSubmitBlock={(i) => submitPlanned(prefs.id, dayModalFor, i)}
           onDeleteBlock={(i) => deleteScheduledBlock(dayModalFor, i)}
           onClose={closeDayModalSmoothly}
           closing={dayModalClosing}
@@ -1302,7 +1216,7 @@ export function ScheduleMain({
         confirmLabel="Yes, log them"
         cancelLabel="Keep banking"
         tone="primary"
-        onConfirm={redeemMinuteBank}
+        onConfirm={redeemMinuteBankNow}
         onCancel={() => setConfirmBankRoundUp(false)}
       />
 
@@ -1313,7 +1227,7 @@ export function ScheduleMain({
         confirmLabel="Yes, clear this day"
         cancelLabel="Cancel"
         tone="danger"
-        onConfirm={() => { if (confirmClearDay) clearDay(confirmClearDay); setConfirmClearDay(null) }}
+        onConfirm={() => { if (confirmClearDay) void clearDay(prefs.id, confirmClearDay); setConfirmClearDay(null) }}
         onCancel={() => setConfirmClearDay(null)}
       />
     </div>

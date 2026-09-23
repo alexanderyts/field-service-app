@@ -48,6 +48,8 @@ src/
   settings.ts          # Typed, crash-safe accessors for theme / credit-hours / last-backup keys
   streets.ts           # Street identity: ensureStreetEntry / findStreetTraceMidpoint
   records.ts           # Multi-table operations, each in one transaction (tested via fake-indexeddb) — incl. logCall + importSharedPayload
+  timeRecords.ts       # Time-log writes (logTime, logWithBank, redeemMinuteBank, submitPlanned, clearDay) — one transaction each; apart from records.ts so the startup bundle doesn't load schedule code
+  rowGuards.ts         # Runtime type checks for rows from outside (share payloads, backup restore): TABLE_ROW_GUARDS per table
   appointments.ts      # Which return visits are still pending (overdue ones stay visible until followed up / 14 days) + badge label
   address.ts           # Address comparison, so a save knows whether the address really changed
   timeAgo.ts           # "3 days ago" formatter (now injected, for testability)
@@ -61,13 +63,13 @@ src/
   milestones.ts        # Milestone crossing (25/50/75/100) + month pace status/delta (pure, tested)
   schedulePrefsRole.ts # Role (publisher/auxiliary/pioneer) derivation + whether hours are tracked this month
   minuteBankFly.ts     # The "minute bank" fly-to-pill animation helper
-  timer.ts             # Live service timer: pure start/pause/resume/stop arithmetic + its localStorage record (tested)
+  timer.ts             # Live service timer: pure start/pause/resume/stop arithmetic + its localStorage record (tested). Stop keeps the record (`stoppedAt`) until the log is written or discarded
   viewportFix.ts       # Installed-iOS launch-viewport deficit correction (--deficit); bottom-fixed chrome subtracts it
   auxPioneering.ts     # Auxiliary-pioneer config (localStorage) + target-hour math
   auxSlip.ts           # Fills the S-205b auxiliary-pioneer PDF (pdf-lib)
   tips.ts              # Tip/support link config for the More tab
   share.ts             # Cross-device share: encode/decode/QR/file + import-as-new-records
-  backup.ts            # Full local JSON backup / restore / wipe-all
+  backup.ts            # Full local JSON backup / restore / wipe-all; restore refuses the whole file if any row fails rowGuards
   notifications.ts     # In-app return-visit reminders (no backend push)
   pwaInstall.ts        # Install prompt + persistent-storage request
   roadSnap.ts          # Snap traced waypoints onto real OSM road geometry (Overpass)
@@ -86,7 +88,7 @@ src/
     Territory.tsx      # Map-side custom-territory manager: trace/draw modal, send-to-ministry, grouping
     MapView.tsx        # Leaflet map: contact pins, territory traces, satellite toggle, place search
     Schedule.tsx       # THE SERVICE TAB root (tab key 'schedule'): intake-or-main switch only
-    schedule/          # dates.ts / plan.ts / animate.ts (pure, no React) + one file per piece: ScheduleMain
+    schedule/          # dates.ts (incl. addDays — never step days by 24 h, DST) / plan.ts / animate.ts (pure, no React) + useMilestoneToast.ts + one file per piece: ScheduleMain
                        #   (week view, logging, minute bank — the hub, 1.3k), ScheduleCalendarView, DayActionModal,
                        #   Survey, EditLogModal, EditAppointmentModal, TimeInputModal, NumPad, InfoTip, HourGoalBar,
                        #   MonthlyParticipationBox, AuxPioneeringBox, ContactPicker, ReturnVisits
@@ -265,8 +267,9 @@ moved into `settings.ts` in 0.20.2.
 | `fieldservice_theme` | `'light' | 'dark' | 'pastel' | 'mark'` | `settings.ts` |
 | `fieldservice_dark_mode` | Legacy boolean, read as a fallback for `_theme`; cleared on any theme write | `settings.ts` |
 | `fieldservice_last_backup_at` | Epoch ms of the last completed backup export; absent = never. Blocklisted, so it never travels inside a backup | `settings.ts` |
-| `fieldservice_timer` | The live service timer's state (start timestamp, accumulated ms, category). Blocklisted — device state, not a record | `timer.ts` |
+| `fieldservice_timer` | The live service timer's state (start timestamp, accumulated ms, category, `stoppedAt` once stopped and awaiting its log). Blocklisted — device state, not a record | `timer.ts` |
 | `fieldservice_backup_nag_dismissed_at` | Epoch ms the back-up reminder was last dismissed (hidden 7 days after). Blocklisted | `settings.ts` |
+| `fieldservice_install_dismissed` | This browser dismissed the Add-to-Home-Screen banner. Blocklisted (0.25.2) so a restore onto a new phone still offers it | `InstallPrompt.tsx` |
 | `fieldservice_participated_months` | Months the user marked as "participated in ministry" | `settings.ts` |
 | `fieldservice_notify_enabled` / `_notify_lead_min` / `_notify_sent_ids` | Return-visit reminder settings + dedupe | `notifications.ts` |
 | `fieldservice_aux_*` | Auxiliary-pioneer config (see `auxPioneering.ts`) | `auxPioneering.ts` |
@@ -363,7 +366,8 @@ brand/category/tag hues are brightened per dark theme for contrast.
 ### Map
 - Default center `{ lat: 32.3, lng: -90.0 }`. Contact pins + popups, territory traces overlaid,
   satellite/street tile toggle, place search. "Jump to Map" from a contact/street focuses the pin via
-  `mapFocus` state (cleared after mount).
+  `mapFocus` state, which every tab-bar tap clears (AUDIT F053). Every `TileLayer` sets
+  `crossOrigin="anonymous"` so the tile cache stores CORS, not opaque, responses (F056).
 
 ### Contacts
 - Only `name` is required. Address auto-geocodes via Nominatim on save (with a live address-autocomplete
@@ -466,7 +470,7 @@ A change is "done" when:
 - **Green gates:** `node scripts/verify.mjs` prints `VERIFY PASS` — the same script CI runs on
   every push and pull request (`.github/workflows/deploy-pages.yml`).
 - **Pure logic is tested:** new pure functions (math, parsing, sorting, formatting) get a Vitest
-  test next to them (`*.test.ts`). Multi-table DB operations belong in `records.ts` rather than
+  test next to them (`*.test.ts`). Multi-table DB operations belong in `records.ts` (time logs: `timeRecords.ts`) rather than
   inline in a component, and are tested against `fake-indexeddb` — a flow you can't call without
   rendering React is a flow you can't test. Component/UI glue isn't required to be tested.
 - **Docs aren't allowed to drift:** if a change touches the schema, tabs, architecture, or a

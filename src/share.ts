@@ -1,4 +1,5 @@
 import { db, type Call, type Person, type StreetEntry, type Territory } from './db'
+import { isObject as isRecord, okCallFields, okPersonFields, okStreetFields, okTerritoryFields } from './rowGuards'
 import { STATUS_ORDER } from './contactStatus'
 
 // Cross-device sharing of a single contact / street / territory. The payload is compressed
@@ -105,47 +106,31 @@ function assertBoundedDepth(v: unknown): void {
 /** Rejects a decoded payload whose data isn't shaped like the kind it claims to be, so
     importSharedPayload only ever spreads the expected fields into the local database.
 
-    Every field a renderer will do arithmetic or `.map` on is typed here, not just `name`:
-    a `lat` of "abc" or a `points` of [null] used to pass, get stored, and then throw inside
-    Leaflet on every visit to the Map tab until the row was found and deleted (AUDIT F039). */
+    Every field a renderer reads is typed here (rowGuards.ts), not just `name`: a `lat` of
+    "abc" or a `points` of [null] used to pass, get stored, and then throw inside Leaflet on
+    every visit to the Map tab (AUDIT F039); an `assignedTo` or `literaturePlaced` that wasn't
+    a string crashed the list that shows it (F054). */
 function assertValidPayload(p: SharePayload): void {
   const bad = () => { throw new Error('This share is malformed and was not imported.') }
   const d = p.data as Record<string, unknown>
   if (!isObject(d)) bad()
   assertBoundedDepth(d)
   const okList = (v: unknown) => v == null || (Array.isArray(v) && v.length <= MAX_LIST)
-  const okStr = (v: unknown) => v == null || typeof v === 'string'
-  const okNum = (v: unknown) => v == null || (typeof v === 'number' && Number.isFinite(v))
-  // A coordinate is either absent on both axes or a finite number on both.
-  const okCoords = (o: Record<string, unknown>) => {
-    if (!okNum(o.lat) || !okNum(o.lng)) return false
-    return (o.lat == null) === (o.lng == null)
-  }
-  const okPoints = (v: unknown) =>
-    okList(v) && (v == null || (v as unknown[]).every((pt) => isObject(pt) && typeof pt.lat === 'number' && Number.isFinite(pt.lat) && typeof pt.lng === 'number' && Number.isFinite(pt.lng)))
-  const okAddress = (o: Record<string, unknown>) => okStr(o.street) && okStr(o.city) && okStr(o.state) && okStr(o.zip)
 
   if (p.kind === 'contact') {
     const person = (d as { person?: unknown }).person
-    if (!isObject(person) || typeof person.name !== 'string') bad()
-    const pr = person as Record<string, unknown>
-    if (!okCoords(pr) || !okAddress(pr) || !okStr(pr.phone) || !okStr(pr.notes) || !okNum(pr.dateMet)) bad()
-    if (pr.status != null && !(STATUS_ORDER as string[]).includes(pr.status as string)) bad()
+    if (!isRecord(person) || !okPersonFields(person)) bad()
+    const status = (person as Record<string, unknown>).status
+    if (status != null && !(STATUS_ORDER as string[]).includes(status as string)) bad()
     const calls = (d as { calls?: unknown }).calls
     if (!okList(calls)) bad()
     for (const c of (calls as unknown[] | undefined) ?? []) {
-      if (!isObject(c) || !okNum(c.date) || !okCoords(c) || !okStr(c.notes) || !okStr(c.scriptures)) bad()
+      if (!isRecord(c) || !okCallFields(c)) bad()
     }
   } else if (p.kind === 'street') {
-    if (typeof d.name !== 'string' || !okList(d.houses) || !okPoints(d.points) || !okAddress(d)) bad()
-    for (const h of (d.houses as unknown[] | undefined) ?? []) {
-      if (!isObject(h) || typeof h.number !== 'string' || !okStr(h.note)) bad()
-    }
+    if (!okList(d.houses) || !okStreetFields(d)) bad()
   } else if (p.kind === 'territory') {
-    if (typeof d.name !== 'string' || !Array.isArray(d.streets) || d.streets.length > MAX_LIST) bad()
-    for (const st of d.streets as unknown[]) {
-      if (!isObject(st) || typeof st.name !== 'string' || !okPoints(st.points) || !okAddress(st) || !okNum(st.entryId)) bad()
-    }
+    if (!okList(d.streets) || !okTerritoryFields(d)) bad()
   } else {
     bad()
   }

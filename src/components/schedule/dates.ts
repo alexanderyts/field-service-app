@@ -19,6 +19,13 @@ export function fmtTime(mins: number) {
   const h = h24 % 12 === 0 ? 12 : h24 % 12
   return `${h}:${String(m).padStart(2, '0')} ${ampm}`
 }
+/** `n` calendar days after `ts`, same wall-clock time. Never step days by adding 24 h: a
+    DST day is 23 or 25 h long, so the week view would show a day twice and skip another
+    (AUDIT F049). */
+export function addDays(ts: number, n: number): number {
+  const d = new Date(ts)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds()).getTime()
+}
 export function startOfWeek(ref: Date) {
   const d = new Date(ref)
   d.setHours(0, 0, 0, 0)
@@ -59,7 +66,7 @@ export function currentYearMonths(): { year: number; month: number; label: strin
 export function monthsTouchedByRange(startMs: number, endMs: number): { year: number; month: number }[] {
   const out: { year: number; month: number }[] = []
   const seen = new Set<string>()
-  for (let t = startMs; t < endMs; t += 24 * 60 * 60 * 1000) {
+  for (let t = startMs; t < endMs; t = addDays(t, 1)) {
     const d = new Date(t)
     const key = `${d.getFullYear()}-${d.getMonth()}`
     if (!seen.has(key)) {
@@ -80,12 +87,14 @@ function monthVsToday(year: number, month: number, today: Date): -1 | 0 | 1 {
   const diff = (year - today.getFullYear()) * 12 + (month - today.getMonth())
   return diff < 0 ? -1 : diff > 0 ? 1 : 0
 }
+/** Days still to serve in the month, today included: leaving today out overstated the per-day
+    amount all month and read "0 days left" on the last day (AUDIT F058). */
 export function daysLeftInMonth(year: number, month: number, today: Date): number {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const cmp = monthVsToday(year, month, today)
   if (cmp < 0) return 0
   if (cmp > 0) return daysInMonth
-  return Math.max(0, daysInMonth - today.getDate())
+  return daysInMonth - today.getDate() + 1
 }
 
 /** % of the month elapsed — a past month reads 100, a future one 0, so every month the

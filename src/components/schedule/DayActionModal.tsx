@@ -5,7 +5,7 @@ import { creditHoursEnabled } from '../../settings'
 import { fmtDuration } from '../../timeStats'
 import ConfirmDialog from '../ConfirmDialog'
 import ModalPortal from '../../ModalPortal'
-import { DAY_NAMES_FULL, fmtTime, startOfWeek, fmtDayMonth, minutesToTimeInput, timeInputToMinutes } from './dates'
+import { DAY_NAMES_FULL, addDays, fmtTime, startOfWeek, fmtDayMonth, minutesToTimeInput, timeInputToMinutes } from './dates'
 import { fmtLocalDate } from '../../localDate'
 import { EditAppointmentModal } from './EditAppointmentModal'
 import { LogTimeForm, type LogInterval } from './LogTimeForm'
@@ -63,7 +63,7 @@ export function DayActionModal({
   const dayLabel = DAY_NAMES_FULL[date.getDay()]
   const dateLabel = date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
   const weekStart = startOfWeek(date).getTime()
-  const weekEnd = weekStart + 6 * 24 * 60 * 60 * 1000
+  const weekEnd = addDays(weekStart, 6)
   const weekRangeLabel = `Week of ${fmtDayMonth(weekStart)} – ${fmtDayMonth(weekEnd)}, ${new Date(weekEnd).getFullYear()}`
   const dayAppt = appointments.find((a) => fmtLocalDate(new Date(a.date)) === fmtLocalDate(date)) ?? null
   const [editingAppt, setEditingAppt] = useState(false)

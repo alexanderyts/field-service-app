@@ -143,6 +143,9 @@ function App() {
 
   function selectTab(next: Tab) {
     setTab(next)
+    // "Jump to Map" focuses one contact, once. Without this, every later Map visit from the
+    // tab bar reopened on that same contact (AUDIT F053).
+    setMapFocus(null)
     // Real haptic feedback (the Taptic Engine) isn't reachable from web content on
     // iOS at all — Safari has never implemented the Vibration API, in-browser or
     // installed as a PWA; only a native app can trigger it. This still fires on
@@ -177,7 +180,7 @@ function App() {
                 onOpenedContact={() => setOpenContactId(null)}
                 onGoToMap={(lat, lng, personId) => { setMapFocus({ lat, lng, personId }); setTab('map') }}
                 onImportEncoded={setPendingImport}
-                onNewTerritory={() => { setPendingDraw(true); setTab('map') }}
+                onNewTerritory={() => { setMapFocus(null); setPendingDraw(true); setTab('map') }}
               />
             )}
             {tab === 'schedule' && (

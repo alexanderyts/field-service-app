@@ -93,3 +93,34 @@ describe('restoring a pre-v9 file (AUDIT F041)', () => {
     await expect(importBackup(file)).rejects.toThrow(/Meleo backup/)
   })
 })
+
+describe('a damaged row refuses the whole file (AUDIT F055)', () => {
+  function fileWith(tables: BackupFile['tables']): File {
+    const body: BackupFile = { app: 'field-service', formatVersion: 1, appVersion: '0.25.1', dbVersion: db.verno, exportedAt: '', tables, settings: {} }
+    return { text: async () => JSON.stringify(body) } as unknown as File
+  }
+
+  it('rejects, names the row, and leaves every table as it was', async () => {
+    await db.people.add({ name: 'Keep me', status: 'interested', dateMet: 0, createdAt: 0 } as never)
+    const file = fileWith({
+      people: [{ id: 1, name: 'Fine', status: 'interested', dateMet: 0, createdAt: 0 }],
+      streetEntries: [{ id: 1, name: 'Oak St', houses: [], createdAt: 0, assignedTo: { x: 1 } }],
+    })
+    await expect(importBackup(file)).rejects.toThrow(/streetEntries #1/)
+    expect((await db.people.toArray()).map((p) => p.name)).toEqual(['Keep me'])
+    expect(await db.streetEntries.count()).toBe(0)
+  })
+
+  it('catches the wrong-type fields that crash a list: a call note, a time entry, a house', async () => {
+    await expect(importBackup(fileWith({ calls: [{ id: 1, personId: 1, date: 0, literaturePlaced: 5 }] }))).rejects.toThrow(/calls #1/)
+    await expect(importBackup(fileWith({ timeLogs: [{ id: 1, date: 0, minutes: '60', category: 'ministry' }] }))).rejects.toThrow(/timeLogs #1/)
+    await expect(importBackup(fileWith({ streetEntries: [{ id: 1, name: 'A', houses: [{ id: 'h', number: 12 }], createdAt: 0 }] }))).rejects.toThrow(/streetEntries #1/)
+  })
+
+  it('does not restore the install-banner dismissal onto another device', async () => {
+    const body: BackupFile = { app: 'field-service', formatVersion: 1, appVersion: '0.25.1', dbVersion: db.verno, exportedAt: '', tables: {}, settings: { fieldservice_install_dismissed: '1', fieldservice_theme: 'dark' } }
+    await importBackup({ text: async () => JSON.stringify(body) } as unknown as File)
+    expect(localStorage.getItem('fieldservice_install_dismissed')).toBeNull()
+    expect(localStorage.getItem('fieldservice_theme')).toBe('dark')
+  })
+})

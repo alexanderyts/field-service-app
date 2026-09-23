@@ -19,6 +19,9 @@ export interface TimerState {
   startedAt: number
   category: TimeCategory
   activityNote: string
+  /** Set by Stop. The record stays until its time is written or the person discards it, so
+      closing the log form (or the app being killed with it open) loses nothing (F050). */
+  stoppedAt?: number
 }
 
 export function startTimer(now: number, category: TimeCategory = 'ministry', activityNote = ''): TimerState {
@@ -33,6 +36,21 @@ export function pauseTimer(t: TimerState, now: number): TimerState {
 export function resumeTimer(t: TimerState, now: number): TimerState {
   if (t.runningSince != null) return t
   return { ...t, runningSince: now }
+}
+
+/** Stop: freeze the elapsed time and wait for it to be logged. Stopping twice is a no-op. */
+export function markStopped(t: TimerState, now: number): TimerState {
+  if (t.stoppedAt != null) return t
+  return { ...pauseTimer(t, now), stoppedAt: now }
+}
+
+export function isStopped(t: TimerState): boolean {
+  return t.stoppedAt != null
+}
+
+/** Whether logging the interval that began at `startedAt` settles this timer. */
+export function isLoggedBy(t: TimerState, startedAt: number): boolean {
+  return t.stoppedAt != null && t.startedAt === startedAt
 }
 
 export function isRunning(t: TimerState): boolean {
@@ -69,9 +87,11 @@ export function normalizeTimer(input: unknown): TimerState | null {
   const startedAt = num(r.startedAt)
   if (startedAt == null) return null
   const runningSince = num(r.runningSince)
+  const stoppedAt = num(r.stoppedAt)
   return {
     startedAt,
-    runningSince: runningSince ?? undefined,
+    runningSince: stoppedAt != null ? undefined : (runningSince ?? undefined),
+    ...(stoppedAt != null ? { stoppedAt } : {}),
     accumulatedMs: num(r.accumulatedMs) ?? 0,
     category: r.category === 'credit' ? 'credit' : 'ministry',
     activityNote: typeof r.activityNote === 'string' ? r.activityNote.slice(0, 200) : '',
@@ -85,6 +105,14 @@ export function loadTimer(): TimerState | null {
   } catch {
     return null
   }
+}
+
+/** Clear the stored timer once the log it was waiting for has been written. */
+export function clearTimerLoggedBy(startedAt: number): boolean {
+  const t = loadTimer()
+  if (!t || !isLoggedBy(t, startedAt)) return false
+  saveTimer(null)
+  return true
 }
 
 export function saveTimer(t: TimerState | null): void {

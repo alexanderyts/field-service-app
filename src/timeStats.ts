@@ -34,6 +34,12 @@ export function quickLogStrategy(category: TimeCategory, hours: number, minutes:
   return 'bank'
 }
 
+/** The minute bank after adding `minutes`: every full 60 rolls out as one logged hour. */
+export function addToBank(before: number, minutes: number): { bank: number; autoHour: boolean } {
+  const bank = before + minutes
+  return bank >= 60 ? { bank: bank - 60, autoHour: true } : { bank, autoHour: false }
+}
+
 export interface MonthTotals {
   ministry: number
   credit: number

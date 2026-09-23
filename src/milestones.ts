@@ -19,6 +19,20 @@ export function milestoneReached(prevApplied: number, nextApplied: number, goalM
   return hit
 }
 
+export interface ProgressSnapshot { month: number; year: number }
+
+/** The toast for going from `prev` to `next` applied minutes, or null. The service-year goal
+    wins over the month, a finished month over a partial one. */
+export function milestoneToastText(prev: ProgressSnapshot, next: ProgressSnapshot, monthGoalMin: number, yearGoalMin: number, monthName: string): string | null {
+  const m = milestoneReached(prev.month, next.month, monthGoalMin)
+  const y = yearGoalMin > 0 ? milestoneReached(prev.year, next.year, yearGoalMin) : null
+  return y === 100 ? '🏆 Service-year goal reached!'
+    : m === 100 ? `🎉 ${monthName} goal reached!`
+    : m ? `${m}% of ${monthName}'s goal — keep going`
+    : y ? `${y}% of the service year done`
+    : null
+}
+
 export type Pace = 'done' | 'ahead' | 'on-pace' | 'behind' | 'not-started'
 
 /**

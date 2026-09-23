@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { startTimer, pauseTimer, resumeTimer, elapsedMs, stopTimer, fmtElapsed, normalizeTimer, isRunning } from './timer'
+import { startTimer, pauseTimer, resumeTimer, elapsedMs, stopTimer, fmtElapsed, normalizeTimer, isRunning, markStopped, isStopped, isLoggedBy } from './timer'
 
 const MIN = 60_000
 const t0 = 1_800_000_000_000
@@ -34,6 +34,31 @@ describe('timer arithmetic', () => {
   it('never goes negative if the clock moved backwards', () => {
     const t = startTimer(t0)
     expect(elapsedMs(t, t0 - MIN)).toBe(0)
+  })
+})
+
+describe('stopping waits for the log (F050)', () => {
+  it('freezes the time: reopening the log form later offers the same minutes', () => {
+    const t = markStopped(startTimer(t0), t0 + 40 * MIN)
+    expect(isStopped(t)).toBe(true)
+    expect(isRunning(t)).toBe(false)
+    expect(stopTimer(t, t.stoppedAt!)).toEqual({ minutes: 40, startedAt: t0, endedAt: t0 + 40 * MIN })
+    expect(elapsedMs(t, t0 + 5 * 60 * MIN)).toBe(40 * MIN)
+  })
+  it('a second stop changes nothing', () => {
+    const t = markStopped(startTimer(t0), t0 + 40 * MIN)
+    expect(markStopped(t, t0 + 90 * MIN)).toBe(t)
+  })
+  it('only the log of this very interval settles it, and only once stopped', () => {
+    const running = startTimer(t0)
+    expect(isLoggedBy(running, t0)).toBe(false)
+    const stopped = markStopped(running, t0 + MIN)
+    expect(isLoggedBy(stopped, t0)).toBe(true)
+    expect(isLoggedBy(stopped, t0 + 1)).toBe(false)
+  })
+  it('a stopped record survives a reload', () => {
+    const t = markStopped(startTimer(t0), t0 + 40 * MIN)
+    expect(normalizeTimer(JSON.parse(JSON.stringify(t)))).toEqual(t)
   })
 })
 

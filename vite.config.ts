@@ -46,12 +46,15 @@ export default defineConfig({
           {
             // Esri map tiles: cache what's been looked at so the Map and territory previews
             // still render offline for areas worked recently. Bounded so it can't grow forever.
+            // Every TileLayer loads with crossOrigin="anonymous", so responses are CORS, not
+            // opaque: Chrome counts each opaque response as ~7 MB against the same quota as the
+            // database, and status 0 also cached network errors for 30 days (AUDIT F056).
             urlPattern: ({ url }) => url.hostname === 'server.arcgisonline.com',
             handler: 'CacheFirst',
             options: {
               cacheName: 'map-tiles',
-              expiration: { maxEntries: 800, maxAgeSeconds: 30 * 24 * 3600 },
-              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 400, maxAgeSeconds: 30 * 24 * 3600, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [200] },
             },
           },
           {

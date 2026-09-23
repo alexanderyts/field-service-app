@@ -1,6 +1,13 @@
 import { db, migrateLegacyRows } from './db'
 import { APP_VERSION } from './version'
 import { setLastBackupAt, LAST_BACKUP_AT_KEY } from './settings'
+import { findBadRow } from './rowGuards'
+
+class BackupRowError extends Error {
+  constructor(where: string) {
+    super(`This backup has a damaged entry (${where}), so nothing was restored. Your current data is unchanged.`)
+  }
+}
 
 // Full local backup / restore. Because the app is local-first with no server, a downloadable
 // JSON file is the ONLY way a tester's data survives a device wipe — and it's the bridge to
@@ -29,6 +36,9 @@ const SETTINGS_BLOCKLIST = new Set([
   'fieldservice_timer',
   // When this device last dismissed the back-up nag — per-device UX, not a record.
   'fieldservice_backup_nag_dismissed_at',
+  // Whether THIS device's browser dismissed the install banner — a restore onto a new phone
+  // must still offer it there (AUDIT F055).
+  'fieldservice_install_dismissed',
 ])
 
 export interface BackupFile {
@@ -195,6 +205,14 @@ export async function importBackup(file: File): Promise<ImportSummary> {
     // Rows from an older schema were written verbatim; give them the same rewrite a schema
     // upgrade would have (AUDIT F041). Inside the transaction, so a failure restores nothing.
     if (fileDbVersion < 9) await migrateLegacyRows(db)
+    // Checked after the migration (so an old file is judged in today's shape) and before the
+    // commit: one row of the wrong type used to crash the default tab on every launch, which
+    // also locked the person out of the Restore button that could fix it (AUDIT F055).
+    // Throwing here aborts the transaction, so a refused file changes nothing.
+    for (const name of Object.keys(counts)) {
+      const bad = findBadRow(name, await db.table(name).toArray())
+      if (bad) throw new BackupRowError(bad)
+    }
   })
 
   // Restore should leave the device in exactly the backed-up state, not the union of the old

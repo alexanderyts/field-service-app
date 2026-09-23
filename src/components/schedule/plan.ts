@@ -1,6 +1,6 @@
 import { db, type DayScheduleBlock, type SchedulePrefs } from '../../db'
 import { pruneDateOverrides } from '../../timeStats'
-import { DAY_END, startOfWeek } from './dates'
+import { DAY_END, addDays, startOfWeek } from './dates'
 import { fmtLocalDate } from '../../localDate'
 
 function dayScheduleBlocks(prefs: SchedulePrefs, day: number): DayScheduleBlock[] {
@@ -35,7 +35,7 @@ export function weekSuggestedMinutesExcluding(prefs: SchedulePrefs, date: Date, 
   const excludeKey = excludeDate ? fmtLocalDate(excludeDate) : null
   let total = 0
   for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart + i * 24 * 60 * 60 * 1000)
+    const d = new Date(addDays(weekStart, i))
     if (excludeKey && fmtLocalDate(d) === excludeKey) continue
     total += blocksForDate(prefs, d).reduce((s, b) => s + (b.end - b.start), 0)
   }
@@ -51,7 +51,7 @@ export async function clearWeekSchedule(prefs: SchedulePrefs, weekStartDate: Dat
   await mutateSchedulePrefs(prefs.id, (current) => {
     const nextOverrides = { ...(current.dateOverrides ?? {}) }
     for (let i = 0; i < 7; i++) {
-      const d = new Date(weekStart + i * 24 * 60 * 60 * 1000)
+      const d = new Date(addDays(weekStart, i))
       if (blocksForDate(current, d).length > 0) {
         nextOverrides[fmtLocalDate(d)] = []
       }
