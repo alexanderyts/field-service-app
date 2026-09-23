@@ -3961,3 +3961,10 @@ button.small {
   text-align: left;
 }
 .welcome-role span { font-size: 12px; font-weight: 400; opacity: 0.85; }
+
+/* More tab (Phase 3f): goal line, compact backup head, help row. */
+.misc-goal { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.misc-backup-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.misc-backup-head .backup-status { padding: var(--space-2) var(--space-5); font-size: var(--fs-xs); }
+.misc-help { display: flex; flex-direction: column; gap: var(--space-5); }
+.misc-help .row { flex-wrap: wrap; }

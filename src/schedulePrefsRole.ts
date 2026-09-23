@@ -45,3 +45,25 @@ export function roleTracksHours(
   if (isAuxMonth(aux, year, month)) return true
   return prefs.goalPeriod === 'weekly' || prefs.goalPeriod === 'monthly' || prefs.goalPeriod === 'yearly'
 }
+
+/** One line for More → Your goal: who you are and what's being counted. */
+export function roleSummary(
+  prefs: Pick<SchedulePrefs, 'role' | 'isPioneer' | 'yearlyHours' | 'weeklyHours' | 'monthlyHours' | 'goalPeriod'>,
+  aux: AuxConfig
+): string {
+  const role = deriveRole(prefs, aux)
+  if (role === 'pioneer') return `Regular pioneer · ${prefs.yearlyHours || 600}h a service year`
+  if (role === 'auxiliary') {
+    const when =
+      aux.mode === 'continuous' ? '30h a month, continuous'
+      : aux.mode === 'this-month' ? `${aux.targetHours}h this month`
+      : `${aux.months.length} month${aux.months.length === 1 ? '' : 's'} chosen`
+    return `Auxiliary pioneer · ${when}`
+  }
+  const goal =
+    prefs.goalPeriod === 'weekly' ? `goal ${prefs.weeklyHours}h a week`
+    : prefs.goalPeriod === 'monthly' ? `goal ${prefs.monthlyHours ?? 0}h a month`
+    : prefs.goalPeriod === 'yearly' ? `goal ${prefs.yearlyHours}h a year`
+    : 'sharing each month'
+  return `Publisher · ${goal}`
+}

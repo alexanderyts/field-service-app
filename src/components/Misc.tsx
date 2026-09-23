@@ -9,6 +9,9 @@ import { tipServices, type TipKind } from '../tips'
 import { APP_VERSION } from '../version'
 import { viewportDiag } from '../viewportFix'
 import { COPYRIGHT_SUMMARY, NOT_AFFILIATED, DEVELOPER_NAME, DEVELOPER_EMAIL } from '../legal'
+import { getAuxConfig } from '../auxPioneering'
+import { roleSummary } from '../schedulePrefsRole'
+import { GoalEditorModal } from './schedule/GoalEditorModal'
 import { getProfileName, saveProfileName } from '../profile'
 import { creditHoursEnabled, setCreditHoursEnabled, getTheme, setTheme as saveTheme, getLastBackupAt, isBackupOverdue, setTerritoriesSetting, type Theme } from '../settings'
 import { useTerritoriesEnabled } from '../territoriesFeature'
@@ -28,6 +31,8 @@ import {
 
 export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTutorial: () => void; onImportEncoded?: (encoded: string) => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [editingGoal, setEditingGoal] = useState(false)
+  const [versionTaps, setVersionTaps] = useState(0)
   const [legalOpen, setLegalOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [confirmClear2, setConfirmClear2] = useState(false)
@@ -36,10 +41,11 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
   const territoriesOn = useTerritoriesEnabled()
   // The switch lives in localStorage; bumping this re-renders so the checkbox follows it.
   const [, setFeaturesVersion] = useState(0)
-  const schedulePrefs = useLiveQuery(() => db.schedulePrefs.get(1), [])
+  // The single prefs row — by position, not by id 1: a restored backup keeps its own ids.
+  const schedulePrefs = useLiveQuery(() => db.schedulePrefs.toCollection().first(), [])
   const defaultExpandCalendar = schedulePrefs?.scheduleDefaultExpand === 'calendar'
   async function setDefaultExpandCalendar(v: boolean) {
-    await db.schedulePrefs.update(1, { scheduleDefaultExpand: v ? 'calendar' : 'week' })
+    if (schedulePrefs) await db.schedulePrefs.update(schedulePrefs.id, { scheduleDefaultExpand: v ? 'calendar' : 'week' })
   }
   const [theme, setThemeState] = useState<Theme>(() => getTheme())
   const [firstName, setFirstName] = useState(() => getProfileName().firstName)
@@ -192,127 +198,105 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
     <div className="view">
       <h2 className="applet-title">More</h2>
 
-      {/* ═══ Support & share ═══════════════════════════════════ */}
-      <div className="misc-section-title" style={{ marginTop: 6 }}>Support &amp; share</div>
+      {/* Order (Phase 3f): what you set up, what keeps your data safe, how the app behaves,
+          then help, support and the fine print. It used to open with the tip jar. */}
 
-      {/* Tips */}
-      <div className="card misc-donate">
-        <div className="misc-donate-header">
-          <span className="misc-donate-emoji" aria-hidden="true">☕</span>
-          <div>
-            <h4 style={{ margin: 0, lineHeight: 1.4 }}>Enjoying the app? Buy me a coffee at the next break 😊</h4>
-          </div>
+      {/* ═══ Your goal ═══ */}
+      <div className="card misc-goal">
+        <div>
+          <strong>Your goal</strong>
+          <p className="muted" style={{ margin: '3px 0 0', fontSize: 13 }}>
+            {schedulePrefs ? roleSummary(schedulePrefs, getAuxConfig()) : 'Not set yet — Service will ask.'}
+          </p>
         </div>
-
-        <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
-          Meleo is free — no paywalled features, subscriptions, or fees. The goal is to keep it that way.
-        </p>
-        <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
-          If you found the app helpful, a tip is a nice way to say thanks — but it is never expected.
-          It helps keep the lights on, and hopefully the updates coming.
-        </p>
-
-        <div className="tip-actions">
-          {oneTimeTips.length === 1 ? (
-            <a className="link-button tip-btn" href={oneTimeTips[0].oneTime} target="_blank" rel="noreferrer">One-Time Tip</a>
-          ) : oneTimeTips.length > 1 ? (
-            <button className="tip-btn" onClick={() => setTipMenu((m) => (m === 'oneTime' ? null : 'oneTime'))}>One-Time Tip</button>
-          ) : null}
-
-          {monthlyTips.length === 1 ? (
-            <a className="link-button secondary tip-btn" href={monthlyTips[0].monthly} target="_blank" rel="noreferrer">Recurring Tip</a>
-          ) : monthlyTips.length > 1 ? (
-            <button className="secondary tip-btn" onClick={() => setTipMenu((m) => (m === 'monthly' ? null : 'monthly'))}>Recurring Tip</button>
-          ) : null}
-        </div>
-
-        {tipMenu && (
-          <div className="tip-menu">
-            {tipServices(tipMenu).map((s) => (
-              <a key={s.id} className="link-button" href={s[tipMenu]} target="_blank" rel="noreferrer">
-                {s.emoji} {s.label}
-              </a>
-            ))}
-          </div>
-        )}
-
-        <p className="muted" style={{ fontSize: 12, margin: 0, textAlign: 'center', lineHeight: 1.5 }}>
-          Totally optional, and never expected — Meleo stays completely free either way. Tips go
-          straight to the developer to help cover hosting and keep the improvements coming.
-        </p>
+        {schedulePrefs && <button className="secondary small" onClick={() => setEditingGoal(true)}>Change</button>}
       </div>
 
-      {/* ── Share the app ───────────────────────────────────── */}
+      {/* ═══ Backup ═══ */}
       <div className="card">
-        <strong>📣 Share Meleo</strong>
-        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
-          Know someone who'd find this handy? Send them the link — it opens right in their browser,
-          no sign-up or install required, and their data stays on their own device.
-        </p>
+        <div className="misc-backup-head">
+          <strong>💾 Backup</strong>
+          <span className={`backup-status${lastBackupAt === null ? ' never' : isBackupOverdue(lastBackupAt, Date.now()) ? ' overdue' : ''}`}>
+            <span className="backup-status-dot" aria-hidden="true" />
+            {lastBackupAt === null ? 'Never backed up' : `Last: ${formatTimeAgo(lastBackupAt, Date.now())}`}
+          </span>
+        </div>
+        <p className="muted backup-copy">Your data lives only on this phone — a backup file is the only copy anywhere else. Keep a recent one.</p>
         <div className="row">
-          <button onClick={shareApp}>Share the App Link</button>
-          <a className="link-button secondary" href={appUrl} target="_blank" rel="noreferrer">Open in Browser</a>
+          <button onClick={handleExport} disabled={backupBusy}>Export backup</button>
+          <button className="secondary" onClick={() => fileInputRef.current?.click()} disabled={backupBusy}>
+            Restore…
+          </button>
         </div>
-        {shareMsg && <p className="muted" style={{ fontSize: 12, margin: '8px 0 0', color: 'var(--accent)', wordBreak: 'break-all' }}>{shareMsg}</p>}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: 'none' }}
+          onChange={pickImportFile}
+        />
+        {exportMsg && <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>{exportMsg}</p>}
+        {importSummary && (
+          <p className="muted" style={{ fontSize: 12, margin: '8px 0 0', color: 'var(--accent)' }}>
+            Restored {Object.values(importSummary.tables).reduce((a, b) => a + b, 0)} records. Reloading…
+          </p>
+        )}
+        {importError && (
+          <p style={{ fontSize: 12, margin: '8px 0 0', color: 'var(--danger)' }}>{importError}</p>
+        )}
+        <div className="section-divider" />
+        <div className="row">
+          <button className="secondary small" onClick={() => shareImportInputRef.current?.click()}>📥 Open a .meleo file</button>
+          <button className="danger small" onClick={() => setConfirmClear(true)}>Clear all data…</button>
+        </div>
+        <input
+          ref={shareImportInputRef}
+          type="file"
+          accept=".meleo,application/octet-stream,text/plain"
+          style={{ display: 'none' }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0]
+            e.target.value = ''
+            if (file) {
+              try { onImportEncoded?.(await readMeleoFile(file)) } catch { /* ImportConfirm surfaces bad files */ }
+            }
+          }}
+        />
       </div>
 
-      {/* ── Feedback & Suggestions ──────────────────────────── */}
-      <div className="card">
-        <strong>💬 Feedback &amp; Suggestions</strong>
-        <p style={{ fontSize: 14, lineHeight: 1.6, margin: '6px 0 0' }}>
-          Have an idea, a feature request, a bug to report, or need a hand with something? I'd genuinely
-          love to hear it.
-        </p>
-        <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, margin: '8px 0 12px' }}>
-          Meleo is a solo project, so I can't promise I'll be able to build everything — but every note
-          helps me make the app better, and I read them all.
-        </p>
-        <a
-          className="link-button"
-          href="mailto:meleoapp@gmail.com?subject=Meleo%20feedback"
-        >
-          ✉️ meleoapp@gmail.com
-        </a>
-      </div>
-
-      {/* ═══ Personalize ═══════════════════════════════════════ */}
-      <div className="misc-section-title">Personalize</div>
-
-      {/* Add to Home Screen */}
+      {/* Add to Home Screen (renders only when installing is possible and not done) */}
       <InstallCard />
 
-      {/* Theme */}
+      {/* ═══ Settings ═══ */}
       <div className="card">
-        <strong>Theme</strong>
-        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
-          Pick the look that's easiest on your eyes.
-        </p>
-        <div className="cat-pills">
-          {([
-            ['light', '☀️ Light'],
-            ['dark', '🌙 Dark'],
-            ['pastel', '🌸 Pastel'],
-            ['mark', '🌊 Mark'],
-          ] as const).map(([key, label]) => (
-            <button
-              key={key}
-              className={`chip${theme === key ? ' active' : ''}`}
-              onClick={() => changeTheme(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── 3. App Settings (credit hours, minute bank, reminders) ── */}
-      <div className="card">
-        <button className="collapse-header" onClick={() => setSettingsOpen((v) => !v)}>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>⚙️ App Settings</span>
+        <button className="collapse-header" onClick={() => setSettingsOpen((v) => !v)} aria-expanded={settingsOpen}>
+          <span style={{ fontWeight: 600, fontSize: 15 }}>⚙️ Settings</span>
           <span className="chevron">{settingsOpen ? '▾' : '▸'}</span>
         </button>
 
         {settingsOpen && (
+          <>
+            <div className="field" style={{ marginTop: 10 }}>
+              <span className="field-label">Theme</span>
+              <div className="cat-pills">
+                {([
+                  ['light', '☀️ Light'],
+                  ['dark', '🌙 Dark'],
+                  ['pastel', '🌸 Pastel'],
+                  ['mark', '🌊 Navy'],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={`chip${theme === key ? ' active' : ''}`}
+                    aria-pressed={theme === key}
+                    onClick={() => changeTheme(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="misc-settings-divider" />
           <div className="misc-settings">
             {/* Your name */}
             <div className="field-row">
@@ -347,29 +331,9 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
               <div>
                 <strong>Count credit hours</strong>
                 <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
-                  Adds a Credit category when logging time — LDC, HLC, Bethel and qualifying
-                  convention or assembly time, capped at 55 hours a month. You can note which
-                  one it was on the entry.
-                </p>
-              </div>
-            </label>
-            {creditEnabled && (
-              <div className="cat-pills" style={{ marginTop: 2 }}>
-                {CREDIT_ACTIVITY_SUGGESTIONS.map((s) => (
-                  <span key={s} className="chip" style={{ fontSize: 12, padding: '5px 12px' }}>{s}</span>
-                ))}
-              </div>
-            )}
-
-            <div className="misc-settings-divider" />
-
-            {/* Streets & territories (opt-in since 0.27.0) */}
-            <label className="checkbox-row">
-              <input type="checkbox" checked={territoriesOn} onChange={(e) => { setTerritoriesSetting(e.target.checked); setFeaturesVersion((n) => n + 1) }} />
-              <div>
-                <strong>Streets &amp; territories</strong>
-                <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
-                  Trace streets on the map, track house numbers, and group streets into territories. Adds Streets and Territories to People. Turning it off hides them; nothing is deleted.
+                  Adds a Credit category when logging time, capped at 55 hours a month — for
+                  example {CREDIT_ACTIVITY_SUGGESTIONS.join(', ')}. You can note which one it was
+                  on the entry.
                 </p>
               </div>
             </label>
@@ -441,98 +405,71 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
               </div>
             )}
           </div>
+          </>
         )}
       </div>
 
-      {/* ═══ Your data ═════════════════════════════════════════ */}
-      <div className="misc-section-title">Your data</div>
-
-      {/* Backup & Restore */}
+      {/* ═══ Features ═══ */}
       <div className="card">
-        <strong>💾 Backup &amp; Restore</strong>
-        <p className="muted backup-copy">
-          Everything you record lives only on this device. If you clear your browser data, or lose
-          or replace the phone, it's gone — there's no copy on a server to restore from, because
-          there is no server.
-        </p>
-        <p className="muted backup-copy">
-          A backup file is the only way back. Keep a recent one somewhere you'd still have it if
-          this device disappeared, and use it to move to a new device or into a future version of
-          the app.
-        </p>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={territoriesOn} onChange={(e) => { setTerritoriesSetting(e.target.checked); setFeaturesVersion((n) => n + 1) }} />
+          <div>
+            <strong>Streets &amp; territories</strong>
+            <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+              Trace streets on the map, track house numbers, and group streets into territories. Adds Streets and Territories to People. Turning it off hides them; nothing is deleted.
+            </p>
+          </div>
+        </label>
+      </div>
 
-        <div className={`backup-status${lastBackupAt === null ? ' never' : isBackupOverdue(lastBackupAt, Date.now()) ? ' overdue' : ''}`}>
-          <span className="backup-status-dot" aria-hidden="true" />
-          {lastBackupAt === null
-            ? "You've never backed up"
-            : `Last backup: ${formatTimeAgo(lastBackupAt, Date.now())}`}
-        </div>
-
+      {/* ═══ Help & feedback ═══ */}
+      <div className="card misc-help">
+        <strong>Help &amp; feedback</strong>
         <div className="row">
-          <button onClick={handleExport} disabled={backupBusy}>Export Backup</button>
-          <button className="secondary" onClick={() => fileInputRef.current?.click()} disabled={backupBusy}>
-            Restore (replaces current data)
-          </button>
+          <button className="secondary small" onClick={onReplayTutorial}>Take the guided tour</button>
+          <a className="link-button secondary" href={`mailto:${DEVELOPER_EMAIL}?subject=Meleo%20feedback`}>✉️ Send feedback</a>
+          <button className="secondary small" onClick={shareApp}>📣 Share Meleo</button>
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json,.json"
-          style={{ display: 'none' }}
-          onChange={pickImportFile}
-        />
-        {exportMsg && <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>{exportMsg}</p>}
-        {importSummary && (
-          <p className="muted" style={{ fontSize: 12, margin: '8px 0 0', color: 'var(--accent)' }}>
-            Restored {Object.values(importSummary.tables).reduce((a, b) => a + b, 0)} records. Reloading…
-          </p>
-        )}
-        {importError && (
-          <p style={{ fontSize: 12, margin: '8px 0 0', color: 'var(--danger)' }}>{importError}</p>
-        )}
-
-        <div className="section-divider" />
-        <strong>📥 Import a Shared Item</strong>
-        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
-          Someone shared a contact, street, or territory with you as a <strong>.meleo</strong> file? Open it here.
-          (Most shares are QR codes — just scan those with your camera.)
-        </p>
-        <button className="secondary" onClick={() => shareImportInputRef.current?.click()}>Open a .meleo File</button>
-        <input
-          ref={shareImportInputRef}
-          type="file"
-          accept=".meleo,application/octet-stream,text/plain"
-          style={{ display: 'none' }}
-          onChange={async (e) => {
-            const file = e.target.files?.[0]
-            e.target.value = ''
-            if (file) {
-              try { onImportEncoded?.(await readMeleoFile(file)) } catch { /* ImportConfirm surfaces bad files */ }
-            }
-          }}
-        />
-
-        <div className="section-divider" />
-        <strong>🗑 Clear all data</strong>
-        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
-          Permanently deletes everything on this device — there is no server copy. Export a backup
-          first if you might want any of it back.
-        </p>
-        <button className="danger" onClick={() => setConfirmClear(true)}>
-          Clear All App Data
-        </button>
+        {shareMsg && <p className="muted" style={{ fontSize: 12, margin: 0, color: 'var(--accent)', wordBreak: 'break-all' }}>{shareMsg}</p>}
       </div>
 
-      {/* ═══ Help & about ══════════════════════════════════════ */}
-      <div className="misc-section-title">Help &amp; about</div>
-
-      {/* Guided tour */}
-      <div className="card">
-        <strong>Guided Tour</strong>
-        <p className="muted" style={{ margin: '3px 0 10px', fontSize: 13, lineHeight: 1.5 }}>
-          A quick walkthrough of each tab.
+      {/* ═══ Support ═══ */}
+      <div className="card misc-donate">
+        <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+          ☕ Meleo is free and will stay that way — if it helps you, a tip is a kind thank-you, never expected.
         </p>
-        <button className="secondary" onClick={onReplayTutorial}>Take the Guided Tour</button>
+        <div className="tip-actions">
+          {oneTimeTips.length === 1 ? (
+            <a className="link-button tip-btn" href={oneTimeTips[0].oneTime} target="_blank" rel="noreferrer">One-Time Tip</a>
+          ) : oneTimeTips.length > 1 ? (
+            <button className="tip-btn" onClick={() => setTipMenu((m) => (m === 'oneTime' ? null : 'oneTime'))}>One-Time Tip</button>
+          ) : null}
+
+          {monthlyTips.length === 1 ? (
+            <a className="link-button secondary tip-btn" href={monthlyTips[0].monthly} target="_blank" rel="noreferrer">Recurring Tip</a>
+          ) : monthlyTips.length > 1 ? (
+            <button className="secondary tip-btn" onClick={() => setTipMenu((m) => (m === 'monthly' ? null : 'monthly'))}>Recurring Tip</button>
+          ) : null}
+        </div>
+
+        {tipMenu && (
+          <div className="tip-menu">
+            {tipServices(tipMenu).map((s) => (
+              <a key={s.id} className="link-button" href={s[tipMenu]} target="_blank" rel="noreferrer">
+                {s.emoji} {s.label}
+              </a>
+            ))}
+          </div>
+        )}
+        {tipMenu && (
+          <div className="tip-menu">
+            {tipServices(tipMenu).map((s) => (
+              <a key={s.id} className="link-button" href={s[tipMenu]} target="_blank" rel="noreferrer">
+                {s.emoji} {s.label}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Developer (dev builds only, never shipped) ───────── */}
@@ -547,7 +484,7 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         </div>
       )}
 
-      {/* ── 5. Legal & Privacy ──────────────────────────────── */}
+      {/* ═══ Legal ═══ */}
       <div className="card">
         <button className="collapse-header" onClick={() => setLegalOpen((v) => !v)}>
           <span style={{ fontWeight: 600, fontSize: 15 }}>🔒 Legal & Privacy</span>
@@ -647,12 +584,17 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
         onCancel={() => setPendingImport(null)}
       />
 
-      <p className="muted" style={{ textAlign: 'center', fontSize: 12, margin: '4px 0 0' }}>
+      {/* Five taps on the version shows the launch-viewport numbers (viewportFix.ts) for a
+          device check; ordinary users never see them. */}
+      <p className="muted" style={{ textAlign: 'center', fontSize: 12, margin: '4px 0 0' }} onClick={() => setVersionTaps((n) => n + 1)}>
         Meleo v{APP_VERSION}
       </p>
-      <p className="muted" style={{ textAlign: 'center', fontSize: 10, margin: '2px 0 0', opacity: 0.6 }}>
-        {viewportDiag()}
-      </p>
+      {(import.meta.env.DEV || versionTaps >= 5) && (
+        <p className="muted" style={{ textAlign: 'center', fontSize: 10, margin: '2px 0 0', opacity: 0.6 }}>
+          {viewportDiag()}
+        </p>
+      )}
+      {editingGoal && <GoalEditorModal prefs={schedulePrefs} onClose={() => setEditingGoal(false)} />}
     </div>
   )
 }

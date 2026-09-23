@@ -32,8 +32,7 @@ type DayModalInitialLog = { hours: number; minutes: number; category?: TimeCateg
 import { ScheduleCalendarView } from './ScheduleCalendarView'
 import { EntriesModal } from './EntriesModal'
 import { AuxPioneeringBox } from './AuxPioneeringBox'
-import { Survey } from './Survey'
-import ModalPortal from '../../ModalPortal'
+import { GoalEditorModal } from './GoalEditorModal'
 import { ReturnVisits } from './ReturnVisits'
 
 // No "Behind pace" chip on purpose: being short is shown as a forward plan (hours to go,
@@ -1229,16 +1228,7 @@ export function ScheduleMain({
 
       {toast && <div className="toast" role="status">{toast}</div>}
       {editingGoal && (
-        <ModalPortal onClose={closeGoalEditor}>
-          <div className="modal-backdrop" onClick={closeGoalEditor}>
-            <div className="modal modal-expanded goal-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-toolbar">
-                <button className="icon-btn close-x" onClick={closeGoalEditor} title="Close" aria-label="Close">×</button>
-              </div>
-              <Survey existing={prefs} onDone={closeGoalEditor} onCancel={closeGoalEditor} />
-            </div>
-          </div>
-        </ModalPortal>
+        <GoalEditorModal prefs={prefs} onClose={closeGoalEditor} />
       )}
       {openPerson && (
         <ContactDetail personId={openPerson.id} startLogging={openPerson.log} onClose={() => setOpenPerson(null)} />

@@ -64,7 +64,7 @@ src/
   milestones.ts        # Milestone crossing (25/50/75/100), month pace status/delta, tone rules (per-day ≤ 3h shown; week stretch > 1.5× average) — pure, tested
   territoriesFeature.ts # Streets & territories opt-in: useTerritoriesEnabled() = the More switch, else on iff streets/territories exist
   roleSetup.ts         # applyFirstRunRole: the welcome screen's role → a ready prefs row + aux config (never overwrites; tested)
-  schedulePrefsRole.ts # Role (publisher/auxiliary/pioneer) derivation + whether hours are tracked this month
+  schedulePrefsRole.ts # Role derivation, whether hours are tracked / reported this month, roleSummary (More's goal line)
   minuteBankFly.ts     # The "minute bank" fly-to-pill animation helper
   timer.ts             # Live service timer: pure start/pause/resume/stop arithmetic + its localStorage record (tested). Stop keeps the record (`stoppedAt`) until the log is written or discarded
   viewportFix.ts       # Installed-iOS launch-viewport deficit correction (--deficit); bottom-fixed chrome subtracts it
@@ -330,7 +330,7 @@ surface that attribution and warn before editing a shared item.
 
 Four themes, selected in More → Personalize, stored in `fieldservice_theme`, applied as
 `<html data-theme>` (light is the default with no attribute). Defined entirely as CSS-var overrides in
-`index.css`: **light**, **dark**, **pastel** (lavender-blush), **mark** (deep navy). Saturated
+`index.css`: **light**, **dark**, **pastel** (lavender-blush), **mark** (deep navy; labelled "Navy" since 0.27.0, key unchanged). Saturated
 brand/category/tag hues are brightened per dark theme for contrast.
 
 ---
@@ -399,9 +399,12 @@ brand/category/tag hues are brightened per dark theme for contrast.
   street or a specific house (`ContactPrefill`).
 
 ### More tab
-- Sections: **Support & share** (tips via `tips.ts`, share the app), **Personalize** (theme, profile
-  name, notifications, minute animation, count-credit-hours, default calendar expand), **Your data**
-  (backup/restore, load demo data, clear all data), plus the collapsible privacy summary.
+- Order (0.27.0): **Your goal** (`roleSummary` + Change → `GoalEditorModal`, shared with Service) ·
+  **Backup** (status line, Export / Restore, open a .meleo file, clear all data) · Add to Home Screen ·
+  **Settings** (collapsed: theme, name, credit hours, minute animation, calendar default, reminders) ·
+  **Features** (Streets & territories) · **Help & feedback** (tour, feedback mail to `DEVELOPER_EMAIL`,
+  share the app) · **Support** (one sentence + tips via `tips.ts`) · dev-only demo loader · Legal.
+  The viewport diagnostic under the version shows only in dev or after 5 taps on the version.
 
 ---
 

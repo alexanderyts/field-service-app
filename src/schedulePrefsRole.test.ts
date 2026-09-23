@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveRole, roleTracksHours } from './schedulePrefsRole'
+import { deriveRole, roleTracksHours, roleSummary } from './schedulePrefsRole'
 import type { AuxConfig } from './auxPioneering'
 
 const off: AuxConfig = { enabled: false, mode: null, targetHours: 30, weeklyHours: 7, months: [], monthTargets: {} }
@@ -31,5 +31,16 @@ describe('roleTracksHours', () => {
     expect(roleTracksHours('publisher', { goalPeriod: 'none' }, off, 2026, 8)).toBe(false)
     expect(roleTracksHours('publisher', { goalPeriod: 'monthly' }, off, 2026, 8)).toBe(true)
     expect(roleTracksHours('publisher', { goalPeriod: 'none' }, thisMonth, 2026, 8)).toBe(true)
+  })
+})
+
+describe('roleSummary', () => {
+  const off = { enabled: false, mode: null, targetHours: 30, weeklyHours: 7, months: [], monthTargets: {} } as const
+  const base = { yearlyHours: 0, weeklyHours: 0, goalPeriod: 'none' as const }
+  it('names the role and what is counted', () => {
+    expect(roleSummary({ ...base, role: 'pioneer', yearlyHours: 600 }, { ...off, months: [] })).toBe('Regular pioneer · 600h a service year')
+    expect(roleSummary({ ...base, role: 'publisher' }, { ...off, months: [] })).toBe('Publisher · sharing each month')
+    expect(roleSummary({ ...base, role: 'publisher', goalPeriod: 'monthly', monthlyHours: 10 }, { ...off, months: [] })).toBe('Publisher · goal 10h a month')
+    expect(roleSummary({ ...base, role: 'auxiliary' }, { ...off, enabled: true, mode: 'this-month', targetHours: 15, months: ['2026-8'] })).toBe('Auxiliary pioneer · 15h this month')
   })
 })
