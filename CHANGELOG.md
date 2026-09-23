@@ -8,7 +8,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 - **MINOR (`0.X.0`)** — a new feature or capability.
 - **PATCH (`0.0.X`)** — fixes, polish, refinements, and infrastructure.
 
-**Current version: `0.25.1`.** Newest first. Work in progress goes under **Unreleased**; `npm run release` stamps it with the next version.
+**Current version: `0.25.2`.** Newest first. Work in progress goes under **Unreleased**; `npm run release` stamps it with the next version.
 
 > Cut versions with `npm run release -- <patch|minor|major> "Title"`: it updates this file,
 > `src/version.ts` (`APP_VERSION`, shown in More and stamped into backups), package.json and the
@@ -17,6 +17,8 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 ---
 
 ## Unreleased
+
+## 0.25.2 — DST-safe days, a timer that waits, crash-safe logging and restore · 2026-09-23
 
 - Developer workflow (no app changes): one `verify` command that CI also runs, with a main-bundle size budget and a check that the built page's security policy can't silently block a script; a `release` command that bumps every version file at once; CI now checks pull requests (including dependency updates), runs Node 24, and skips redeploys for docs-only changes; `/?demo=1` loads the demo year in dev, and the demo history now runs up to yesterday; a one-paste browser smoke check; this changelog is now newest-first
 - **Daylight-saving weeks show the right days.** Around a clock change the week view could show Sunday twice and skip Saturday, and tapping a day could log to the day before. Days are now counted by the calendar, not by adding 24 hours
