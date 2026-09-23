@@ -16,7 +16,7 @@
   const crashed = () => /Something went wrong/.test(document.body.innerText)
   const out = { tabs: {} }
 
-  for (const key of ['contacts', 'schedule', 'map', 'reports', 'misc']) {
+  for (const key of ['schedule', 'contacts', 'reports', 'misc']) {
     const btn = document.querySelector(`[data-tutorial="tab-${key}"]`)
     if (!btn) { out.tabs[key] = { missing: true }; continue }
     btn.click()

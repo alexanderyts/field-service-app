@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTerritoriesEnabled } from '../territoriesFeature'
 import ModalPortal from '../ModalPortal'
 import contactShot from '../assets/tutorial/contact.webp'
 import scheduleWeekShot from '../assets/tutorial/schedule-week.webp'
@@ -18,7 +19,7 @@ export function markTutorialPromptSeen() {
   try { localStorage.setItem(TUTORIAL_KEY, 'yes') } catch {}
 }
 
-export type TutorialTab = 'contacts' | 'schedule' | 'map' | 'reports' | 'misc'
+export type TutorialTab = 'contacts' | 'schedule' | 'reports' | 'misc'
 
 interface TutorialStep {
   icon: string
@@ -45,6 +46,8 @@ interface TutorialStep {
   /** A signature line (e.g. "— Alex") rendered with deliberate spacing below the body, so it
       reads as a sign-off rather than an orphaned trailing line. */
   signoff?: string
+  /** Only shown with Streets & territories switched on (More → Features). */
+  territoriesOnly?: boolean
 }
 
 // A short, tab-by-tab overview rather than a granular button-by-button walkthrough —
@@ -56,17 +59,8 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     icon: '👋',
     title: 'Welcome to Meleo',
     body: "Here's a quick look around — under a minute. You can replay it anytime from More.",
-    tab: 'contacts',
+    tab: 'schedule',
     highlight: '[data-tutorial="tabbar"]',
-  },
-  {
-    icon: '◎',
-    title: 'Ministry',
-    body: "Your home base for everyone you meet — log a call, jot what you talked about, and mark return visits so you never lose the thread.",
-    tab: 'contacts',
-    highlight: '[data-tutorial="tab-contacts"]',
-    image: contactShot,
-    imageAlt: 'A contact with a Return Visit tag, address, and a history of logged calls.',
   },
   {
     icon: '◫',
@@ -96,31 +90,42 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     imageAlt: 'A minute-bank pill showing 45 minutes filling toward an hour.',
   },
   {
-    icon: '◈',
-    title: 'Map · Your contacts',
+    icon: '◎',
+    title: 'People',
+    body: "Everyone you meet — log a visit, jot what you talked about, and set return visits so you never lose the thread.",
+    tab: 'contacts',
+    highlight: '[data-tutorial="tab-contacts"]',
+    image: contactShot,
+    imageAlt: 'A contact with a Return Visit tag, address, and a history of logged calls.',
+  },
+  {
+    icon: '◎',
+    title: 'People · Map',
     body: "Give a contact an address and they land here automatically — pinned on the map and colour-coded by status, so your territory takes shape as you go.",
-    tab: 'map',
-    highlight: '[data-tutorial="tab-map"]',
+    tab: 'contacts',
+    highlight: '[data-tutorial="tab-contacts"]',
     image: contactsMapShot,
     imageFocus: 'center',
     imageAlt: 'A map with several contacts pinned across a neighborhood, colour-coded by status.',
   },
   {
-    icon: '◈',
-    title: 'Map · Trace a street',
-    body: "Working a street? Trace it right on the map, so you always remember exactly where you've been. Your streets live in the Ministry tab, ready to manage anytime.",
-    tab: 'map',
-    highlight: '[data-tutorial="tab-map"]',
+    icon: '◎',
+    title: 'Trace a street',
+    body: "Working a street? Trace it right on the map, so you always remember exactly where you've been. Your streets live in People → Streets.",
+    tab: 'contacts',
+    highlight: '[data-tutorial="tab-contacts"]',
+    territoriesOnly: true,
     image: streetShot,
     imageFocus: 'center',
     imageAlt: 'A street traced as a colored line on the map, matching the real road.',
   },
   {
-    icon: '◈',
-    title: 'Map · Territories',
-    body: "Bundle a few streets into a custom territory — each one labelled, so the whole area stays organized. Find and manage your territories in the Ministry tab.",
-    tab: 'map',
-    highlight: '[data-tutorial="tab-map"]',
+    icon: '◎',
+    title: 'Territories',
+    body: "Bundle a few streets into a custom territory — each one labelled, so the whole area stays organized. Find them in People → Territories.",
+    tab: 'contacts',
+    highlight: '[data-tutorial="tab-contacts"]',
+    territoriesOnly: true,
     image: territoryShot,
     imageFocus: 'center',
     imageAlt: 'Several labelled streets grouped into one custom territory on the map.',
@@ -185,8 +190,10 @@ export default function Tutorial({
 }) {
   const [step, setStep] = useState(0)
   const [rect, setRect] = useState<DOMRect | null>(null)
-  const isLast = step === TUTORIAL_STEPS.length - 1
-  const current = TUTORIAL_STEPS[step]
+  const territoriesOn = useTerritoriesEnabled()
+  const steps = TUTORIAL_STEPS.filter((st) => territoriesOn || !st.territoriesOnly)
+  const isLast = step === steps.length - 1
+  const current = steps[Math.min(step, steps.length - 1)]
 
   // Switch to whichever tab this step is about, so the real screen behind the
   // overlay matches what's being explained.
@@ -248,7 +255,7 @@ export default function Tutorial({
         </div>
 
         <div className="tutorial-dots">
-          {TUTORIAL_STEPS.map((_, i) => (
+          {steps.map((_, i) => (
             <span key={i} className={`tutorial-dot${i === step ? ' active' : ''}`} />
           ))}
         </div>

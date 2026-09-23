@@ -18,6 +18,9 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 
 ## Unreleased
 
+- **Four tabs, opening on Service.** Service · People · Report · More. "Ministry" is now **People**, and the Map moved inside it: a **List | Map** switch at the top. The map's buttons (satellite, find me, search, and a Key for the pin colours) now sit on the map itself instead of stacking above it, so the map fills the screen
+- **Streets & territories is now optional** (More → App Settings). It's on automatically if you already have streets or territories, and off for new installs — then People is just List | Map, the button reads "+ New Contact", and the tour skips tracing. Turning it off hides those parts; nothing is deleted
+
 ## 0.26.0 — The report hands your month in · 2026-09-23
 
 - **The Report tab hands your month in.** The top card now follows the form, in order: Shared in the ministry, Bible studies, Hours, Comments. Each has a Copy button, so filling in NW Publisher is tap, paste, tap, paste. **Share report** sends the same lines through your phone's share sheet (mail, messages, notes), replacing the email box. **Mark as submitted** records that it's done

@@ -75,7 +75,7 @@ export default function Territories({
         })}
         {grouped.length === 0 && (
           <p className="muted">
-            No territories yet — trace streets on the Map tab, then check some and "Group Selected into a Territory."
+            No territories yet — trace streets on People → Map, then check some and "Group Selected into a Territory."
           </p>
         )}
       </ul>

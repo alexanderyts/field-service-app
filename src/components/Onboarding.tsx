@@ -117,7 +117,7 @@ export function PrivacyGate({ onAccept }: { onAccept: () => void }) {
               the line to a real road; and the map tiles you look at are fetched from Esri, which therefore sees
               the <strong>area being viewed</strong>. "Get Directions" opens the address in Google Maps. Each of
               these also sees your device's IP address, as any web request does. If you never enter an address
-              and never open the Map tab, none of them are contacted.
+              and never open the map, none of them are contacted.
             </p>
           </section>
 

@@ -132,11 +132,14 @@ export default function MapView({
   focusLocation,
   pendingDraw,
   onDrawConsumed,
+  territoriesEnabled = true,
 }: {
   onGoToContact?: (personId: number) => void
   focusLocation?: { lat: number; lng: number; personId?: number } | null
   pendingDraw?: boolean
   onDrawConsumed?: () => void
+  /** Streets & territories switched on (More → Features): traces, the draw tool. */
+  territoriesEnabled?: boolean
 }) {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const { getLocation, loading, error } = useCurrentLocation()
@@ -156,6 +159,8 @@ export default function MapView({
   const [searching, setSearching] = useState(false)
   const [searchErr, setSearchErr] = useState<string | null>(null)
   const [errorDismissed, setErrorDismissed] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [showKey, setShowKey] = useState(false)
   const [tileError, setTileError] = useState(false)
   async function doSearch() {
     const q = search.trim()
@@ -207,54 +212,49 @@ export default function MapView({
     ?? (pinned[0] ? { lat: pinned[0].lat!, lng: pinned[0].lng! } : { lat: 32.3, lng: -90.0 })
   const statusesShown = Array.from(new Set(pinned.map((p) => p.status)))
 
+  async function recenter() {
+    setErrorDismissed(false)
+    const loc = await getLocation()
+    if (loc) setMe(loc)
+  }
+
+  // Lives inside the People tab (List | Map) since 0.27.0. Everything that used to stack
+  // ~900 px above the map — recenter, the legend, search — is now a small control on the map
+  // itself, so the map starts at the top of the screen (AUDIT F048(6)).
   return (
-    <div className="view">
-      <h2 className="applet-title">Territory Map</h2>
-      <button
-        onClick={async () => {
-          setErrorDismissed(false)
-          const loc = await getLocation()
-          if (loc) setMe(loc)
-        }}
-        disabled={loading}
-      >
-        {loading ? 'Locating...' : 'Recenter on Me'}
-      </button>
+    <div className="map-panel">
       {error && !errorDismissed && (
         <p className="error map-error">
           <span>{error}</span>
           <button className="icon-btn" title="Dismiss" aria-label="Dismiss" onClick={() => setErrorDismissed(true)}>×</button>
         </p>
       )}
-      {statusesShown.length > 0 && (
-        <div className="legend">
-          {statusesShown.map((s) => (
-            <span key={s}><i className={`contact-pin legend-mini status-${s}`} style={{ display: 'inline-block' }} /> {STATUS_LABELS[s]}</span>
-          ))}
+
+      {showSearch && (
+        <div className="map-search-row">
+          <input
+            className="map-search-input"
+            placeholder="Search a place or address…"
+            aria-label="Search a place or address"
+            value={search}
+            autoFocus
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') doSearch() }}
+          />
+          <button className="secondary" onClick={doSearch} disabled={searching}>{searching ? '…' : 'Go'}</button>
         </div>
       )}
-
-      {/* Jump the map to any place or address (Nominatim search) — handy for planning a territory
-          somewhere other than where you're standing. */}
-      <div className="map-search-row">
-        <input
-          className="map-search-input"
-          placeholder="Search a place or address…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') doSearch() }}
-        />
-        <button className="secondary" onClick={doSearch} disabled={searching}>{searching ? '…' : '🔍 Search'}</button>
-      </div>
       {searchErr && <p className="error" style={{ margin: '4px 0 0' }}>{searchErr}</p>}
 
       {/* Single custom-territory entry point: draws a new one, or (once streets exist) opens the
           manage modal. Reachable without scrolling past the (touch-capturing) map. */}
-      <button className="secondary map-draw-btn" onClick={() => setDrawSignal((n) => n + 1)}>
-        {activeTerritory && activeTerritory.streets.length > 0
-          ? `🗺️ Manage Custom Territory (${activeTerritory.streets.length})`
-          : '✏️ Draw Custom Territory'}
-      </button>
+      {territoriesEnabled && (
+        <button className="secondary map-draw-btn" onClick={() => setDrawSignal((n) => n + 1)}>
+          {activeTerritory && activeTerritory.streets.length > 0
+            ? `🗺️ Manage Custom Territory (${activeTerritory.streets.length})`
+            : '✏️ Draw Custom Territory'}
+        </button>
+      )}
 
       {/* The map itself is the main thing this tab is for, so it stays right up top,
           visible without scrolling — the territory controls below it are a secondary,
@@ -265,7 +265,7 @@ export default function MapView({
         {/* Height adapts to the viewport so the map bottom (attribution + any bottom-edge
             pins) clears the floating tab bar instead of hiding under it, while staying a
             comfortable size on tall and short screens alike. */}
-        <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: 'clamp(200px, calc(100dvh - 520px), 620px)', width: '100%' }}>
+        <MapContainer center={[center.lat, center.lng]} zoom={focusLocation ? 17 : me ? 16 : 13} style={{ height: 'clamp(240px, calc(100dvh - 330px), 640px)', width: '100%' }}>
           {baseLayer === 'street' ? (
             <TileLayer
               key="street"
@@ -309,10 +309,10 @@ export default function MapView({
           {/* Every territory's traces show here, not just the active draft — a grouped
               territory should still be visible on the map even once it's "graduated"
               into a Ministry-tab entry. */}
-          {territories.map((t) => (
+          {territoriesEnabled && territories.map((t) => (
             <TerritoryStreetsOverlay key={t.id} streets={t.streets} />
           ))}
-          <TerritoryStreetsOverlay streets={sentStreets} />
+          {territoriesEnabled && <TerritoryStreetsOverlay streets={sentStreets} />}
         </MapContainer>
         <MapCompass />
         {tileError && (
@@ -320,22 +320,44 @@ export default function MapView({
         )}
         {pinned.length === 0 && !me && !focusLocation && (
           <div className="map-empty">
-            <p>No pins yet. Add an address to a contact and it'll appear here, or tap <strong>Recenter on Me</strong>.</p>
+            <p>No pins yet. Add an address to a contact and it'll appear here, or tap <strong>📍</strong> to find yourself.</p>
           </div>
         )}
-        <button
-          className="map-layer-toggle"
-          onClick={() => setBaseLayer((l) => (l === 'street' ? 'satellite' : 'street'))}
-          title={baseLayer === 'street' ? 'Switch to satellite' : 'Switch to street map'}
-        >
-          {baseLayer === 'street' ? '🛰️ Satellite' : '🗺️ Street'}
-        </button>
+        <div className="map-controls">
+          <button
+            className="map-ctl"
+            onClick={() => setBaseLayer((l) => (l === 'street' ? 'satellite' : 'street'))}
+            title={baseLayer === 'street' ? 'Switch to satellite' : 'Switch to street map'}
+          >
+            {baseLayer === 'street' ? '🛰️' : '🗺️'}
+          </button>
+          <button className="map-ctl" onClick={recenter} disabled={loading} title="Find me" aria-label="Find me">
+            {loading ? '…' : '📍'}
+          </button>
+          <button className={`map-ctl${showSearch ? ' active' : ''}`} onClick={() => setShowSearch((v) => !v)} title="Search a place" aria-label="Search a place" aria-pressed={showSearch}>
+            🔍
+          </button>
+          {statusesShown.length > 0 && (
+            <button className={`map-ctl map-ctl-text${showKey ? ' active' : ''}`} onClick={() => setShowKey((v) => !v)} aria-pressed={showKey}>
+              Key
+            </button>
+          )}
+        </div>
+        {showKey && statusesShown.length > 0 && (
+          <div className="legend map-key" role="note">
+            {statusesShown.map((s) => (
+              <span key={s}><i className={`contact-pin legend-mini status-${s}`} style={{ display: 'inline-block' }} /> {STATUS_LABELS[s]}</span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Territory drawing + management both live in their own modals (see Territory.tsx) with
           their own map instances — fully isolated from this page's scroll. Renders no inline UI;
           the button above is the only entry point. Drawing starts on the map's current view. */}
-      <TerritoryManager territory={activeTerritory} initialCenter={mapView ?? center} pendingDraw={pendingDraw} onDrawConsumed={onDrawConsumed} drawSignal={drawSignal} />
+      {territoriesEnabled && (
+        <TerritoryManager territory={activeTerritory} initialCenter={mapView ?? center} pendingDraw={pendingDraw} onDrawConsumed={onDrawConsumed} drawSignal={drawSignal} />
+      )}
     </div>
   )
 }

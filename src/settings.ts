@@ -32,6 +32,9 @@ const KEY = {
   /** Months whose Service Report the person marked as submitted — a JSON map keyed "YYYY-M"
       (month 0-based) to the epoch ms it was marked. A record, so it travels in backups. */
   reportedMonths: 'fieldservice_reported_months',
+  /** 'on' / 'off' once the person chose in More → Features; absent means "decide from the
+      data" (see territoriesFeature.ts). A preference, so it travels in backups. */
+  territories: 'fieldservice_territories',
 } as const
 
 function readRaw(key: string): string | null {
@@ -172,4 +175,14 @@ export function setReported(year: number, month: number, at: number | null): voi
   if (at == null) delete map[`${year}-${month}`]
   else map[`${year}-${month}`] = Math.floor(at)
   writeRaw(KEY.reportedMonths, JSON.stringify(map))
+}
+
+/** The Streets & territories switch as the person set it, or null if they never touched it. */
+export function getTerritoriesSetting(): boolean | null {
+  const v = readRaw(KEY.territories)
+  return v === 'on' ? true : v === 'off' ? false : null
+}
+
+export function setTerritoriesSetting(on: boolean): void {
+  writeRaw(KEY.territories, on ? 'on' : 'off')
 }

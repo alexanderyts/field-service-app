@@ -10,7 +10,8 @@ import { APP_VERSION } from '../version'
 import { viewportDiag } from '../viewportFix'
 import { COPYRIGHT_SUMMARY, NOT_AFFILIATED, DEVELOPER_NAME, DEVELOPER_EMAIL } from '../legal'
 import { getProfileName, saveProfileName } from '../profile'
-import { creditHoursEnabled, setCreditHoursEnabled, getTheme, setTheme as saveTheme, getLastBackupAt, isBackupOverdue, type Theme } from '../settings'
+import { creditHoursEnabled, setCreditHoursEnabled, getTheme, setTheme as saveTheme, getLastBackupAt, isBackupOverdue, setTerritoriesSetting, type Theme } from '../settings'
+import { useTerritoriesEnabled } from '../territoriesFeature'
 import { CREDIT_ACTIVITY_SUGGESTIONS } from '../categories'
 import { formatTimeAgo } from '../timeAgo'
 import { minuteBankAnimationsEnabled, setMinuteBankAnimationsEnabled } from '../minuteBankFly'
@@ -32,6 +33,9 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
   const [confirmClear2, setConfirmClear2] = useState(false)
   const [confirmSeed, setConfirmSeed] = useState(false)
   const [creditEnabled, setCreditEnabled] = useState(() => creditHoursEnabled())
+  const territoriesOn = useTerritoriesEnabled()
+  // The switch lives in localStorage; bumping this re-renders so the checkbox follows it.
+  const [, setFeaturesVersion] = useState(0)
   const schedulePrefs = useLiveQuery(() => db.schedulePrefs.get(1), [])
   const defaultExpandCalendar = schedulePrefs?.scheduleDefaultExpand === 'calendar'
   async function setDefaultExpandCalendar(v: boolean) {
@@ -356,6 +360,19 @@ export default function Misc({ onReplayTutorial, onImportEncoded }: { onReplayTu
                 ))}
               </div>
             )}
+
+            <div className="misc-settings-divider" />
+
+            {/* Streets & territories (opt-in since 0.27.0) */}
+            <label className="checkbox-row">
+              <input type="checkbox" checked={territoriesOn} onChange={(e) => { setTerritoriesSetting(e.target.checked); setFeaturesVersion((n) => n + 1) }} />
+              <div>
+                <strong>Streets &amp; territories</strong>
+                <p className="muted" style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+                  Trace streets on the map, track house numbers, and group streets into territories. Adds Streets and Territories to People. Turning it off hides them; nothing is deleted.
+                </p>
+              </div>
+            </label>
 
             <div className="misc-settings-divider" />
 

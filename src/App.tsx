@@ -25,21 +25,20 @@ const initialImport: string | null = (() => {
   }
 })()
 
-// Contacts is the default tab, so it stays eagerly imported (no Suspense flash on first
-// paint). Everything else is code-split: Map pulls in Leaflet (~150KB), and Schedule is a
-// 3k-line component — deferring these off the initial bundle cuts first-paint JS/parse.
-// The chunks are then prefetched during idle time once the app is up (see the warm-up effect),
-// so the very first switch to each tab is instant rather than showing a Suspense flash.
+// Service is the landing tab (0.27.0) but stays code-split with the rest; People (Contacts)
+// is eager because it holds the import/deep-link paths. The map (Leaflet, ~150 KB) loads only
+// when People → Map is opened. The tab chunks are prefetched during idle time once the app is
+// up (see the warm-up effect), so the first switch to each tab is instant.
 const importSchedule = () => import('./components/Schedule')
 const importReports = () => import('./components/Reports')
 const importMisc = () => import('./components/Misc')
-const importMapView = () => import('./components/MapView')
 const Schedule = lazy(importSchedule)
 const Reports = lazy(importReports)
 const Misc = lazy(importMisc)
-const MapView = lazy(importMapView)
 
-type Tab = 'contacts' | 'schedule' | 'map' | 'reports' | 'misc'
+// Keys predate the 0.27.0 labels (contacts = People, schedule = Service) and stay, so nothing
+// saved or deep-linked moves. The Map is a view inside People now, not a tab.
+type Tab = 'contacts' | 'schedule' | 'reports' | 'misc'
 type Phase = 'splash' | 'splash-out' | 'policy' | 'profile' | 'app'
 
 function nextPhase(): Phase {
@@ -49,21 +48,15 @@ function nextPhase(): Phase {
 }
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
-  { key: 'contacts', label: 'Ministry', icon: '◎' },
   { key: 'schedule', label: 'Service', icon: '◫' },
-  { key: 'map', label: 'Map', icon: '◈' },
+  { key: 'contacts', label: 'People', icon: '◎' },
   { key: 'reports', label: 'Report', icon: '▦' },
   { key: 'misc', label: 'More', icon: '⋯' },
 ]
 
 function App() {
-  const [tab, setTab] = useState<Tab>('contacts')
+  const [tab, setTab] = useState<Tab>('schedule')
   const [openContactId, setOpenContactId] = useState<number | null>(null)
-  const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number; personId?: number } | null>(null)
-  // Set when "New Custom Territory" is picked from the Ministry chooser — switches to the Map
-  // tab, which opens the drawing tool and clears this (so it's consumed exactly once, even
-  // though the Map tab mounts fresh on the switch).
-  const [pendingDraw, setPendingDraw] = useState(false)
   const [phase, setPhase] = useState<Phase>('splash')
   const [showTutorialPrompt, setShowTutorialPrompt] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
@@ -98,10 +91,10 @@ function App() {
   }, [phase])
 
   // Warm the code-split tab chunks during idle time once the app is up, so the first switch
-  // to Schedule/Reports/Map/More is instant instead of showing a one-time Suspense flash.
+  // to Service/Report/More is instant instead of showing a one-time Suspense flash.
   useEffect(() => {
     if (phase !== 'app') return
-    const warm = () => { void importSchedule(); void importReports(); void importMisc(); void importMapView() }
+    const warm = () => { void importSchedule(); void importReports(); void importMisc() }
     if (typeof window.requestIdleCallback === 'function') {
       const id = window.requestIdleCallback(warm, { timeout: 2500 })
       return () => window.cancelIdleCallback(id)
@@ -143,9 +136,6 @@ function App() {
 
   function selectTab(next: Tab) {
     setTab(next)
-    // "Jump to Map" focuses one contact, once. Without this, every later Map visit from the
-    // tab bar reopened on that same contact (AUDIT F053).
-    setMapFocus(null)
     // Real haptic feedback (the Taptic Engine) isn't reachable from web content on
     // iOS at all — Safari has never implemented the Vibration API, in-browser or
     // installed as a PWA; only a native app can trigger it. This still fires on
@@ -178,9 +168,7 @@ function App() {
               <Contacts
                 openContactId={openContactId}
                 onOpenedContact={() => setOpenContactId(null)}
-                onGoToMap={(lat, lng, personId) => { setMapFocus({ lat, lng, personId }); setTab('map') }}
                 onImportEncoded={setPendingImport}
-                onNewTerritory={() => { setMapFocus(null); setPendingDraw(true); setTab('map') }}
               />
             )}
             {tab === 'schedule' && (
@@ -190,14 +178,6 @@ function App() {
                   setTab('contacts')
                 }}
                 onOpenReport={() => selectTab('reports')}
-              />
-            )}
-            {tab === 'map' && (
-              <MapView
-                focusLocation={mapFocus}
-                onGoToContact={(id) => { setOpenContactId(id); setTab('contacts') }}
-                pendingDraw={pendingDraw}
-                onDrawConsumed={() => setPendingDraw(false)}
               />
             )}
             {tab === 'reports' && <Reports />}

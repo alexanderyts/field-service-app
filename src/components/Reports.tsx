@@ -19,6 +19,7 @@ import { getMinuteBank, getParticipatedMonth, getReportedAt, setParticipatedMont
 import { deriveRole, roleReportsHours, roleTracksHours } from '../schedulePrefsRole'
 import { buildMonthReport, dueReportMonth, hasSomethingToReport, reportText } from '../monthReport'
 import ServiceYearReview from './ServiceYearReview'
+import { useTerritoriesEnabled } from '../territoriesFeature'
 import { StepperNav } from './SharedBits'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -38,6 +39,7 @@ export default function Reports() {
   // docs/review-2026-09-23.md). Automatic until the person navigates or marks it; after that
   // their choice holds, so marking a report submitted doesn't yank the view to another month.
   const [chosenOffset, setChosenOffset] = useState<number | null>(null)
+  const territoriesOn = useTerritoriesEnabled()
   // Participation and "submitted" live in localStorage; bumping this re-reads them.
   const [, setMarksVersion] = useState(0)
   const [copied, setCopied] = useState<string | null>(null)
@@ -431,7 +433,7 @@ export default function Reports() {
 
       {/* Temporary territories completed — independent of any hours goal, so it's its
           own card rather than folded into the (goal-gated) yearly progress card below. */}
-      {(monthTerritoriesCompleted > 0 || yearTerritoriesCompleted > 0) && (
+      {territoriesOn && (monthTerritoriesCompleted > 0 || yearTerritoriesCompleted > 0) && (
         <div className="card">
           <h4 style={{ marginBottom: 8 }}>Custom Territories</h4>
           <p>🗺️ {monthTerritoriesCompleted} completed this month</p>

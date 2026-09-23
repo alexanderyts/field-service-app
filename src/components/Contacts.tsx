@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type ContactStatus } from '../db'
 import { fmtDateTime } from '../localDate'
@@ -14,35 +14,49 @@ import Territories from './Territories'
 import StreetEntries, { type ContactPrefill } from './StreetEntries'
 import { ContactForm } from './contacts/ContactForm'
 import { ContactDetail } from './contacts/ContactDetail'
+import { useTerritoriesEnabled } from '../territoriesFeature'
+
+// Leaflet is ~150 kB; People is the startup-bundle tab, so the map loads only when opened.
+const MapView = lazy(() => import('./MapView'))
 
 type SortKey = 'name' | 'visit' | 'street' | 'date' | 'city' | 'zip'
-type MinistryView = 'people' | 'streets' | 'territories'
+type PeopleView = 'people' | 'map' | 'streets' | 'territories'
+type MapFocus = { lat: number; lng: number; personId?: number }
 export default function Contacts({
   openContactId,
   onOpenedContact,
-  onGoToMap,
   onImportEncoded,
-  onNewTerritory,
 }: {
   openContactId?: number | null
   onOpenedContact?: () => void
-  onGoToMap?: (lat: number, lng: number, personId?: number) => void
   onImportEncoded?: (encoded: string) => void
-  onNewTerritory?: () => void
 }) {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
   const appointments = useLiveQuery(() => db.appointments.toArray(), []) ?? []
   const calls = useLiveQuery(() => db.calls.toArray(), []) ?? []
-  // Counts shown on the segmented control so each list's size reads at a glance. Territories
-  // counts only the *grouped* (durable) ones — the active draft isn't a "created" territory.
+  // Only for the backup reminder's "is there anything to lose" check. The segments carry no
+  // counts: four of them with counts wrapped on a 375 px screen.
   const streetCount = useLiveQuery(() => db.streetEntries.count(), []) ?? 0
-  const territoryCount = useLiveQuery(() => db.territories.filter((t) => !!t.grouped).count(), []) ?? 0
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [filterStatus, setFilterStatus] = useState<ContactStatus | 'all'>('all')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showNew, setShowNew] = useState(false)
-  const [view, setView] = useState<MinistryView>('people')
+  const [view, setView] = useState<PeopleView>('people')
+  const territoriesOn = useTerritoriesEnabled()
+  // "Jump to Map" focuses one contact once; opening the Map segment directly never does
+  // (AUDIT F053). Both live here now that the map is part of this tab.
+  const [mapFocus, setMapFocus] = useState<MapFocus | null>(null)
+  const [pendingDraw, setPendingDraw] = useState(false)
+  function onGoToMap(lat: number, lng: number, personId?: number) {
+    setSelectedId(null)
+    setMapFocus({ lat, lng, personId })
+    setView('map')
+  }
+  function showView(next: PeopleView) {
+    setMapFocus(null)
+    setView(next)
+  }
   const [contactPrefill, setContactPrefill] = useState<ContactPrefill | null>(null)
   const [showChooser, setShowChooser] = useState(false)
   const [showBackupNag, setShowBackupNag] = useState(() => shouldShowBackupNag(getLastBackupAt(), Date.now()))
@@ -135,8 +149,11 @@ export default function Contacts({
   return (
     <div className="view">
       <div className="view-header">
-        <h2 className="applet-title">Ministry</h2>
-        <button onClick={() => setShowChooser(true)}>+ New Entry</button>
+        <h2 className="applet-title">People</h2>
+        {/* With Streets & territories off there is only one thing to add. */}
+        <button onClick={() => (territoriesOn ? setShowChooser(true) : (setView('people'), setShowNew(true)))}>
+          {territoriesOn ? '+ New Entry' : '+ New Contact'}
+        </button>
       </div>
 
       {showBackupNag && (people.length + streetCount > 0) && (
@@ -146,12 +163,16 @@ export default function Contacts({
         </div>
       )}
 
-      {/* People vs. Streets — contacts are individual householders; streets track the
-          house numbers worked on a road (and are auto-created from temporary territories). */}
+      {/* List | Map, plus Streets and Territories when that feature is on (More → Settings). */}
       <div className="segmented">
-        <button className={view === 'people' ? 'active' : ''} aria-pressed={view === 'people'} onClick={() => setView('people')}>People{people.length > 0 ? ` (${people.length})` : ''}</button>
-        <button className={view === 'streets' ? 'active' : ''} aria-pressed={view === 'streets'} onClick={() => setView('streets')}>Streets{streetCount > 0 ? ` (${streetCount})` : ''}</button>
-        <button className={view === 'territories' ? 'active' : ''} aria-pressed={view === 'territories'} onClick={() => setView('territories')}>Territories{territoryCount > 0 ? ` (${territoryCount})` : ''}</button>
+        <button className={view === 'people' ? 'active' : ''} aria-pressed={view === 'people'} onClick={() => showView('people')}>List</button>
+        <button className={view === 'map' ? 'active' : ''} aria-pressed={view === 'map'} onClick={() => showView('map')}>Map</button>
+        {territoriesOn && (
+          <>
+            <button className={view === 'streets' ? 'active' : ''} aria-pressed={view === 'streets'} onClick={() => showView('streets')}>Streets</button>
+            <button className={view === 'territories' ? 'active' : ''} aria-pressed={view === 'territories'} onClick={() => showView('territories')}>Territories</button>
+          </>
+        )}
       </div>
 
       {view === 'people' ? (
@@ -263,6 +284,16 @@ export default function Contacts({
 
           {selectedId != null && !editMode && <ContactDetail personId={selectedId} onClose={() => setSelectedId(null)} onGoToMap={onGoToMap} />}
         </>
+      ) : view === 'map' ? (
+        <Suspense fallback={<div className="tab-loading" />}>
+          <MapView
+            focusLocation={mapFocus}
+            onGoToContact={(id) => { setSelectedId(id); setView('people') }}
+            pendingDraw={pendingDraw}
+            onDrawConsumed={() => setPendingDraw(false)}
+            territoriesEnabled={territoriesOn}
+          />
+        </Suspense>
       ) : view === 'streets' ? (
         <StreetEntries showNewForm={streetFormOpen} onCloseNewForm={() => setStreetFormOpen(false)} onGoToMap={onGoToMap} onCreateContact={handleCreateContact} />
       ) : (
@@ -293,7 +324,7 @@ export default function Contacts({
                 </button>
                 <button
                   className="secondary"
-                  onClick={() => { setShowChooser(false); onNewTerritory?.() }}
+                  onClick={() => { setShowChooser(false); setMapFocus(null); setPendingDraw(true); setView('map') }}
                 >
                   🗺️ New Custom Territory
                 </button>

@@ -906,11 +906,9 @@ button.small {
   box-shadow: var(--shadow-sm);
 }
 
-/* Top-of-tab shortcut to the Custom-Territory draw tool, so it's reachable without scrolling
-   past the touch-capturing map to the controls below. */
+/* Shortcut to the Custom-Territory draw tool (only with Streets & territories on). */
 .map-draw-btn {
   width: 100%;
-  margin: 8px 0 4px;
 }
 
 .map-compass {
@@ -922,34 +920,66 @@ button.small {
   filter: drop-shadow(var(--shadow-sm));
 }
 
-/* Place / address search above the map. */
+/* Place / address search, opened from the map's 🔍 control. */
 .map-search-row {
   display: flex;
   gap: 8px;
-  margin: 8px 0 0;
 }
 .map-search-input {
   flex: 1;
   min-width: 0;
 }
 
-/* Street ↔ satellite toggle overlaid on the map — top-left, below the zoom control, so it clears
-   the compass (top-right), the attribution (bottom), and the floating tab bar that overlaps the
-   map's bottom edge. */
-.map-layer-toggle {
+/* On-map controls (layer, find me, search, key) — a column top-left, under the zoom buttons,
+   clear of the compass (top-right), the attribution (bottom) and the floating tab bar. They
+   replaced ~900 px of buttons that used to sit above the map (AUDIT F048(6)). */
+.map-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.map-controls {
   position: absolute;
   left: 10px;
   top: 82px;
   z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.map-ctl {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 16px;
   box-shadow: var(--shadow-sm);
   cursor: pointer;
+}
+.map-ctl-text {
+  font-size: 11px;
+  font-weight: 700;
+}
+.map-ctl.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.map-key {
+  position: absolute;
+  left: 54px;
+  top: 82px;
+  z-index: 500;
+  max-width: calc(100% - 110px);
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
 }
 
 .me-dot {

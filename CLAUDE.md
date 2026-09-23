@@ -62,6 +62,7 @@ src/
   timeStats.ts         # Credit-hour cap (55h/mo), monthly/yearly + service-year helpers
   goalSegments.ts      # Day goal-ring arc math for the Schedule calendar
   milestones.ts        # Milestone crossing (25/50/75/100) + month pace status/delta (pure, tested)
+  territoriesFeature.ts # Streets & territories opt-in: useTerritoriesEnabled() = the More switch, else on iff streets/territories exist
   schedulePrefsRole.ts # Role (publisher/auxiliary/pioneer) derivation + whether hours are tracked this month
   minuteBankFly.ts     # The "minute bank" fly-to-pill animation helper
   timer.ts             # Live service timer: pure start/pause/resume/stop arithmetic + its localStorage record (tested). Stop keeps the record (`stoppedAt`) until the log is written or discarded
@@ -82,12 +83,12 @@ src/
     Onboarding.tsx     # SplashScreen + PrivacyGate + ProfileGate (+ hasAcceptedPolicy/hasSeenProfilePrompt)
     Tutorial.tsx       # Guided tour + first-run TutorialPrompt
     InstallPrompt.tsx  # "Add to Home Screen" banner
-    Contacts.tsx       # THE MINISTRY TAB root: People/Streets/Territories segmented control + list (289 lines)
+    Contacts.tsx       # THE PEOPLE TAB root (key 'contacts'): List | Map (| Streets | Territories) segments + list; hosts the lazy MapView
     contacts/          # ContactForm, ContactDetail, CallLogger, ReturnVisitEditor; geocode.ts (Nominatim lookups, pure)
     StreetEntries.tsx  # Streets sub-view: street list, StreetDetail, house-number pad
     Territories.tsx    # Territories sub-view: grouped-territory list + detail
     Territory.tsx      # Map-side custom-territory manager: trace/draw modal, send-to-ministry, grouping
-    MapView.tsx        # Leaflet map: contact pins, territory traces, satellite toggle, place search
+    MapView.tsx        # People → Map: contact pins, territory traces, on-map controls (layer, find me, search, key)
     Schedule.tsx       # THE SERVICE TAB root (tab key 'schedule'): intake-or-main switch only
     schedule/          # dates.ts (incl. addDays — never step days by 24 h, DST) / plan.ts / animate.ts (pure, no React) + useMilestoneToast.ts + one file per piece: ScheduleMain
                        #   (week view, logging, minute bank — the hub, 1.3k), ScheduleCalendarView, DayActionModal,
@@ -112,7 +113,7 @@ Phase state (`App.tsx`): `'splash' | 'splash-out' | 'policy' | 'profile' | 'app'
 2. **splash-out** (~2.45–2.85s) — fade-out
 3. **policy** — first boot: user must accept the privacy policy (`hasAcceptedPolicy()`)
 4. **profile** — first boot: optional name prompt (`hasSeenProfilePrompt()`)
-5. **app** — main app with 5-tab nav
+5. **app** — main app with 4-tab nav, landing on **Service**
 
 `nextPhase()` skips whichever gates are already satisfied. `main.tsx` applies the saved theme to
 `<html data-theme>` **before first paint** so a non-light theme never flashes light.
@@ -123,20 +124,22 @@ Phase state (`App.tsx`): `'splash' | 'splash-out' | 'policy' | 'profile' | 'app'
 
 | Tab | Key | Label | Icon | Component |
 |---|---|---|---|---|
-| Ministry | `contacts` | Ministry | ◎ | `Contacts.tsx` |
-| Service | `schedule` | Service | ◫ | `Schedule.tsx` (tab key unchanged; label renamed in 0.21.0) |
-| Map | `map` | Map | ◈ | `MapView.tsx` |
+| Service | `schedule` | Service | ◫ | `Schedule.tsx` — the landing tab since 0.27.0 |
+| People | `contacts` | People | ◎ | `Contacts.tsx` (was "Ministry"; holds the Map since 0.27.0) |
 | Report | `reports` | Report | ▦ | `Reports.tsx` (label singular since 0.26.0) |
 | More | `misc` | More | ⋯ | `Misc.tsx` |
 
-Schedule/Reports/Misc/Map are code-split (`lazy`) and warmed during idle after launch. Contacts is
-eager (default tab). Cross-tab navigation is state in `App.tsx`: `openContactId`, `mapFocus`,
-`pendingDraw` (Map draw tool), `pendingImport` (share import).
+Keys predate the labels and never change (saved state, the tutorial). Schedule/Reports/Misc are
+code-split (`lazy`) and warmed during idle after launch; Contacts is eager; MapView is lazy inside
+Contacts. Cross-tab navigation state in `App.tsx`: `openContactId`, `pendingImport` (share import).
 
-### Ministry tab sub-views
-`Contacts.tsx` hosts a segmented control: **People** / **Streets** / **Territories** (each shows a count).
-The **+ New Entry** chooser offers: New Contact, New Street, New Custom Territory (jumps to Map draw
-tool), and Import a Shared Item (file).
+### People tab sub-views
+`Contacts.tsx` hosts a segmented control: **List** / **Map**, plus **Streets** / **Territories** when
+Streets & territories is on (`territoriesFeature.ts`; More → App Settings). Map focus ("Jump to Map")
+and the pending draw request are local state here. With the feature on, **+ New Entry** offers New
+Contact, New Street, New Custom Territory (opens Map with the draw tool) and Import a Shared Item;
+with it off the button is **+ New Contact**. Off also hides traces, the draw tool, the tour's
+territory steps and the Report territory card — nothing is deleted.
 
 ---
 
@@ -272,6 +275,7 @@ moved into `settings.ts` in 0.20.2.
 | `fieldservice_backup_nag_dismissed_at` | Epoch ms the back-up reminder was last dismissed (hidden 7 days after). Blocklisted | `settings.ts` |
 | `fieldservice_install_dismissed` | This browser dismissed the Add-to-Home-Screen banner. Blocklisted (0.25.2) so a restore onto a new phone still offers it | `InstallPrompt.tsx` |
 | `fieldservice_participated_months` | Months the user ticked as "shared in the ministry" (logged time or calls also count, see `monthReport.ts`) | `settings.ts` |
+| `fieldservice_territories` | `'on'`/`'off'` — the Streets & territories switch; absent = on iff streets/territories exist | `settings.ts` |
 | `fieldservice_reported_months` | `{"YYYY-M": epochMs}` — months whose report was marked submitted. A record: travels in backups | `settings.ts` |
 | `fieldservice_notify_enabled` / `_notify_lead_min` / `_notify_sent_ids` | Return-visit reminder settings + dedupe | `notifications.ts` |
 | `fieldservice_aux_*` | Auxiliary-pioneer config (see `auxPioneering.ts`) | `auxPioneering.ts` |
@@ -374,9 +378,10 @@ brand/category/tag hues are brightened per dark theme for contrast.
   territories, credit cap, service year; `ServiceYearReview` is the animated year summary).
 
 ### Map
-- Default center `{ lat: 32.3, lng: -90.0 }`. Contact pins + popups, territory traces overlaid,
-  satellite/street tile toggle, place search. "Jump to Map" from a contact/street focuses the pin via
-  `mapFocus` state, which every tab-bar tap clears (AUDIT F053). Every `TileLayer` sets
+- A view inside People (0.27.0). Default center `{ lat: 32.3, lng: -90.0 }`. Contact pins + popups,
+  territory traces (feature on). Controls sit on the map (layer, 📍 find me, 🔍 search, Key legend)
+  instead of above it (AUDIT F048(6)). "Jump to Map" from a contact/street focuses the pin once;
+  opening the Map segment directly never does (AUDIT F053). Every `TileLayer` sets
   `crossOrigin="anonymous"` so the tile cache stores CORS, not opaque, responses (F056).
 
 ### Contacts
