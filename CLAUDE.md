@@ -436,19 +436,35 @@ that silently killed every inline script and passed every test).
 
 ```
 E:\Field Service App\dev-server.cmd   # Sets nodejs PATH, runs npm run dev
-.claude/launch.json                   # Points the preview tool to this cmd on port 5173
+.claude/launch.json                   # "Field Service App" = dev server :5173; "Meleo built" = build + vite preview :4173
 ```
 
-Run: `npm run dev` (port 5173) · Build: `npm run build` (`tsc -b && vite build`) ·
-Pages build: `npm run build:pages` · Lint: `npm run lint` (oxlint) · Test: `npm test` (Vitest)
+| Command | What it does |
+|---|---|
+| `node scripts/verify.mjs` (`npm run verify`) | **The one gate.** tsc, oxlint, vitest, build, main-chunk budget (320 kB), CSP present / no inline script. Ends with one `VERIFY PASS …` or `VERIFY FAIL at <step>` line; judge by that and the exit code. CI runs the same script. |
+| `npm run release -- <patch\|minor\|major> "Title"` | Bumps package.json + lock + `APP_VERSION`, stamps CHANGELOG `## Unreleased`, runs verify, writes `.git/RELEASE_MSG`. Never commits or pushes. `--dry-run` previews. |
+| `/?demo=1` (dev server only) | Wipes local data, loads the demo year (history up to yesterday), skips onboarding. |
+| `scripts/smoke-snippet.js` | Paste as one browser `javascript_exec` after `?demo=1`: visits every tab, returns JSON with `ok`, titles, Service card order, report card, CSP refusals. |
+
+### Working in this environment (AI sessions)
+- A global **RTK hook rewrites shell commands**: `npm run lint` becomes an ESLint wrapper that
+  falsely fails on oxlint; `cat`/`head`/`grep` output gets truncated or filtered. So: read with
+  **Read**, search with **Grep**, change files with **Edit/Write**, gate with
+  `node scripts/verify.mjs` (the hook leaves `node …` alone). Never trust `npm run lint` here.
+- Multi-file mechanical edits: Write a `.mjs` script to the scratchpad and run `node <file>`.
+  Commit messages: Write them to a file, then `git commit -F <file>`.
+- Add a bullet under CHANGELOG `## Unreleased` as you work; `npm run release` stamps it.
+- Push only when the owner says so — a push to `master` deploys (docs-only pushes don't).
+- Browser pane: first screenshot often times out (retry once); hidden panes throttle timers
+  (drive with JS clicks); old HMR errors linger in the console buffer (trust a fresh reload).
 
 ---
 
 ## Working Conventions (Definition of Done)
 
 A change is "done" when:
-- **Green gates:** `npm run build` (tsc **strict** + vite), `npm run lint`, and `npm test` all pass —
-  the same three the CI runs before every deploy (`.github/workflows/deploy-pages.yml`).
+- **Green gates:** `node scripts/verify.mjs` prints `VERIFY PASS` — the same script CI runs on
+  every push and pull request (`.github/workflows/deploy-pages.yml`).
 - **Pure logic is tested:** new pure functions (math, parsing, sorting, formatting) get a Vitest
   test next to them (`*.test.ts`). Multi-table DB operations belong in `records.ts` rather than
   inline in a component, and are tested against `fake-indexeddb` — a flow you can't call without
@@ -461,8 +477,8 @@ A change is "done" when:
 - **Findings are tracked in [AUDIT.md](AUDIT.md):** a finding closes only with *named proof* (a test,
   a fixing commit, or a manual-verification note). The human owns waivers and closure.
 - **Versioning (semver `MAJOR.MINOR.PATCH`):** MINOR = new feature, PATCH = fix/polish, MAJOR reserved
-  for the first public release / breaking changes. When cutting a version, update [CHANGELOG.md](CHANGELOG.md),
-  `src/version.ts` (`APP_VERSION`), and `package.json` together.
+  for the first public release / breaking changes. Cut versions with `npm run release` (never by
+  hand); `src/version.test.ts` fails if `APP_VERSION`, package.json and the lock file disagree.
 
 ---
 

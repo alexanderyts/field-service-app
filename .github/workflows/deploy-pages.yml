@@ -3,6 +3,11 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [master]
+    # Docs-only pushes don't change the app — skip the rebuild and the PWA update cycle it causes.
+    paths-ignore: ['**/*.md', 'docs/**']
+  # Every PR (including Dependabot's) runs the same gate but never deploys.
+  pull_request:
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -11,7 +16,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  # PRs get their own group so a PR check can never cancel a real deploy.
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.ref) || 'pages' }}
   cancel-in-progress: true
 
 jobs:
@@ -21,16 +27,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
+          cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build:pages
-      - uses: actions/upload-pages-artifact@v3
+      # Same single gate as local work: tsc, oxlint, tests, build, bundle budget, CSP check.
+      # GH_PAGES=1 builds with the /field-service-app/ base path.
+      - run: node scripts/verify.mjs
+        env:
+          GH_PAGES: '1'
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:

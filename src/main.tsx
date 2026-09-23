@@ -19,10 +19,19 @@ if (theme !== 'light') document.documentElement.dataset.theme = theme
 // toast) lands at the true screen edge on first paint instead of settling on first scroll.
 installViewportFix()
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </StrictMode>,
-)
+// Dev-only preview shortcut: `/?demo=1` wipes local data, loads the demo year (which also skips
+// the first-run screens), then reloads clean. Saves every browser check from walking onboarding
+// and More → Load Demo Year by hand. Tree-shaken out of production builds.
+if (import.meta.env.DEV && new URLSearchParams(location.search).has('demo')) {
+  void import('./devSeed')
+    .then((m) => m.seedDemoData())
+    .then(() => location.replace(location.pathname))
+} else {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </StrictMode>,
+  )
+}

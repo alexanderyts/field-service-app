@@ -6,6 +6,12 @@
       "runtimeExecutable": "cmd.exe",
       "runtimeArgs": ["/c", "E:\\Field Service App\\dev-server.cmd"],
       "port": 5173
+    },
+    {
+      "name": "Meleo built",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "npm run build && npx vite preview --port 4173 --strictPort"],
+      "port": 4173
     }
   ]
 }

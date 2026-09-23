@@ -498,7 +498,9 @@ export async function seedDemoData() {
   const rng = mulberry32(20250101)
   const start = new Date(2024, 8, 1) // Sept 1, 2024 — start of service year 2025
   const now = new Date()
-  const end = new Date(Math.min(new Date(2026, 5, 30).getTime(), now.getTime() - 86400000))
+  // History runs up to yesterday, so the current month always has data to look at. (It used to
+  // stop at a fixed 2026-06-30, which left every later month empty in previews.)
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
 
   // Full reset first (every table + all fieldservice_* settings) so the demo starts from a
   // genuinely clean slate, then re-seed. Matches the More-tab "Clear All Data" behavior.
