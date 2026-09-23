@@ -3908,3 +3908,14 @@ button.small {
   font-size: 12px;
   text-align: center;
 }
+
+/* Service → Today: who to see today (Phase 3b). */
+.today-card .list { margin-top: var(--space-4); }
+.today-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.today-row > button { flex: 0 0 auto; min-height: 40px; }
+.today-overdue { color: var(--danger); }

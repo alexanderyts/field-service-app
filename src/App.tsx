@@ -56,7 +56,6 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 
 function App() {
   const [tab, setTab] = useState<Tab>('schedule')
-  const [openContactId, setOpenContactId] = useState<number | null>(null)
   const [phase, setPhase] = useState<Phase>('splash')
   const [showTutorialPrompt, setShowTutorialPrompt] = useState(false)
   const [showTutorial, setShowTutorial] = useState(false)
@@ -166,19 +165,11 @@ function App() {
           <div key={tab} className="tab-content">
             {tab === 'contacts' && (
               <Contacts
-                openContactId={openContactId}
-                onOpenedContact={() => setOpenContactId(null)}
                 onImportEncoded={setPendingImport}
               />
             )}
             {tab === 'schedule' && (
-              <Schedule
-                onGoToContact={(id) => {
-                  setOpenContactId(id)
-                  setTab('contacts')
-                }}
-                onOpenReport={() => selectTab('reports')}
-              />
+              <Schedule onOpenReport={() => selectTab('reports')} />
             )}
             {tab === 'reports' && <Reports />}
             {tab === 'misc' && <Misc onReplayTutorial={() => setShowTutorial(true)} onImportEncoded={setPendingImport} />}

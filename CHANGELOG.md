@@ -20,6 +20,7 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 
 - **Four tabs, opening on Service.** Service · People · Report · More. "Ministry" is now **People**, and the Map moved inside it: a **List | Map** switch at the top. The map's buttons (satellite, find me, search, and a Key for the pin colours) now sit on the map itself instead of stacking above it, so the map fills the screen
 - **Streets & territories is now optional** (More → App Settings). It's on automatically if you already have streets or territories, and off for new installs — then People is just List | Map, the button reads "+ New Contact", and the tour skips tracing. Turning it off hides those parts; nothing is deleted
+- **A "Today" card on Service.** Today's return visits and any overdue ones, each with **Log visit**: it opens that person right there on Service with the visit form ready, instead of sending you to another tab. Logging the visit clears the row — a visit made earlier the same day counts. "Go to contact" in Return Visits and the day view opens the same way
 
 ## 0.26.0 — The report hands your month in · 2026-09-23
 

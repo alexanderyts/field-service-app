@@ -20,10 +20,12 @@ function householdSummary(person: Person): string[] {
   if (person.hasPets) lines.push(`Pets${person.petsInfo ? `: ${person.petsInfo}` : ''}`)
   return lines
 }
-export function ContactDetail({ personId, onClose, onGoToMap }: {
+export function ContactDetail({ personId, onClose, onGoToMap, startLogging = false }: {
   personId: number
   onClose: () => void
   onGoToMap?: (lat: number, lng: number, personId?: number) => void
+  /** Open with the visit form already showing (Service → Today → Log visit). */
+  startLogging?: boolean
 }) {
   const person = useLiveQuery(() => db.people.get(personId), [personId])
   const calls = useLiveQuery(() => db.calls.where('personId').equals(personId).toArray(), [personId]) ?? []
@@ -32,7 +34,7 @@ export function ContactDetail({ personId, onClose, onGoToMap }: {
     [personId]
   ) ?? []
   const [expanded, setExpanded] = useState(false)
-  const [showLogger, setShowLogger] = useState(false)
+  const [showLogger, setShowLogger] = useState(startLogging)
   const [showEdit, setShowEdit] = useState(false)
   const [callSort, setCallSort] = useState<'newest' | 'oldest'>('newest')
   const [editingCallId, setEditingCallId] = useState<number | null>(null)

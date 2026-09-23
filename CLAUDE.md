@@ -51,7 +51,7 @@ src/
   timeRecords.ts       # Time-log writes (logTime, logWithBank, redeemMinuteBank, submitPlanned, clearDay) — one transaction each; apart from records.ts so the startup bundle doesn't load schedule code
   monthReport.ts       # Pure: the month's Service Report (participation, visited Bible studies, whole hours, comments) + which month is due
   rowGuards.ts         # Runtime type checks for rows from outside (share payloads, backup restore): TABLE_ROW_GUARDS per table
-  appointments.ts      # Which return visits are still pending (overdue ones stay visible until followed up / 14 days) + badge label
+  appointments.ts      # Which return visits are still pending (until a call on/after the visit's day, or 14 days overdue), dueToday, badge label
   address.ts           # Address comparison, so a save knows whether the address really changed
   timeAgo.ts           # "3 days ago" formatter (now injected, for testability)
   scripture.ts         # Scripture reference formatter + autocorrect
@@ -344,7 +344,9 @@ brand/category/tag hues are brightened per dark theme for contrast.
   pioneer — then only what that role needs (yearly goal + credit; aux months + target; optional
   personal goal). Days and time windows are never asked; planning is opt-in on the tab itself.
   "Change my goal" at the bottom of the tab reopens it and leaves `daysOut`/`daySchedule` untouched.
-- The tab order (0.25.0): Log time + `TimerCard`, the minute-bank pill, the progress card (month
+- The tab order (0.27.0): the report-due banner (days 1–10), Log time + `TimerCard`, the minute-bank pill,
+  `TodayCard` (today's + overdue visits, **Log visit** opens `ContactDetail` over the tab with the
+  form ready — contacts opened from Service never switch tabs), the progress card (month
   → service year → week pace, plus a pace chip/line from `milestones.ts` — no "behind" chip; short
   reads as a forward per-day plan), participation (publishers without a goal: one tick inline in the progress card), the planner
   (Service Schedule card, collapsed), Return Visits (3 + "Show all"), Recent Entries (3 + "See

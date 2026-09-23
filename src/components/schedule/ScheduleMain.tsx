@@ -23,6 +23,8 @@ import { animateHeightScroll } from './animate'
 import { EditLogModal } from './EditLogModal'
 import { DayActionModal } from './DayActionModal'
 import { TimerCard } from './TimerCard'
+import { TodayCard } from './TodayCard'
+import { ContactDetail } from '../contacts/ContactDetail'
 import { useMilestoneToast } from './useMilestoneToast'
 import type { LogInterval } from './LogTimeForm'
 
@@ -45,14 +47,16 @@ const PACE_LABEL: Record<Pace, string> = {
 export function ScheduleMain({
   prefs,
   onRedo,
-  onGoToContact,
   onOpenReport,
 }: {
   prefs: SchedulePrefs
   onRedo: () => void
-  onGoToContact: (personId: number) => void
   onOpenReport: () => void
 }) {
+  // Contacts open over this tab rather than jumping to People (Phase 3b): from Today's
+  // "Log visit" with the visit form ready, from Return Visits and the day modal as-is.
+  const [openPerson, setOpenPerson] = useState<{ id: number; log: boolean } | null>(null)
+  const onGoToContact = (id: number) => setOpenPerson({ id, log: false })
   const logsOrUndefined = useLiveQuery(() => db.timeLogs.orderBy('date').reverse().toArray(), [])
   const logsLoaded = logsOrUndefined !== undefined
   const logs = logsOrUndefined ?? []
@@ -730,6 +734,8 @@ export function ScheduleMain({
           )}
         </div>
 
+      <TodayCard onLogVisit={(id) => setOpenPerson({ id, log: true })} />
+
       {/* Progress is the hero: month first, service year second, week pace last, nothing
           behind an "Expand" (docs/tracking-first-plan.md D3). The bars themselves are the
           same elements they always were — only their order and gating changed. */}
@@ -1207,6 +1213,9 @@ export function ScheduleMain({
       )}
 
       {toast && <div className="toast" role="status">{toast}</div>}
+      {openPerson && (
+        <ContactDetail personId={openPerson.id} startLogging={openPerson.log} onClose={() => setOpenPerson(null)} />
+      )}
 
       {dayModalFor != null && (
         <DayActionModal

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isPending, pendingAppointments, nextPendingByPerson, visitBadgeLabel } from './appointments'
+import { isPending, pendingAppointments, nextPendingByPerson, visitBadgeLabel, dueToday } from './appointments'
 
 // AUDIT F036: a missed return visit must stay visible until it is either followed up or stale.
 
@@ -51,5 +51,33 @@ describe('visitBadgeLabel', () => {
     expect(visitBadgeLabel(now + DAY, now, 'en-US')).toBe('Tomorrow')
     expect(visitBadgeLabel(now - 4 * DAY, now, 'en-US')).toBe('Overdue · Tue, Sep 8')
     expect(visitBadgeLabel(now + 6 * DAY, now, 'en-US')).toBe('Fri, Sep 18')
+  })
+})
+
+describe('dueToday', () => {
+  const noon = new Date(2026, 8, 15, 12).getTime()
+  it("lists today's visits and pending overdue ones, soonest first; not tomorrow's", () => {
+    const appts = [
+      { id: 1, date: new Date(2026, 8, 15, 18).getTime(), personId: 1 },
+      { id: 2, date: new Date(2026, 8, 13, 10).getTime(), personId: 2 },
+      { id: 3, date: new Date(2026, 8, 16, 0, 30).getTime(), personId: 3 },
+      { id: 4, date: new Date(2026, 8, 15, 9).getTime() },
+    ]
+    expect(dueToday(appts, [], noon).map((a) => a.id)).toEqual([2, 1])
+  })
+  it('an overdue visit already followed up by a call drops off', () => {
+    const appts = [{ id: 2, date: new Date(2026, 8, 13, 10).getTime(), personId: 2 }]
+    expect(dueToday(appts, [{ personId: 2, date: new Date(2026, 8, 14).getTime() }], noon)).toEqual([])
+  })
+})
+
+describe('a visit made earlier the same day counts', () => {
+  it('a 5 PM visit is done once a call to that person is logged at 11 AM that day', () => {
+    const fivePm = new Date(2026, 8, 15, 17).getTime()
+    const elevenAm = new Date(2026, 8, 15, 11).getTime()
+    expect(isPending({ date: fivePm, personId: 1 }, [{ personId: 1, date: elevenAm }], elevenAm + 60_000)).toBe(false)
+    // …but a call the day before doesn't, and neither does a call to someone else.
+    expect(isPending({ date: fivePm, personId: 1 }, [{ personId: 1, date: elevenAm - 24 * 3600_000 }], elevenAm)).toBe(true)
+    expect(isPending({ date: fivePm, personId: 1 }, [{ personId: 2, date: elevenAm }], elevenAm)).toBe(true)
   })
 })

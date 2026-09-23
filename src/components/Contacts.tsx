@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type ContactStatus } from '../db'
 import { fmtDateTime } from '../localDate'
@@ -23,12 +23,8 @@ type SortKey = 'name' | 'visit' | 'street' | 'date' | 'city' | 'zip'
 type PeopleView = 'people' | 'map' | 'streets' | 'territories'
 type MapFocus = { lat: number; lng: number; personId?: number }
 export default function Contacts({
-  openContactId,
-  onOpenedContact,
   onImportEncoded,
 }: {
-  openContactId?: number | null
-  onOpenedContact?: () => void
   onImportEncoded?: (encoded: string) => void
 }) {
   const people = useLiveQuery(() => db.people.toArray(), []) ?? []
@@ -96,15 +92,6 @@ export default function Contacts({
       // just no-ops rather than throwing.
     }
   }
-
-  useEffect(() => {
-    if (openContactId != null) {
-      setSelectedId(openContactId)
-      setView('people')
-      onOpenedContact?.()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openContactId])
 
   const now = Date.now()
   // Overdue visits stay on the row until followed up or stale (AUDIT F036).
