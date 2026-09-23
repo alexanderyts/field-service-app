@@ -84,7 +84,9 @@ src/
     Tutorial.tsx       # Guided tour + first-run TutorialPrompt
     InstallPrompt.tsx  # "Add to Home Screen" banner
     Contacts.tsx       # THE PEOPLE TAB root (key 'contacts'): List | Map (| Streets | Territories) segments + list; hosts the lazy MapView
-    contacts/          # ContactForm, ContactDetail, CallLogger, ReturnVisitEditor; geocode.ts (Nominatim lookups, pure)
+    contacts/          # ContactForm (doorstep layout + "More details"), ContactDetail (Log visit / Schedule visit first),
+                       #   CallLogger (Talked / Not home, "Now · change"), ReturnVisitEditor (create or edit), VisitDateChips
+                       #   (Tomorrow / +1 wk / +2 wk / Pick…, shared); geocode.ts (Nominatim lookups, pure)
     StreetEntries.tsx  # Streets sub-view: street list, StreetDetail, house-number pad
     Territories.tsx    # Territories sub-view: grouped-territory list + detail
     Territory.tsx      # Map-side custom-territory manager: trace/draw modal, send-to-ministry, grouping

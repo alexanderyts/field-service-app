@@ -74,11 +74,10 @@ export default function Contacts({
     setSelectedIds(new Set()); setEditMode(false); setConfirmBulk(false)
   }
 
-  // Open the new-contact form on the People view, pre-filled from a street/house (from the
-  // Streets list or a street inside a territory).
+  // Open the new-contact form pre-filled from a street/house, over whatever is showing — the
+  // street stays open underneath, so the next house is one tap away (Phase 3c).
   function handleCreateContact(prefill: ContactPrefill) {
     setContactPrefill(prefill)
-    setView('people')
     setShowNew(true)
   }
 
@@ -198,13 +197,6 @@ export default function Contacts({
           </div>
           )}
 
-          {showNew && (
-            <ContactForm
-              prefill={contactPrefill ?? undefined}
-              onClose={() => { setShowNew(false); setContactPrefill(null) }}
-            />
-          )}
-
           {sorted.length > 0 && (
             <div className="list-edit-bar">
               <button className="secondary small" onClick={() => { setEditMode((m) => !m); setSelectedIds(new Set()) }}>
@@ -285,6 +277,13 @@ export default function Contacts({
         <StreetEntries showNewForm={streetFormOpen} onCloseNewForm={() => setStreetFormOpen(false)} onGoToMap={onGoToMap} onCreateContact={handleCreateContact} />
       ) : (
         <Territories onGoToMap={onGoToMap} onCreateContact={handleCreateContact} />
+      )}
+
+      {showNew && (
+        <ContactForm
+          prefill={contactPrefill ?? undefined}
+          onClose={() => { setShowNew(false); setContactPrefill(null) }}
+        />
       )}
 
       {showChooser && (

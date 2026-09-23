@@ -39,3 +39,18 @@ export function fmtDateTime(ts: number, locale?: string): string {
     minute: '2-digit',
   })
 }
+
+/** `YYYY-MM-DD` for `days` calendar days after `now` (the return-visit chips: Tomorrow, +1 wk…).
+    Calendar days, not 24 h steps, so a clock change never lands on the wrong date. */
+export function localDateAfter(days: number, now: number): string {
+  const d = new Date(now)
+  return fmtLocalDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + days))
+}
+
+/** `HH:mm` of `now` rounded to the nearest quarter hour — the default time for a return visit
+    set at the door ("same time next week"). Clamped to 23:45 rather than rolling to tomorrow. */
+export function roundedTimeStr(now: number): string {
+  const d = new Date(now)
+  const mins = Math.min(23 * 60 + 45, Math.round((d.getHours() * 60 + d.getMinutes()) / 15) * 15)
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
+}

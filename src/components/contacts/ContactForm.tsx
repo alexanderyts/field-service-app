@@ -8,7 +8,8 @@ import { sameAddress } from '../../address'
 import { SharedWarning } from '../SharedBits'
 import ConfirmDialog from '../ConfirmDialog'
 import ModalPortal from '../../ModalPortal'
-import { toLocalDateStr, toLocalTimeStr, combineDateTime } from '../../localDate'
+import { toLocalDateStr, toLocalTimeStr, combineDateTime, roundedTimeStr } from '../../localDate'
+import { VisitDateChips } from './VisitDateChips'
 import { geocodeAddress, type AddressSuggestion, searchAddress } from './geocode'
 import type { ContactPrefill } from '../StreetEntries'
 
@@ -28,9 +29,6 @@ export function ContactForm({ onClose, existing, prefill }: { onClose: () => voi
   const [notes, setNotes] = useState(existing?.notes ?? '')
   const [errors, setErrors] = useState<Set<RequiredField>>(new Set())
 
-  const [showAdditional, setShowAdditional] = useState(
-    Boolean(existing?.married || existing?.hasKids || existing?.hasPets)
-  )
   const [married, setMarried] = useState(existing?.married ?? false)
   const [spouseName, setSpouseName] = useState(existing?.spouseName ?? '')
   const [hasKids, setHasKids] = useState(existing?.hasKids ?? false)
@@ -45,7 +43,10 @@ export function ContactForm({ onClose, existing, prefill }: { onClose: () => voi
   const [scripture, setScripture] = useState('')
   const [literaturePlaced, setLiteraturePlaced] = useState('')
   const [returnVisitDate, setReturnVisitDate] = useState('')
-  const [returnVisitTime, setReturnVisitTime] = useState('10:00')
+  const [returnVisitTime, setReturnVisitTime] = useState(() => roundedTimeStr(Date.now()))
+  // New contacts open in the doorstep layout (name, street, location, what you talked about,
+  // return visit); everything else waits under "More details". Editing shows it all.
+  const [moreOpen, setMoreOpen] = useState(!!existing)
   const [scriptureSuggestion, setScriptureSuggestion] = useState<{ original: string; suggestion: string } | null>(
     null
   )
@@ -61,10 +62,20 @@ export function ContactForm({ onClose, existing, prefill }: { onClose: () => voi
     existing?.lat != null && existing?.lng != null ? { lat: existing.lat, lng: existing.lng } : null
   )
 
+  // Errors only after a tap: the automatic capture below must not greet everyone who keeps
+  // location off with an error on every new contact.
+  const [locationTapped, setLocationTapped] = useState(false)
   async function handleUseLocation() {
     const loc = await getLocation()
     if (loc) setCoords(loc)
   }
+
+  // At the door, where you're standing IS the address: capture it on open for a new contact
+  // (unless it came pre-filled from a street/house). The position stays on the device.
+  useEffect(() => {
+    if (!existing && !prefill?.street) void handleUseLocation()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Debounced address lookup — waits for a pause in typing before hitting Nominatim,
   // both to be a reasonable API citizen and to avoid a suggestion list that's constantly
@@ -237,10 +248,9 @@ export function ContactForm({ onClose, existing, prefill }: { onClose: () => voi
           {existing && <SharedWarning sharedWith={existing.sharedWith} />}
 
         <section className="form-section">
-          <h4 className="section-title">Contact Info</h4>
           <label className={`field${errors.has('name') ? ' field-invalid' : ''}`}>
             <span className="field-label">Name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} />
+            <input value={name} onChange={(e) => setName(e.target.value)} autoFocus={!existing} />
           </label>
           <label className="field">
             <span className="field-label">Street address</span>
@@ -264,60 +274,69 @@ export function ContactForm({ onClose, existing, prefill }: { onClose: () => voi
               )}
             </div>
           </label>
-          <div className="field-row stay-row address-row">
-            <label className="field">
-              <span className="field-label">City</span>
-              <input value={city} onChange={(e) => { setCity(e.target.value); setCoords(null) }} />
-            </label>
-            <label className="field">
-              <span className="field-label">State</span>
-              <input
-                value={state}
-                onChange={(e) => { setState(e.target.value); setCoords(null) }}
-                onBlur={() => setState((s) => expandState(s))}
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Zip</span>
-              <input value={zip} onChange={(e) => { setZip(e.target.value); setCoords(null) }} />
-            </label>
-          </div>
-          <div className="field-row">
-            <label className="field">
-              <span className="field-label">Phone</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </label>
-            <label className="field">
-              <span className="field-label">Tag</span>
-              <select value={status} onChange={(e) => setStatus(e.target.value as ContactStatus)}>
-                {STATUS_ORDER.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <button className="secondary" onClick={handleUseLocation} disabled={loading}>
-            {loading ? 'Getting location...' : coords ? 'Location captured ✓' : 'Use Current Location'}
+          <button className="secondary" onClick={() => { setLocationTapped(true); void handleUseLocation() }} disabled={loading}>
+            {loading ? 'Getting location…' : coords ? '📍 Location captured ✓' : '📍 Use my location'}
           </button>
-          {error && <p className="error">{error}</p>}
+          {error && (existing || locationTapped) && <p className="error">{error}</p>}
           {errors.size > 0 && <p className="error">Please enter a name before saving.</p>}
+
+          {!existing && (
+            <>
+              <label className="field">
+                <span className="field-label">What did you talk about? (optional)</span>
+                <textarea value={conversation} onChange={(e) => setConversation(e.target.value)} />
+              </label>
+              <p className="field-label">Return visit</p>
+              <VisitDateChips date={returnVisitDate} time={returnVisitTime} onDate={setReturnVisitDate} onTime={setReturnVisitTime} allowNone />
+            </>
+          )}
         </section>
 
         <div className="section-divider" />
 
-        {/* Compact, expandable household details — kept light so the form doesn't feel cluttered */}
         <section className="form-section">
-          <button className="collapse-header" onClick={() => setShowAdditional((v) => !v)}>
-            <span className="section-title" style={{ margin: 0 }}>
-              Additional Details
-            </span>
-            <span className="chevron">{showAdditional ? '▾' : '▸'}</span>
+          <button className="collapse-header" onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen}>
+            <span className="section-title" style={{ margin: 0 }}>More details</span>
+            <span className="chevron">{moreOpen ? '▾' : '▸'}</span>
           </button>
 
-          {showAdditional && (
+          {moreOpen && (
             <div className="household-fields">
+              <div className="field-row stay-row address-row">
+                <label className="field">
+                  <span className="field-label">City</span>
+                  <input value={city} onChange={(e) => { setCity(e.target.value); setCoords(null) }} />
+                </label>
+                <label className="field">
+                  <span className="field-label">State</span>
+                  <input
+                    value={state}
+                    onChange={(e) => { setState(e.target.value); setCoords(null) }}
+                    onBlur={() => setState((s) => expandState(s))}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field-label">Zip</span>
+                  <input value={zip} onChange={(e) => { setZip(e.target.value); setCoords(null) }} />
+                </label>
+              </div>
+              <div className="field-row">
+                <label className="field">
+                  <span className="field-label">Phone</span>
+                  <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+                </label>
+                <label className="field">
+                  <span className="field-label">Status</span>
+                  <select value={status} onChange={(e) => setStatus(e.target.value as ContactStatus)}>
+                    {STATUS_ORDER.map((s) => (
+                      <option key={s} value={s}>
+                        {STATUS_LABELS[s]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
               <label className="checkbox-row">
                 <input type="checkbox" checked={married} onChange={(e) => setMarried(e.target.checked)} />
                 <span>Married</span>
@@ -343,62 +362,39 @@ export function ContactForm({ onClose, existing, prefill }: { onClose: () => voi
               )}
 
               <label className="field">
-                <span className="field-label">Other notes</span>
+                <span className="field-label">Notes about them</span>
                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
               </label>
+
+              {!existing && (
+                <>
+                  <p className="field-label">Date &amp; time met</p>
+                  <div className="field-row">
+                    <label className="field">
+                      <span className="field-label">Date</span>
+                      <input type="date" value={metDate} onChange={(e) => setMetDate(e.target.value)} />
+                    </label>
+                    <label className="field">
+                      <span className="field-label">Time</span>
+                      <input type="time" value={metTime} onChange={(e) => setMetTime(e.target.value)} />
+                    </label>
+                  </div>
+                  <label className="field">
+                    <span className="field-label">Scripture shared (optional)</span>
+                    <input value={scripture} onChange={(e) => setScripture(e.target.value)} placeholder="e.g. John 3:16" />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Literature placed (optional)</span>
+                    <input value={literaturePlaced} onChange={(e) => setLiteraturePlaced(e.target.value)} placeholder="e.g. Awake! magazine" />
+                  </label>
+                </>
+              )}
             </div>
           )}
         </section>
 
-        {!existing && (
-          <>
-            <div className="section-divider" />
-            <section className="form-section">
-              <h4 className="section-title">Visit Details</h4>
-              <p className="field-label">Date &amp; time met</p>
-              <div className="field-row">
-                <label className="field">
-                  <span className="field-label">Date</span>
-                  <input type="date" value={metDate} onChange={(e) => setMetDate(e.target.value)} />
-                </label>
-                <label className="field">
-                  <span className="field-label">Time</span>
-                  <input type="time" value={metTime} onChange={(e) => setMetTime(e.target.value)} />
-                </label>
-              </div>
-              <label className="field">
-                <span className="field-label">Conversation notes (optional)</span>
-                <textarea
-                  placeholder="What was talked about…"
-                  value={conversation}
-                  onChange={(e) => setConversation(e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">Scripture shared (optional)</span>
-                <input value={scripture} onChange={(e) => setScripture(e.target.value)} placeholder="e.g. John 3:16" />
-              </label>
-              <label className="field">
-                <span className="field-label">Literature placed (optional)</span>
-                <input value={literaturePlaced} onChange={(e) => setLiteraturePlaced(e.target.value)} placeholder="e.g. Awake! magazine" />
-              </label>
-              <p className="field-label">Schedule a return visit (optional)</p>
-              <div className="field-row">
-                <label className="field">
-                  <span className="field-label">Date</span>
-                  <input type="date" value={returnVisitDate} onChange={(e) => setReturnVisitDate(e.target.value)} />
-                </label>
-                <label className="field">
-                  <span className="field-label">Time</span>
-                  <input type="time" value={returnVisitTime} onChange={(e) => setReturnVisitTime(e.target.value)} />
-                </label>
-              </div>
-            </section>
-          </>
-        )}
-
         <div className="row">
-          <button onClick={save} disabled={saving}>{existing ? 'Save Changes' : 'Save Contact'}</button>
+          <button onClick={save} disabled={saving}>{existing ? 'Save changes' : 'Save contact'}</button>
           <button className="secondary" onClick={onClose}>
             Cancel
           </button>

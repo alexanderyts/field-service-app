@@ -4,7 +4,8 @@ import { logCall } from '../../records'
 import { useCurrentLocation } from '../../useGeolocation'
 import { formatScripture } from '../../scripture'
 import { SharedWarning } from '../SharedBits'
-import { toLocalDateStr, toLocalTimeStr, combineDateTime } from '../../localDate'
+import { toLocalDateStr, toLocalTimeStr, combineDateTime, fmtDateTime, roundedTimeStr } from '../../localDate'
+import { VisitDateChips } from './VisitDateChips'
 
 export function CallLogger({
   personId,
@@ -27,7 +28,9 @@ export function CallLogger({
   const [leftAtDoor, setLeftAtDoor] = useState(existing?.leftAtDoor ?? '')
   const [literaturePlaced, setLiteraturePlaced] = useState(existing?.literaturePlaced ?? '')
   const [returnVisitDate, setReturnVisitDate] = useState('')
-  const [returnVisitTime, setReturnVisitTime] = useState('10:00')
+  const [returnVisitTime, setReturnVisitTime] = useState(() => roundedTimeStr(Date.now()))
+  // At the door the visit is "now"; the date/time pickers only open on request.
+  const [editWhen, setEditWhen] = useState(false)
   const { getLocation } = useCurrentLocation()
   const [saving, setSaving] = useState(false)
 
@@ -75,22 +78,30 @@ export function CallLogger({
           <button className="icon-btn close-x" onClick={onCancel} disabled={saving} title="Cancel edit" aria-label="Cancel edit">×</button>
         </div>
       )}
-      <h4>{existing ? 'Edit Call' : 'Log a Call'}</h4>
+      <h4>{existing ? 'Edit visit' : 'Log a visit'}</h4>
       <SharedWarning sharedWith={sharedWith} />
-      <div className="field-row">
-        <label className="field">
-          <span className="field-label">Date</span>
-          <input type="date" value={whenDate} onChange={(e) => setWhenDate(e.target.value)} />
-        </label>
-        <label className="field">
-          <span className="field-label">Time</span>
-          <input type="time" value={whenTime} onChange={(e) => setWhenTime(e.target.value)} />
-        </label>
+      {/* The one question that shapes the rest of the form, as two big buttons. */}
+      <div className="segmented visit-outcome" role="group" aria-label="How did it go?">
+        <button type="button" className={!notHome ? 'active' : ''} aria-pressed={!notHome} onClick={() => setNotHome(false)}>🗣️ Talked</button>
+        <button type="button" className={notHome ? 'active' : ''} aria-pressed={notHome} onClick={() => setNotHome(true)}>🚪 Not home</button>
       </div>
-      <label className="checkbox-row">
-        <input type="checkbox" checked={notHome} onChange={(e) => setNotHome(e.target.checked)} />
-        <span>Not at home</span>
-      </label>
+      {editWhen ? (
+        <div className="field-row">
+          <label className="field">
+            <span className="field-label">Date</span>
+            <input type="date" value={whenDate} onChange={(e) => setWhenDate(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field-label">Time</span>
+            <input type="time" value={whenTime} onChange={(e) => setWhenTime(e.target.value)} />
+          </label>
+        </div>
+      ) : (
+        <p className="muted visit-when">
+          {existing ? fmtDateTime(existing.date) : 'Now'} ·{' '}
+          <button type="button" className="link-btn" onClick={() => setEditWhen(true)}>change</button>
+        </p>
+      )}
 
       {notHome ? (
         <>
@@ -125,20 +136,11 @@ export function CallLogger({
         </>
       )}
 
-      <p className="field-label">Schedule a return visit (optional)</p>
-      <div className="field-row">
-        <label className="field">
-          <span className="field-label">Date</span>
-          <input type="date" value={returnVisitDate} onChange={(e) => setReturnVisitDate(e.target.value)} />
-        </label>
-        <label className="field">
-          <span className="field-label">Time</span>
-          <input type="time" value={returnVisitTime} onChange={(e) => setReturnVisitTime(e.target.value)} />
-        </label>
-      </div>
+      <p className="field-label">Return visit</p>
+      <VisitDateChips date={returnVisitDate} time={returnVisitTime} onDate={setReturnVisitDate} onTime={setReturnVisitTime} allowNone />
 
       <div className="row">
-        <button onClick={saveCall} disabled={saving}>{existing ? 'Save Changes' : 'Save Call'}</button>
+        <button onClick={saveCall} disabled={saving}>{existing ? 'Save changes' : 'Save visit'}</button>
         {onCancel && (
           <button className="secondary" onClick={onCancel} disabled={saving}>
             Cancel

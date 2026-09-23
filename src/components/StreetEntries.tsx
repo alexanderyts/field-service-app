@@ -393,7 +393,7 @@ export function StreetDetail({
             {onCreateContact && (
               <button
                 className="secondary"
-                onClick={() => { onCreateContact({ street: entry.name, city: entry.city, state: entry.state, zip: entry.zip }); onClose() }}
+                onClick={() => onCreateContact({ street: entry.name, city: entry.city, state: entry.state, zip: entry.zip })}
               >
                 👤 New Contact
               </button>
@@ -425,7 +425,7 @@ export function StreetDetail({
                       className="icon-btn"
                       title="Create a contact for this house"
                       aria-label="Create a contact for this house"
-                      onClick={() => { onCreateContact({ street: `${h.number} ${entry.name}`, city: entry.city, state: entry.state, zip: entry.zip }); onClose() }}
+                      onClick={() => onCreateContact({ street: `${h.number} ${entry.name}`, city: entry.city, state: entry.state, zip: entry.zip })}
                     >
                       👤
                     </button>

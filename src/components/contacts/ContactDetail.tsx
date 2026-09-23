@@ -6,6 +6,7 @@ import { fmtDateTime } from '../../localDate'
 import { isOverdue, pendingAppointments } from '../../appointments'
 import { SharedBadge, SharedWarning } from '../SharedBits'
 import { buildContactPayload } from '../../share'
+import { deleteContacts } from '../../records'
 import ConfirmDialog from '../ConfirmDialog'
 import ModalPortal from '../../ModalPortal'
 import ShareModal from '../ShareModal'
@@ -39,17 +40,12 @@ export function ContactDetail({ personId, onClose, onGoToMap, startLogging = fal
   const [callSort, setCallSort] = useState<'newest' | 'oldest'>('newest')
   const [editingCallId, setEditingCallId] = useState<number | null>(null)
   const [editingAppt, setEditingAppt] = useState<Appointment | null>(null)
+  const [schedulingVisit, setSchedulingVisit] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showShare, setShowShare] = useState(false)
 
   async function deletePerson() {
-    // Transactional so an interruption (tab closed, exception) mid-delete can't leave
-    // orphaned calls/appointments behind for a person that's already gone.
-    await db.transaction('rw', [db.calls, db.appointments, db.people], async () => {
-      await db.calls.where('personId').equals(personId).delete()
-      await db.appointments.where('personId').equals(personId).delete()
-      await db.people.delete(personId)
-    })
+    await deleteContacts([personId])
     onClose()
   }
 
@@ -106,6 +102,11 @@ export function ContactDetail({ personId, onClose, onGoToMap, startLogging = fal
           <p className="muted contact-line">Met {fmtDateTime(person.dateMet)}</p>
         </div>
 
+        {/* At the door the visit is the job, so it leads; everything else is secondary. */}
+        <div className="row contact-primary-actions">
+          <button onClick={() => setShowLogger((v) => !v)}>{showLogger ? 'Close visit form' : '＋ Log visit'}</button>
+          <button className="secondary" onClick={() => setSchedulingVisit(true)}>📅 Schedule visit</button>
+        </div>
         <div className="row">
           {directionsUrl && (
             <a className="link-button" href={directionsUrl} target="_blank" rel="noreferrer">
@@ -121,7 +122,6 @@ export function ContactDetail({ personId, onClose, onGoToMap, startLogging = fal
             Edit Contact
           </button>
           <button className="secondary" onClick={() => setShowShare(true)}>↗ Share</button>
-          <button onClick={() => setShowLogger((v) => !v)}>{showLogger ? 'Close Call Form' : '+ Log a Call'}</button>
         </div>
 
         {upcoming.length > 0 && (
@@ -142,12 +142,13 @@ export function ContactDetail({ personId, onClose, onGoToMap, startLogging = fal
         )}
 
         {editingAppt && <ReturnVisitEditor appt={editingAppt} onClose={() => setEditingAppt(null)} />}
+        {schedulingVisit && <ReturnVisitEditor personId={personId} personName={person.name} onClose={() => setSchedulingVisit(false)} />}
 
         {showLogger && <CallLogger personId={personId} sharedWith={person.sharedWith} onSaved={() => setShowLogger(false)} />}
 
         {/* Call history is the primary focus of this view */}
         <div className="view-header">
-          <h4>Call History</h4>
+          <h4>Visit history</h4>
           <label className="field">
             <span className="field-label">Sort</span>
             <select value={callSort} onChange={(e) => setCallSort(e.target.value as 'newest' | 'oldest')}>
@@ -170,7 +171,7 @@ export function ContactDetail({ personId, onClose, onGoToMap, startLogging = fal
             <li key={c.id} className="list-item">
               <div>
                 <div className="muted">
-                  {fmtDateTime(c.date)} {c.notHome && <span className="badge not-home-badge">Not Home</span>}
+                  {fmtDateTime(c.date)} {c.notHome && <span className="badge not-home-badge">Not home</span>}
                 </div>
                 {c.notes && <div>{c.notes}</div>}
                 {c.scriptures && <div>Scriptures: {c.scriptures}</div>}
@@ -184,7 +185,7 @@ export function ContactDetail({ personId, onClose, onGoToMap, startLogging = fal
             </li>
             )
           )}
-          {sortedCalls.length === 0 && <p className="muted">No calls logged yet.</p>}
+          {sortedCalls.length === 0 && <p className="muted">No visits logged yet.</p>}
         </ul>
 
         <div className="row">
@@ -211,7 +212,7 @@ export function ContactDetail({ personId, onClose, onGoToMap, startLogging = fal
       <ConfirmDialog
         open={confirmDelete}
         title="Delete this contact?"
-        message={`This permanently removes ${person.name} and their entire call history. This can't be undone.`}
+        message={`This permanently removes ${person.name}, their visit history and return visits. This can't be undone.`}
         onConfirm={() => {
           setConfirmDelete(false)
           deletePerson()

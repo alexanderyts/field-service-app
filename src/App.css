@@ -3919,3 +3919,24 @@ button.small {
 }
 .today-row > button { flex: 0 0 auto; min-height: 40px; }
 .today-overdue { color: var(--danger); }
+
+/* The doorstep (Phase 3c): the visit form's two big outcome buttons, "Now · change", and the
+   return-visit date chips shared with the return-visit editor. */
+.visit-outcome button {
+  min-height: 52px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.visit-when { margin: var(--space-2) 0 var(--space-6); font-size: 13px; }
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  min-height: 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.visit-date-chips { display: flex; flex-direction: column; gap: var(--space-4); margin-bottom: var(--space-6); }
+.contact-primary-actions > button { flex: 1; min-height: 48px; }
