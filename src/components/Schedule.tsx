@@ -4,7 +4,7 @@ import { db, type SchedulePrefs } from '../db'
 import { SurveyIntro, Survey } from './schedule/Survey'
 import { ScheduleMain } from './schedule/ScheduleMain'
 
-export default function Schedule({ onGoToContact }: { onGoToContact: (personId: number) => void }) {
+export default function Schedule({ onGoToContact, onOpenReport }: { onGoToContact: (personId: number) => void; onOpenReport: () => void }) {
   const prefs = useLiveQuery(() => db.schedulePrefs.toArray(), [])
   // Set true the moment the wizard is explicitly opened (from the intro gate below, or
   // from "Redo survey") so a brand-new user sees the intro gate exactly once, while
@@ -48,6 +48,7 @@ export default function Schedule({ onGoToContact }: { onGoToContact: (personId: 
         setWizardOpen(true)
       }}
       onGoToContact={onGoToContact}
+      onOpenReport={onOpenReport}
     />
   )
 }

@@ -18,6 +18,11 @@ Meleo uses semantic versioning — **MAJOR.MINOR.PATCH**:
 
 ## Unreleased
 
+- **The Report tab hands your month in.** The top card now follows the form, in order: Shared in the ministry, Bible studies, Hours, Comments. Each has a Copy button, so filling in NW Publisher is tap, paste, tap, paste. **Share report** sends the same lines through your phone's share sheet (mail, messages, notes), replacing the email box. **Mark as submitted** records that it's done
+- **Report reminders.** In the first ten days of a month, last month's report opens first and the Service tab shows "August report is ready to hand in →" until you mark it submitted
+- **The figures are the right ones.** Bible studies count the studies you actually visited that month (a past month no longer shows today's number), and any you haven't logged a visit for are named so you can fix it. Any logged time or call counts as sharing in the ministry, and the tick can be changed right on the report. Hours appear only for pioneers and auxiliary-pioneer months — a personal goal is for you, not the report — as whole hours, with the leftover minutes shown. Credit hours and what earned them are written for the Comments box. Share and Copy work even with zero hours
+- **Tidier.** "Reports" is now "Report"; the Re-run button and its "Gathering…" pause are gone; the encouragement card only shows when you're tracking hours; "doors not answered" reads "homes called on"; and on the Service tab the two participation cards are one line with the tick
+
 ## 0.25.2 — DST-safe days, a timer that waits, crash-safe logging and restore · 2026-09-23
 
 - Developer workflow (no app changes): one `verify` command that CI also runs, with a main-bundle size budget and a check that the built page's security policy can't silently block a script; a `release` command that bumps every version file at once; CI now checks pull requests (including dependency updates), runs Node 24, and skips redeploys for docs-only changes; `/?demo=1` loads the demo year in dev, and the demo history now runs up to yesterday; a one-paste browser smoke check; this changelog is now newest-first

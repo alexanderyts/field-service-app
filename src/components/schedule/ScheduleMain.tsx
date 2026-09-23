@@ -3,7 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type DayScheduleBlock, type SchedulePrefs, type TimeCategory, type TimeLog } from '../../db'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../categories'
 import { animateBankValue, collectAndFlyToMinuteBank } from '../../minuteBankFly'
-import { getMinuteBank, getParticipatedMonth, setParticipatedMonth } from '../../settings'
+import { getMinuteBank, getParticipatedMonth, getReportedAt, setParticipatedMonth } from '../../settings'
+import { buildMonthReport, dueReportMonth, hasSomethingToReport } from '../../monthReport'
 import { clearDay, logTime, logWithBank, redeemMinuteBank as redeemBank, submitPlanned } from '../../timeRecords'
 import { clearTimerLoggedBy } from '../../timer'
 import { displayGoalMin, effectiveMonthlyGoalMin, fmtDuration, isCredit, monthTotals, quickLogStrategy, serviceYearLabel, serviceYearRangeLabel, serviceYearlyApplied, serviceYearlyTotals } from '../../timeStats'
@@ -27,7 +28,6 @@ import type { LogInterval } from './LogTimeForm'
 
 type DayModalInitialLog = { hours: number; minutes: number; category?: TimeCategory; activityNote?: string; interval?: LogInterval }
 import { ScheduleCalendarView } from './ScheduleCalendarView'
-import { MonthlyParticipationBox } from './MonthlyParticipationBox'
 import { EntriesModal } from './EntriesModal'
 import { AuxPioneeringBox } from './AuxPioneeringBox'
 import { ReturnVisits } from './ReturnVisits'
@@ -46,10 +46,12 @@ export function ScheduleMain({
   prefs,
   onRedo,
   onGoToContact,
+  onOpenReport,
 }: {
   prefs: SchedulePrefs
   onRedo: () => void
   onGoToContact: (personId: number) => void
+  onOpenReport: () => void
 }) {
   const logsOrUndefined = useLiveQuery(() => db.timeLogs.orderBy('date').reverse().toArray(), [])
   const logsLoaded = logsOrUndefined !== undefined
@@ -354,8 +356,19 @@ export function ScheduleMain({
 
   const tracksHours = isPioneer || nonPioneerTracksHours
   const isCurrentMonthShown = displayedMonth.year === now.getFullYear() && displayedMonth.month === now.getMonth()
-  // Bible studies as the congregation counts them: distinct people currently studying.
-  const bibleStudies = people.filter((p) => p.status === 'bible-study').length
+  // Participation and Bible studies exactly as the month's report will count them.
+  const shownMonthReport = buildMonthReport({
+    logs, calls, people, showHours: false, ticked: participatedThisMonth,
+    year: displayedMonth.year, month: displayedMonth.month,
+  })
+  // Days 1–10: last month's report is waiting to be handed in (until marked submitted).
+  const dueReport = logsLoaded
+    ? dueReportMonth(
+        now,
+        (y, m) => getReportedAt(y, m) != null,
+        (y, m) => hasSomethingToReport(buildMonthReport({ logs, calls, people, showHours: false, ticked: getParticipatedMonth(y, m), year: y, month: m })),
+      )
+    : null
   const contactsThisMonth = people.filter((p) => {
     const d = new Date(p.createdAt)
     return d.getFullYear() === displayedMonth.year && d.getMonth() === displayedMonth.month
@@ -674,6 +687,13 @@ export function ScheduleMain({
         <h2 className="applet-title">Service</h2>
       </div>
 
+      {dueReport && (
+        <button className="report-due-banner" onClick={onOpenReport}>
+          <span>📋 {MONTH_NAMES_LONG[dueReport.month]} report is ready to hand in</span>
+          <span aria-hidden="true">→</span>
+        </button>
+      )}
+
       {/* The tab's primary action (tracking-first D4): straight into the time form for today. */}
       <button
         className="log-time-cta"
@@ -824,10 +844,23 @@ export function ScheduleMain({
           </>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <p className="pace-line" style={{ marginTop: 0 }}>
-              {participatedThisMonth ? '✓ Shared in the ministry this month' : 'Not yet marked as shared in the ministry this month'}
-            </p>
-            <p className="muted">📖 {bibleStudies} Bible stud{bibleStudies === 1 ? 'y' : 'ies'}</p>
+            {/* One row: the tick and its status together (it used to be this line plus a
+                separate participation card below). Logged time or calls already count. */}
+            {shownMonthReport.participationImplied ? (
+              <p className="pace-line" style={{ marginTop: 0 }}>✓ Shared in the ministry this month</p>
+            ) : (
+              <label className="participation-header pace-line" style={{ marginTop: 0 }}>
+                <span>{participatedThisMonth ? '✓ Shared in the ministry this month' : "Tap when you've shared this month"}</span>
+                <input
+                  type="checkbox"
+                  className="participation-check"
+                  checked={participatedThisMonth}
+                  onChange={(e) => updateParticipated(e.target.checked)}
+                  aria-label={`I shared in the ministry in ${MONTH_NAMES_LONG[displayedMonth.month]}`}
+                />
+              </label>
+            )}
+            <p className="muted">📖 {shownMonthReport.bibleStudies} Bible stud{shownMonthReport.bibleStudies === 1 ? 'y' : 'ies'} this month</p>
             {contactsThisMonth > 0 && (
               <p className="muted">👋 {contactsThisMonth} contact{contactsThisMonth === 1 ? '' : 's'} recorded this month</p>
             )}
@@ -842,16 +875,6 @@ export function ScheduleMain({
 
         {!isPioneer && <AuxPioneeringBox config={auxConfig} onChange={updateAuxConfig} />}
       </div>
-
-      {/* Non-pioneers not tracking hours just check a single box off once a month; everyone
-          who tracks hours logs via day taps (or the header's "+ Add time" shortcut). */}
-      {!isPioneer && !nonPioneerTracksHours && (
-        <MonthlyParticipationBox
-          month={displayedMonth.month}
-          participated={participatedThisMonth}
-          onChange={updateParticipated}
-        />
-      )}
 
       {/* Service Schedule — mini week (collapsed), inline month calendar, or inline week grid */}
       <div className="card sched-card" ref={schedCardRef}>

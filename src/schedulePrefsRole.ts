@@ -25,6 +25,15 @@ export function deriveRole(prefs: Pick<SchedulePrefs, 'role' | 'isPioneer'>, aux
  * the tab leads with progress bars or with the participation checkbox. A pioneer always is;
  * anyone else is when that month is an auxiliary month or they set a personal goal.
  */
+/**
+ * Whether the month's Service Report carries an Hours figure: regular pioneers, and auxiliary
+ * pioneers in their months. Unlike `roleTracksHours`, a publisher's personal goal doesn't
+ * count — that goal is for them; publishers report participation and Bible studies only.
+ */
+export function roleReportsHours(role: Role, aux: AuxConfig, year: number, month: number): boolean {
+  return role === 'pioneer' || isAuxMonth(aux, year, month)
+}
+
 export function roleTracksHours(
   role: Role,
   prefs: Pick<SchedulePrefs, 'goalPeriod'>,

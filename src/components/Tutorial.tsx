@@ -127,8 +127,8 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     icon: '▦',
-    title: 'Reports',
-    body: "A warm recap of your month and service year — hours, categories, and little highlights worth celebrating.",
+    title: 'Report',
+    body: "Your monthly report, ready to hand in — tap Copy beside each figure for NW Publisher, or Share it. Below it, a recap of your month and service year.",
     tab: 'reports',
     highlight: '[data-tutorial="tab-reports"]',
     image: reportShot,

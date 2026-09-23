@@ -29,6 +29,9 @@ const KEY = {
   /** Epoch ms the user last dismissed the "back up soon" banner; the banner stays hidden for
       a week after. Per-device UX state, blocklisted from backups. */
   backupNagDismissedAt: 'fieldservice_backup_nag_dismissed_at',
+  /** Months whose Service Report the person marked as submitted — a JSON map keyed "YYYY-M"
+      (month 0-based) to the epoch ms it was marked. A record, so it travels in backups. */
+  reportedMonths: 'fieldservice_reported_months',
 } as const
 
 function readRaw(key: string): string | null {
@@ -147,4 +150,26 @@ export function setParticipatedMonth(year: number, month: number, participated: 
   const map = readParticipatedMap()
   map[`${year}-${month}`] = participated
   writeRaw(KEY.participatedMonths, JSON.stringify(map))
+}
+
+function readReportedMap(): Record<string, number> {
+  try {
+    const parsed: unknown = JSON.parse(readRaw(KEY.reportedMonths) ?? '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, number>) : {}
+  } catch {
+    return {}
+  }
+}
+
+/** When the month's report was marked submitted (epoch ms), or null. */
+export function getReportedAt(year: number, month: number): number | null {
+  const v = readReportedMap()[`${year}-${month}`]
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
+}
+
+export function setReported(year: number, month: number, at: number | null): void {
+  const map = readReportedMap()
+  if (at == null) delete map[`${year}-${month}`]
+  else map[`${year}-${month}`] = Math.floor(at)
+  writeRaw(KEY.reportedMonths, JSON.stringify(map))
 }

@@ -52,7 +52,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'contacts', label: 'Ministry', icon: '◎' },
   { key: 'schedule', label: 'Service', icon: '◫' },
   { key: 'map', label: 'Map', icon: '◈' },
-  { key: 'reports', label: 'Reports', icon: '▦' },
+  { key: 'reports', label: 'Report', icon: '▦' },
   { key: 'misc', label: 'More', icon: '⋯' },
 ]
 
@@ -189,6 +189,7 @@ function App() {
                   setOpenContactId(id)
                   setTab('contacts')
                 }}
+                onOpenReport={() => selectTab('reports')}
               />
             )}
             {tab === 'map' && (

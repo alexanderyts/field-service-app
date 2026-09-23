@@ -49,6 +49,7 @@ src/
   streets.ts           # Street identity: ensureStreetEntry / findStreetTraceMidpoint
   records.ts           # Multi-table operations, each in one transaction (tested via fake-indexeddb) — incl. logCall + importSharedPayload
   timeRecords.ts       # Time-log writes (logTime, logWithBank, redeemMinuteBank, submitPlanned, clearDay) — one transaction each; apart from records.ts so the startup bundle doesn't load schedule code
+  monthReport.ts       # Pure: the month's Service Report (participation, visited Bible studies, whole hours, comments) + which month is due
   rowGuards.ts         # Runtime type checks for rows from outside (share payloads, backup restore): TABLE_ROW_GUARDS per table
   appointments.ts      # Which return visits are still pending (overdue ones stay visible until followed up / 14 days) + badge label
   address.ts           # Address comparison, so a save knows whether the address really changed
@@ -91,8 +92,8 @@ src/
     schedule/          # dates.ts (incl. addDays — never step days by 24 h, DST) / plan.ts / animate.ts (pure, no React) + useMilestoneToast.ts + one file per piece: ScheduleMain
                        #   (week view, logging, minute bank — the hub, 1.3k), ScheduleCalendarView, DayActionModal,
                        #   Survey, EditLogModal, EditAppointmentModal, TimeInputModal, NumPad, InfoTip, HourGoalBar,
-                       #   MonthlyParticipationBox, AuxPioneeringBox, ContactPicker, ReturnVisits
-    Reports.tsx        # On-demand monthly report + service-year figures
+                       #   AuxPioneeringBox, ContactPicker, ReturnVisits
+    Reports.tsx        # THE REPORT TAB: the month's hand-off card (copy per field, Share, Mark as submitted) + personal recap
     ServiceYearReview.tsx # Animated end-of-service-year summary
     Misc.tsx           # More tab: support, theme, profile, notifications, backup/restore, clear data
     ShareModal.tsx     # Reusable QR/file share flow (contact/street/territory)
@@ -125,7 +126,7 @@ Phase state (`App.tsx`): `'splash' | 'splash-out' | 'policy' | 'profile' | 'app'
 | Ministry | `contacts` | Ministry | ◎ | `Contacts.tsx` |
 | Service | `schedule` | Service | ◫ | `Schedule.tsx` (tab key unchanged; label renamed in 0.21.0) |
 | Map | `map` | Map | ◈ | `MapView.tsx` |
-| Reports | `reports` | Reports | ▦ | `Reports.tsx` |
+| Report | `reports` | Report | ▦ | `Reports.tsx` (label singular since 0.26.0) |
 | More | `misc` | More | ⋯ | `Misc.tsx` |
 
 Schedule/Reports/Misc/Map are code-split (`lazy`) and warmed during idle after launch. Contacts is
@@ -270,7 +271,8 @@ moved into `settings.ts` in 0.20.2.
 | `fieldservice_timer` | The live service timer's state (start timestamp, accumulated ms, category, `stoppedAt` once stopped and awaiting its log). Blocklisted — device state, not a record | `timer.ts` |
 | `fieldservice_backup_nag_dismissed_at` | Epoch ms the back-up reminder was last dismissed (hidden 7 days after). Blocklisted | `settings.ts` |
 | `fieldservice_install_dismissed` | This browser dismissed the Add-to-Home-Screen banner. Blocklisted (0.25.2) so a restore onto a new phone still offers it | `InstallPrompt.tsx` |
-| `fieldservice_participated_months` | Months the user marked as "participated in ministry" | `settings.ts` |
+| `fieldservice_participated_months` | Months the user ticked as "shared in the ministry" (logged time or calls also count, see `monthReport.ts`) | `settings.ts` |
+| `fieldservice_reported_months` | `{"YYYY-M": epochMs}` — months whose report was marked submitted. A record: travels in backups | `settings.ts` |
 | `fieldservice_notify_enabled` / `_notify_lead_min` / `_notify_sent_ids` | Return-visit reminder settings + dedupe | `notifications.ts` |
 | `fieldservice_aux_*` | Auxiliary-pioneer config (see `auxPioneering.ts`) | `auxPioneering.ts` |
 
@@ -340,7 +342,7 @@ brand/category/tag hues are brightened per dark theme for contrast.
   "Change my goal" at the bottom of the tab reopens it and leaves `daysOut`/`daySchedule` untouched.
 - The tab order (0.25.0): Log time + `TimerCard`, the minute-bank pill, the progress card (month
   → service year → week pace, plus a pace chip/line from `milestones.ts` — no "behind" chip; short
-  reads as a forward per-day plan), participation (publishers without a goal), the planner
+  reads as a forward per-day plan), participation (publishers without a goal: one tick inline in the progress card), the planner
   (Service Schedule card, collapsed), Return Visits (3 + "Show all"), Recent Entries (3 + "See
   all" → `EntriesModal`, month-grouped). Milestone toasts
   fire from a render-side baseline comparison so every write path is covered. Goals are displayed
@@ -357,11 +359,19 @@ brand/category/tag hues are brightened per dark theme for contrast.
 - Category **pills** (not a dropdown). Per-day planning uses `DayScheduleBlock`s; goal rings via
   `goalSegments.ts`.
 
-### Reports
-- Leads with a **"What to submit"** card — participation, Bible studies, hours and credit for roles
-  that track hours (`schedulePrefsRole.ts`), minutes carried forward — shown immediately (0.24.0);
-  the cards below animate in with a staggered CSS reveal and `↺ Re-run` replays it via `runKey`. Includes territory completions and
-  service-year figures; `ServiceYearReview` is the animated year summary.
+### Report (tab key `reports`)
+- Leads with the **hand-off card** (0.26.0), in the form's order: Shared in the ministry · Bible
+  studies · Hours · Comments, each with a **Copy** button (for NW Publisher or the slip), then
+  **Share report** (OS share sheet; copy fallback) and **Mark as submitted**
+  (`fieldservice_reported_months`). All figures come from pure `monthReport.ts`:
+  participation = tick OR any time OR any call; Bible studies = `bible-study` contacts with a
+  (not-at-home excluded) call that month, uncounted ones named; Hours = whole Ministry hours,
+  shown only when `roleReportsHours()` (pioneer, or an aux month — never for a personal goal);
+  Comments = credit hours and their activity notes.
+- Days 1–10: last month is "due" (`dueReportMonth`) until marked submitted or empty — the tab
+  opens on it and the Service tab shows a "report is ready" banner that links here.
+- Below: the person's own recap (encouragement only when hours are tracked, highlights,
+  territories, credit cap, service year; `ServiceYearReview` is the animated year summary).
 
 ### Map
 - Default center `{ lat: 32.3, lng: -90.0 }`. Contact pins + popups, territory traces overlaid,

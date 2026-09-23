@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type TimeCategory } from '../db'
 import { CATEGORY_EMOJI, CATEGORY_LABELS } from '../categories'
@@ -15,8 +15,9 @@ import {
   serviceYearlyTotals,
 } from '../timeStats'
 import { getAuxConfig } from '../auxPioneering'
-import { getMinuteBank, getParticipatedMonth } from '../settings'
-import { deriveRole, roleTracksHours } from '../schedulePrefsRole'
+import { getMinuteBank, getParticipatedMonth, getReportedAt, setParticipatedMonth, setReported } from '../settings'
+import { deriveRole, roleReportsHours, roleTracksHours } from '../schedulePrefsRole'
+import { buildMonthReport, dueReportMonth, hasSomethingToReport, reportText } from '../monthReport'
 import ServiceYearReview from './ServiceYearReview'
 import { StepperNav } from './SharedBits'
 
@@ -33,26 +34,18 @@ function encouragement(pct: number, totalMin: number): string {
 
 export default function Reports() {
   const now = new Date()
-  const [monthOffset, setMonthOffset] = useState(0)
-  const [runKey, setRunKey] = useState(0)
-  const [generating, setGenerating] = useState(false)
-  const generateTimeoutRef = useRef<number | undefined>(undefined)
-
-  useEffect(() => () => window.clearTimeout(generateTimeoutRef.current), [])
-
-  // "Re-run" replays the staggered reveal. The report itself is always shown — the figures
-  // the congregation asks for should never sit behind a button (tracking-first D7).
-  function generateReport() {
-    setGenerating(true)
-    generateTimeoutRef.current = window.setTimeout(() => {
-      setRunKey((k) => k + 1)
-      setGenerating(false)
-    }, 600)
-  }
-
-  const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
-  const targetYear = targetDate.getFullYear()
-  const targetMonth = targetDate.getMonth()
+  // Days 1–10: open on last month while its report is still to hand in (Phase 2 of
+  // docs/review-2026-09-23.md). Automatic until the person navigates or marks it; after that
+  // their choice holds, so marking a report submitted doesn't yank the view to another month.
+  const [chosenOffset, setChosenOffset] = useState<number | null>(null)
+  // Participation and "submitted" live in localStorage; bumping this re-reads them.
+  const [, setMarksVersion] = useState(0)
+  const [copied, setCopied] = useState<string | null>(null)
+  useEffect(() => {
+    if (!copied) return
+    const t = window.setTimeout(() => setCopied(null), 1600)
+    return () => window.clearTimeout(t)
+  }, [copied])
 
   const logs = useLiveQuery(() => db.timeLogs.toArray(), []) ?? []
   const calls = useLiveQuery(() => db.calls.toArray(), []) ?? []
@@ -61,7 +54,15 @@ export default function Reports() {
   const prefs = useLiveQuery(() => db.schedulePrefs.toArray(), [])
   const territoryCompletions = useLiveQuery(() => db.territoryCompletions.toArray(), []) ?? []
 
-  const [email, setEmail] = useState('')
+  const due = dueReportMonth(
+    now,
+    (y, m) => getReportedAt(y, m) != null,
+    (y, m) => hasSomethingToReport(buildMonthReport({ logs, calls, people, showHours: false, ticked: getParticipatedMonth(y, m), year: y, month: m })),
+  )
+  const monthOffset = chosenOffset ?? (due ? -1 : 0)
+  const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
+  const targetYear = targetDate.getFullYear()
+  const targetMonth = targetDate.getMonth()
 
   function inMonth(ts: number) {
     const d = new Date(ts)
@@ -73,8 +74,7 @@ export default function Reports() {
   const monthAppts = appointments.filter((a) => inMonth(a.date))
   const newContacts = people.filter((p) => inMonth(p.createdAt))
 
-  const { ministry: ministryMin, credit: creditMin, total: totalMin, creditUsed, applied: appliedMin } =
-    monthTotals(monthLogs)
+  const { total: totalMin, creditUsed, applied: appliedMin } = monthTotals(monthLogs)
 
   // By category
   const byCat = new Map<TimeCategory, number>()
@@ -156,72 +156,57 @@ export default function Reports() {
   const bankedMin = getMinuteBank()
   const reportRole = deriveRole(prefs?.[0] ?? {}, getAuxConfig())
   const reportTracksHours = roleTracksHours(reportRole, prefs?.[0] ?? {}, getAuxConfig(), targetYear, targetMonth)
-  // Participation is the month's checkbox, or implied by any logged time.
-  const participated = getParticipatedMonth(targetYear, targetMonth) || totalMin > 0
-  const bibleStudies = people.filter((p) => p.status === 'bible-study').length
+  const report = buildMonthReport({
+    logs,
+    calls,
+    people,
+    showHours: roleReportsHours(reportRole, getAuxConfig(), targetYear, targetMonth),
+    ticked: getParticipatedMonth(targetYear, targetMonth),
+    year: targetYear,
+    month: targetMonth,
+  })
+  const reportedAt = getReportedAt(targetYear, targetMonth)
+  const canHandOff = hasSomethingToReport(report)
+  const [shareMsg, setShareMsg] = useState<string | null>(null)
 
-  function reportBody(): string {
-    let body = `Meleo Report — ${monthLabel}\n\n`
-    body += `Shared in the ministry: ${participated ? 'Yes' : 'Not marked'}\n`
-    body += `Bible studies: ${bibleStudies}\n`
-    body += `Total Hours: ${fmtDuration(totalMin)}\n`
-    if (isCurrentMonth && bankedMin > 0) body += `  (${bankedMin}m banked, carried forward)\n`
-    if (ministryMin) body += `  Ministry: ${fmtDuration(ministryMin)}\n`
-    if (creditMin) body += `  Credit Hours: ${fmtDuration(creditMin)}\n`
-    // Deliberately no breakdown of credit by type. The congregation's Service Report has no
-    // field for it — credit is submitted as a single figure regardless of what earned it, and
-    // anything descriptive belongs in the report's remarks (see CONTEXT.md). The Activity Note
-    // is for the person's own records, which is what the Reports tab itself shows.
-    if (returnVisits) body += `\nReturn Visits Scheduled: ${returnVisits}\n`
-    if (newContacts.length) body += `New Contacts Added: ${newContacts.length}\n`
-    if (atHomeCalls) body += `Conversations: ${atHomeCalls}\n`
-    if (notHomeCalls) body += `Not at Home: ${notHomeCalls}\n`
-    if (scripturesShared) body += `Scriptures Shared: ${scripturesShared}\n`
-    if (monthTerritoriesCompleted) {
-      body += `Custom Territories Completed: ${monthTerritoriesCompleted} this month, ${yearTerritoriesCompleted} this service year\n`
-      for (const t of monthCompletions) {
-        body += `  ${t.name} — ${new Date(t.completedAt).toLocaleDateString()}\n`
+  async function copy(key: string, value: string) {
+    if (await copyText(value)) {
+      setCopied(key)
+      setShareMsg(null)
+    } else setShareMsg("Couldn't copy on this device — press and hold the figure to copy it.")
+  }
+
+  // The OS share sheet reaches mail, messages, notes — whatever the person uses to hand the
+  // report in — with no address to type. Copying is the fallback where sharing isn't offered.
+  async function shareReport() {
+    const text = reportText(report, monthLabel)
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Service report — ${monthLabel}`, text })
+        return
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return
       }
     }
-    if (yearGoalMin) body += `\nYearly Goal Progress: ${fmtDuration(yearAppliedMin)} of ${fmtDuration(yearGoalMin)} (${yearPct}%)\n`
-    return body
+    await copy('all', text)
+    setShareMsg('Report copied — paste it anywhere.')
   }
 
-  const [copyMsg, setCopyMsg] = useState<string | null>(null)
-
-  async function copyReport() {
-    try {
-      await navigator.clipboard.writeText(reportBody())
-      setCopyMsg('Report copied — paste it anywhere.')
-    } catch {
-      setCopyMsg("Couldn't copy on this device — use Email instead.")
-    }
+  function toggleParticipated(v: boolean) {
+    setParticipatedMonth(targetYear, targetMonth, v)
+    setMarksVersion((n) => n + 1)
+  }
+  function markSubmitted(v: boolean) {
+    setReported(targetYear, targetMonth, v ? Date.now() : null)
+    setChosenOffset(monthOffset)
+    setMarksVersion((n) => n + 1)
   }
 
-  // A `mailto:` link is a URL, and some mail apps cut it off around 2,000 characters — a big
-  // month with a long list of completed territories can pass that and arrive truncated with
-  // no warning (REVIEW.md F-C5). Past the limit the full text goes to the clipboard and the
-  // email opens with a one-line note to paste it, which is never cut off.
-  const MAILTO_SAFE_LEN = 1800
-  async function emailReport() {
-    const subject = `Meleo Report — ${monthLabel}`
-    const body = reportBody()
-    const full = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    if (full.length <= MAILTO_SAFE_LEN) {
-      window.location.href = full
-      return
-    }
-    try {
-      await navigator.clipboard.writeText(body)
-      setCopyMsg('This report is too long for a mail link, so it was copied — paste it into the email.')
-      const note = 'This report was copied to your clipboard — paste it here.'
-      window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(note)}`
-    } catch {
-      // No clipboard: send what fits rather than nothing, and say so.
-      setCopyMsg('This report is too long for a mail link and copying failed — it may arrive cut off.')
-      window.location.href = full
-    }
-  }
+  const copyBtn = (key: string, value: string, label: string) => (
+    <button className="secondary small report-copy" onClick={() => copy(key, value)} aria-label={`Copy ${label}`}>
+      {copied === key ? 'Copied' : 'Copy'}
+    </button>
+  )
 
   return (
     <div className="view">
@@ -230,66 +215,110 @@ export default function Reports() {
           arrows always share a baseline and mirror each other. */}
       <StepperNav
         className="report-nav"
-        onPrev={() => setMonthOffset((o) => o - 1)}
-        onNext={() => setMonthOffset((o) => o + 1)}
+        onPrev={() => setChosenOffset(monthOffset - 1)}
+        onNext={() => setChosenOffset(monthOffset + 1)}
         nextDisabled={monthOffset >= 0}
       >
         <h2 className="applet-title" style={{ margin: 0, textAlign: 'center' }}>{monthLabel}</h2>
       </StepperNav>
       <div className="report-nav-actions">
-        <button className="secondary small" onClick={() => generateReport()} disabled={generating} title="Run again">↺ Re-run</button>
         {!isCurrentMonth && (
-          <button className="secondary small" onClick={() => setMonthOffset(0)}>Back to this month</button>
+          <button className="secondary small" onClick={() => setChosenOffset(0)}>Back to this month</button>
         )}
       </div>
 
-      {generating ? (
-        <div className="report-run-wrap">
-          <div className="report-run-icon spin">📊</div>
-          <h3>Gathering your {monthLabel} summary…</h3>
-          <p className="muted">Just a moment.</p>
+      <div className="report-body">
+      {/* The hand-off, in the order the congregation's form asks (CONTEXT.md › Reporting):
+          one tap copies each figure for NW Publisher or the paper slip. Everything below this
+          card is for the person's own records. */}
+      <div className={`card highlight report-submit${reportedAt ? ' submitted' : ''}`}>
+        <div className="report-submit-head">
+          <h4 style={{ margin: 0 }}>{monthLabel} report</h4>
+          {reportedAt && (
+            <span className="report-submitted-chip">
+              ✓ Submitted {new Date(reportedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </span>
+          )}
         </div>
-      ) : (
-      <div className="report-body" key={runKey}>
-      {/* What the congregation's Service Report actually asks for — first, plainly, and only
-          the figures that belong on it (CONTEXT.md › Reporting). Everything below is for the
-          person's own records. */}
-      <div className="card highlight report-submit">
-        <h4 style={{ marginTop: 0 }}>What to submit for {monthLabel}</h4>
         <ul className="report-submit-list">
           <li>
-            <span>Shared in the ministry</span>
-            <strong>{participated ? 'Yes' : 'Not marked'}</strong>
+            <div className="report-field">
+              <span>Shared in the ministry</span>
+              {report.participationImplied ? (
+                <span className="muted report-field-note">From your logged time and calls</span>
+              ) : (
+                <label className="report-field-note report-shared-toggle">
+                  <input type="checkbox" checked={report.participated} onChange={(e) => toggleParticipated(e.target.checked)} />
+                  Tap when you've shared this month
+                </label>
+              )}
+            </div>
+            <strong>{report.participated ? 'Yes' : 'No'}</strong>
+            {copyBtn('shared', report.participated ? 'Yes' : 'No', 'shared in the ministry')}
           </li>
           <li>
-            <span>Bible studies</span>
-            <strong>{bibleStudies}</strong>
+            <div className="report-field">
+              <span>Bible studies</span>
+              {report.bibleStudyNames.length > 0 && (
+                <span className="muted report-field-note">{report.bibleStudyNames.join(', ')}</span>
+              )}
+              {report.studiesNotVisited.length > 0 && (
+                <span className="muted report-field-note">
+                  Not counted: {report.studiesNotVisited.join(', ')} — no visit logged this month. Log one to count it.
+                </span>
+              )}
+            </div>
+            <strong>{report.bibleStudies}</strong>
+            {copyBtn('studies', String(report.bibleStudies), 'Bible studies')}
           </li>
-          {reportTracksHours && (
+          {report.showHours && (
             <li>
-              <span>Hours</span>
-              <strong>{fmtDuration(ministryMin)}</strong>
+              <div className="report-field">
+                <span>Hours</span>
+                {report.leftoverMin > 0 && (
+                  <span className="muted report-field-note">
+                    {isCurrentMonth ? `+${report.leftoverMin}m toward the next hour` : `+${report.leftoverMin}m not included — carry it into next month`}
+                  </span>
+                )}
+                {isCurrentMonth && bankedMin > 0 && (
+                  <span className="muted report-field-note">{bankedMin}m in the minute bank carry forward</span>
+                )}
+              </div>
+              <strong>{report.hours}</strong>
+              {copyBtn('hours', String(report.hours), 'hours')}
             </li>
           )}
-          {reportTracksHours && creditMin > 0 && (
+          {report.comments && (
             <li>
-              <span>Credit hours <span className="muted">(note in remarks)</span></span>
-              <strong>{fmtDuration(creditMin)}</strong>
+              <div className="report-field">
+                <span>Comments</span>
+                <span className="muted report-field-note">{report.comments}</span>
+              </div>
+              <strong aria-hidden="true" />
+              {copyBtn('comments', report.comments, 'comments')}
             </li>
           )}
         </ul>
-        {reportTracksHours && isCurrentMonth && bankedMin > 0 && (
-          <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>{bankedMin}m in the minute bank are not included — they carry forward.</p>
+        {!report.showHours && totalMin > 0 && (
+          <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>Publishers report participation and Bible studies; the hours below are for you.</p>
         )}
-        {!reportTracksHours && (
-          <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>Publishers report participation and Bible studies only; hours below are for you.</p>
-        )}
+        <div className="row report-submit-actions">
+          <button onClick={shareReport} disabled={!canHandOff}>Share report</button>
+          {reportedAt ? (
+            <button className="secondary" onClick={() => markSubmitted(false)}>Undo submitted</button>
+          ) : (
+            <button className="secondary" onClick={() => markSubmitted(true)} disabled={!canHandOff}>Mark as submitted</button>
+          )}
+        </div>
+        {shareMsg && <p className="muted" style={{ fontSize: 13, margin: '6px 0 0' }}>{shareMsg}</p>}
       </div>
 
-      {/* Encouragement banner */}
-      <div className="card report-encourage">
-        <p>{encouragement(monthPct, totalMin)}</p>
-      </div>
+      {/* Encouragement banner — only where hours are being tracked toward something */}
+      {reportTracksHours && (
+        <div className="card report-encourage">
+          <p>{encouragement(monthPct, totalMin)}</p>
+        </div>
+      )}
 
       {/* Hours summary */}
       <div className="card highlight">
@@ -391,8 +420,8 @@ export default function Reports() {
               <div className="report-highlight-item">
                 <span className="report-highlight-icon" aria-hidden="true">🚪</span>
                 <div>
-                  <strong>{notHomeCalls} door{notHomeCalls !== 1 ? 's' : ''} not answered</strong>
-                  <p className="muted">Persistence is a form of love — keep showing up</p>
+                  <strong>{notHomeCalls} home{notHomeCalls !== 1 ? 's' : ''} called on</strong>
+                  <p className="muted">No one was in — every call still counts</p>
                 </div>
               </div>
             )}
@@ -468,28 +497,7 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Email export */}
-      <div className="card">
-        <h4>Email This Report</h4>
-        <input
-          className="full"
-          type="email"
-          placeholder="Send to email address"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <div className="row">
-          <button onClick={emailReport} disabled={!email || totalMin === 0}>
-            Email Report
-          </button>
-          <button className="secondary" onClick={copyReport} disabled={totalMin === 0}>
-            Copy Report
-          </button>
-        </div>
-        {copyMsg && <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>{copyMsg}</p>}
       </div>
-      </div>
-      )}{/* /report-body */}
 
       {showYearReview && (
         <ServiceYearReview
@@ -504,4 +512,29 @@ export default function Reports() {
       )}
     </div>
   )
+}
+
+/** Clipboard write with the old select-and-copy path as a fallback: the async Clipboard API is
+    refused in some embedded browsers and older WebViews, and one refused Copy on report day is
+    exactly when it matters. */
+async function copyText(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = value
+      ta.setAttribute('readonly', '')
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      const ok = document.execCommand('copy')
+      ta.remove()
+      return ok
+    } catch {
+      return false
+    }
+  }
 }

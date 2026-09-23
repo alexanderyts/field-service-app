@@ -1632,8 +1632,7 @@ button.small {
   margin-bottom: 8px;
 }
 
-/* Non-pioneer monthly participation — a single inline toggle (no expand); the checkbox sits
-   at the right of the header where a chevron/plus used to. */
+/* Monthly participation tick, inline in the Service progress card (publishers without a goal). */
 .participation-header {
   display: flex;
   align-items: center;
@@ -1648,51 +1647,6 @@ button.small {
   height: 24px;
   accent-color: var(--accent);
   cursor: pointer;
-}
-
-.participation-card.done {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-}
-
-/* Warm confirmation once they've ticked the box — more than a bare check. */
-.participation-cue {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--accent-soft);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
-.participation-cue strong {
-  color: var(--accent);
-}
-
-.participation-cue-emoji {
-  font-size: 22px;
-  line-height: 1;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .participation-cue {
-    animation: participation-pop 0.32s ease-out both;
-  }
-  .participation-cue-emoji {
-    animation: participation-emoji 0.5s ease-out both;
-  }
-}
-
-@keyframes participation-pop {
-  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
-  to   { opacity: 1; transform: none; }
-}
-
-@keyframes participation-emoji {
-  0%   { transform: scale(0.4) rotate(-12deg); }
-  60%  { transform: scale(1.25) rotate(6deg); }
-  100% { transform: scale(1) rotate(0); }
 }
 
 .legend {
@@ -3012,49 +2966,6 @@ button.small {
 /* ============================================================
    Reports: run-on-demand prompt
    ============================================================ */
-.report-run-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 40px 20px;
-  text-align: center;
-}
-
-.report-run-icon {
-  font-size: 52px;
-  line-height: 1;
-}
-
-.report-run-wrap h3 {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-h);
-  margin: 0;
-}
-
-.report-run-wrap p {
-  margin: 0;
-}
-
-.report-run-wrap button {
-  padding: 12px 32px;
-  font-size: 16px;
-  font-weight: 600;
-  margin-top: 6px;
-}
-
-/* Pulsing icon while the report is "being gathered" — builds a beat of anticipation
-   before the reveal instead of the cards appearing instantly. */
-@keyframes report-icon-pulse {
-  0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
-  50% { transform: scale(1.15) rotate(6deg); opacity: 0.7; }
-}
-
-.report-run-icon.spin {
-  animation: report-icon-pulse 0.9s ease-in-out infinite;
-}
-
 /* ============================================================
    Reports: staggered card reveal animation
    ============================================================ */
@@ -3825,15 +3736,84 @@ button.small {
   gap: 6px;
 }
 .report-submit-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
   padding: 6px 0;
   border-bottom: 1px solid var(--border);
 }
 .report-submit-list li:last-child { border-bottom: none; }
 .report-submit-list strong { font-size: 16px; }
+
+/* Report hand-off (Phase 2): label · value · Copy per row, in the form's order. */
+.report-submit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: var(--space-4);
+}
+.report-submitted-chip {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.report-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.report-field-note {
+  font-size: 12px;
+  line-height: var(--lh-tight);
+  overflow-wrap: anywhere;
+}
+.report-shared-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.report-shared-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+.report-copy {
+  min-width: 64px;
+  min-height: 36px;
+}
+.report-submit-actions {
+  margin-top: var(--space-6);
+}
+.report-submit-actions > button {
+  flex: 1;
+}
+
+/* Service tab: last month's report is waiting (days 1–10, until marked submitted). */
+.report-due-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text-h);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
 
 /* All-entries modal: month subtotals (Wave 5 §B). */
 .entries-month-head {
